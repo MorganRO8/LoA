@@ -25,6 +25,7 @@ if task == "1":
         'paperscraper==0.2.4',
         'PyPDF2==3.0.1',
         'scidownl==1.0.0'
+        'pandas==1.5.3'
     ]
 
     # Loop through the packages and run 'pip install' command

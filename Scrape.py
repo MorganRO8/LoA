@@ -36,8 +36,11 @@ def Scrape():
         scholar_query = input("Enter search query, as if google searching:  ")
         try:
             os.mkdir(os.getcwd() + "/scholar/")
-            get_and_dump_scholar_papers(scholar_query, str(os.getcwd()) + "/scholar/")
+        except:
+            None
 
+        try:
+            get_and_dump_scholar_papers(scholar_query, str(os.getcwd()) + "/scholar/")
         except:
             print("Scholar search ended with error")
 
@@ -101,6 +104,10 @@ def Scrape():
     if scihubyn == "y":
         import re
 
+        try:
+            os.mkdir(str(os.getcwd()) + '/doi/')
+        except:
+            None
 
         try:
             # Open the file
@@ -112,7 +119,7 @@ def Scrape():
             doi_list = re.findall(r'"doi": "(.*?)"', file_contents)
 
             # create a new text file named output that has each found instance of a string matching the criteria on it's own line
-            with open(str(os.getcwd()) + '/' + json_name + '_all_doi.txt', 'w') as f:
+            with open(str(os.getcwd()) + '/doi/' + json_name + '_all_doi.txt', 'w') as f:
                 for doi in doi_list:
                     f.write(doi + '\n')
 
@@ -129,7 +136,7 @@ def Scrape():
             doi_list = re.findall(r'"doi": "(.*?)"', file_contents)
 
             # create a new text file named output that has each found instance of a string matching the criteria on it's own line
-            with open(str(os.getcwd()) + '/' + json_name + '_all_doi.txt', 'w') as f:
+            with open(str(os.getcwd()) + '/doi/' + json_name + '_all_doi.txt', 'w') as f:
                 for doi in doi_list:
                     f.write(doi + '\n')
 
@@ -146,7 +153,7 @@ def Scrape():
             doi_list = re.findall(r'"doi": "(.*?)"', file_contents)
 
             # create a new text file named output that has each found instance of a string matching the criteria on it's own line
-            with open(str(os.getcwd()) + '/' + json_name + '_all_doi.txt', 'w') as f:
+            with open(str(os.getcwd()) + '/doi/' + json_name + '_all_doi.txt', 'w') as f:
                 for doi in doi_list:
                     f.write(doi + '\n')
 
@@ -163,7 +170,7 @@ def Scrape():
             doi_list = re.findall(r'"doi": "(.*?)"', file_contents)
 
             # create a new text file named output that has each found instance of a string matching the criteria on it's own line
-            with open(str(os.getcwd()) + '/' + json_name + '_all_doi.txt', 'w') as f:
+            with open(str(os.getcwd()) + '/doi/' + json_name + '_all_doi.txt', 'w') as f:
                 for doi in doi_list:
                     f.write(doi + '\n')
 
@@ -180,16 +187,15 @@ def Scrape():
             doi_list = re.findall(r'"doi": "(.*?)"', file_contents)
 
             # create a new text file named output that has each found instance of a string matching the criteria on it's own line
-            with open(str(os.getcwd()) + '/' + json_name + '_all_doi.txt', 'w') as f:
+            with open(str(os.getcwd()) + '/doi/' + json_name + '_all_doi.txt', 'w') as f:
                 for doi in doi_list:
                     f.write(doi + '\n')
 
             import tkinter as tk
-            from tkinter import filedialog
             from scidownl import scihub_download
 
             # Go through each DOI number in the provided file and download the pdf from the website https://sci-hub.se using the package scidownl
-            with open(str(os.getcwd()) + '/' + json_name + '_all_doi.txt') as f:
+            with open(str(os.getcwd()) + '/doi/' + json_name + '_all_doi.txt') as f:
                 for line in f:
                     doi = line.strip()
                     paper_type = "doi"
@@ -212,28 +218,21 @@ def Scrape():
 
     import subprocess
 
-    fixyn = input("Do you want to check for html encoding in the pdfs?(y/n)")
+    # fix pdf files that have html encoding
+    # Go through each pdf in folder
+    for filename in os.listdir(str(os.getcwd()) + '/pdfs/' + json_name + '/'):
+        # Check if file is a pdf
+        if filename.endswith(".pdf"):
+            # Repair pdf using ghostscript
+            subprocess.call(["gs", "-sDEVICE=pdfwrite", "-dPDFSETTINGS=/prepress", "-dNOPAUSE", "-dBATCH", "-sOutputFile=" + str(os.getcwd()) + '/pdfs/' + json_name + '/' + filename + ".repaired.pdf", str(os.getcwd()) + '/pdfs/' + json_name + '/' + filename])
+            # Delete original pdf
+            os.remove(str(os.getcwd()) + '/pdfs/' + json_name + '/' + filename)
+            try:
+                # Rename repaired pdf to original name
+                os.rename(str(os.getcwd()) + '/pdfs/' + json_name + '/' + filename + ".repaired.pdf", str(os.getcwd()) + '/pdfs/' + json_name + '/' + filename)
+            except:
+                None
 
-    if fixyn == "y":
-        # fix pdf files that have html encoding
-        # Go through each pdf in folder
-        for filename in os.listdir(str(os.getcwd()) + '/pdfs/' + json_name + '/'):
-            # Check if file is a pdf
-            if filename.endswith(".pdf"):
-                # Repair pdf using ghostscript
-                subprocess.call(["gs", "-sDEVICE=pdfwrite", "-dPDFSETTINGS=/prepress", "-dNOPAUSE", "-dBATCH", "-sOutputFile=" + str(os.getcwd()) + '/pdfs/' + json_name + '/' + filename + ".repaired.pdf", str(os.getcwd()) + '/pdfs/' + json_name + '/' + filename])
-                # Delete original pdf
-                os.remove(str(os.getcwd()) + '/pdfs/' + json_name + '/' + filename)
-                try:
-                    # Rename repaired pdf to original name
-                    os.rename(str(os.getcwd()) + '/pdfs/' + json_name + '/' + filename + ".repaired.pdf", str(os.getcwd()) + '/pdfs/' + json_name + '/' + filename)
-                except:
-                    None
-    elif fixyn == "n":
-        None
-
-    else:
-        print("You must select y or n")
 
     import PyPDF2
     from os import listdir

@@ -5,6 +5,7 @@ def Inference():
     from transformers import BertTokenizer
     from chunk import chunkedinf
     from chunk import chunkedinfoffs
+    import pandas as pd
 
     # make sure the answers directory exists
 
@@ -140,3 +141,34 @@ def Inference():
                 g.write(best_answer + '\n')
 
     print('Done!')
+
+    xlyn = input("Would you like to convert answers to excel format?(y/n)")
+
+    if xlyn == "y":
+        # Read in the answers from the text file
+        with open(os.getcwd() + "/answers/" + selected_dir + 'answers.txt', "r") as f:
+            answers = f.readlines()
+
+        # Create an empty dictionary to hold the answers for each question
+        question_answers = {q: [] for q in questions}
+
+        # Loop through each answer and append it to the corresponding question's list
+        for i, ans in enumerate(answers):
+            question_answers[questions[i % len(questions)]].append(ans.strip())
+
+        # Create a DataFrame from the question_answers dictionary
+        df = pd.DataFrame(question_answers)
+
+        # Write the DataFrame to an Excel file
+        output_file = "output.xlsx"
+        df.to_excel(output_file, index=False)
+
+    elif xlyn == "n":
+        None
+
+    else:
+        print("You must select y or n")
+
+    import sys
+    python = sys.executable
+    os.execl(python, python, *sys.argv)

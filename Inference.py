@@ -67,7 +67,7 @@ def Inference():
             except ValueError:
                 print("Invalid choice. Please try again.")
 
-    dlyn = input("Would you like to download a new model or use an existing one?(d/e)")
+    dlyn = input("Would you like to download a new model or use an existing one?(d/e)").lower()
 
     if dlyn == "d":
         model_name = download_model()
@@ -204,7 +204,7 @@ def Inference():
 
     print('Done!')
 
-    xlyn = input("Would you like to convert answers to excel format?(y/n)")
+    xlyn = input("Would you like to convert answers to excel format?(y/n)").lower()
 
     if xlyn == "y":
         # Read in the answers from the text file

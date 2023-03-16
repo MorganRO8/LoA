@@ -5,7 +5,7 @@ def Scrape():
 
 
     # update/download Metadata
-    updownyn = input("Update/Download Metadata? (y/n)")
+    updownyn = input("Update/Download Metadata? (y/n)").lower()
 
     if updownyn == "y":
         from paperscraper.get_dumps import biorxiv, medrxiv, chemrxiv
@@ -50,8 +50,7 @@ def Scrape():
 
 
     # Save PDFs in current folder and name the files by their DOI
-    json_name = '_'.join(queries)
-    json_name = json_name.replace(" ", "")
+    json_name = '_'.join(queries).replace(" ", "").lower()
 
     try:
         os.mkdir(str(os.getcwd()) + "/pdfs")
@@ -65,33 +64,19 @@ def Scrape():
     except:
         None
 
-    regdlyn = input("Would you like to try scrape pdfs that are available for free normally?(y/n)")
+    regdlyn = input("Would you like to try scrape pdfs that are available for free normally?(y/n)").lower()
 
     if regdlyn == "y":
-        try:
-            save_pdf_from_dump(str(os.getcwd()) + "/arxiv/" + json_name + '.jsonl', pdf_path=str(os.getcwd()) + '/pdfs/' + json_name + '/', key_to_save='doi')
-        except:
-            None
 
-        try:
-            save_pdf_from_dump(str(os.getcwd()) + "/biorxiv/" + json_name + '.jsonl', pdf_path=str(os.getcwd()) + '/pdfs/' + json_name + '/', key_to_save='doi')
-        except:
-            None
+        save_pdf_from_dump(str(os.getcwd()) + "/arxiv/" + json_name + '.jsonl', pdf_path=str(os.getcwd()) + '/pdfs/' + json_name + '/', key_to_save='doi')
 
-        try:
-            save_pdf_from_dump(str(os.getcwd()) + "/chemrxiv/" + json_name + '.jsonl', pdf_path=str(os.getcwd()) + '/pdfs/' + json_name + '/', key_to_save='doi')
-        except:
-            None
+        save_pdf_from_dump(str(os.getcwd()) + "/biorxiv/" + json_name + '.jsonl', pdf_path=str(os.getcwd()) + '/pdfs/' + json_name + '/', key_to_save='doi')
 
-        try:
-            save_pdf_from_dump(str(os.getcwd()) + "/medrxiv/" + json_name + '.jsonl', pdf_path=str(os.getcwd()) + '/pdfs/' + json_name + '/', key_to_save='doi')
-        except:
-            None
+        save_pdf_from_dump(str(os.getcwd()) + "/chemrxiv/" + json_name + '.jsonl', pdf_path=str(os.getcwd()) + '/pdfs/' + json_name + '/', key_to_save='doi')
 
-        try:
-            save_pdf_from_dump(str(os.getcwd()) + "/pubmed/" + json_name + '.jsonl', pdf_path=str(os.getcwd()) + '/pdfs/' + json_name + '/', key_to_save='doi')
-        except:
-            None
+        save_pdf_from_dump(str(os.getcwd()) + "/medrxiv/" + json_name + '.jsonl', pdf_path=str(os.getcwd()) + '/pdfs/' + json_name + '/', key_to_save='doi')
+
+        save_pdf_from_dump(str(os.getcwd()) + "/pubmed/" + json_name + '.jsonl', pdf_path=str(os.getcwd()) + '/pdfs/' + json_name + '/', key_to_save='doi')
 
     elif regdlyn == "n":
         None
@@ -99,7 +84,7 @@ def Scrape():
     else:
         print("You must select y or n")
 
-    scihubyn = input("Would you like to search and download from scihub?(y/n)")
+    scihubyn = input("Would you like to search and download from scihub?(y/n)").lower()
 
     if scihubyn == "y":
         import re

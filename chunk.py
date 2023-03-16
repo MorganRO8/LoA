@@ -1,18 +1,19 @@
-def chunkedinf(tokenizer, full_start_token, z, question):
+def chunkedinf(tokenizer, full_start_token, z, question, model_path):
 
-    from transformers import BertForQuestionAnswering
+    from transformers import MegatronBertModel
     import torch
 
     print("now working on chunk " + str(z))
     # load model
-    model = BertForQuestionAnswering.from_pretrained('bert-large-uncased-whole-word-masking-finetuned-squad')
+    model = MegatronBertModel.from_pretrained(model_path)
 
     # create chunk
     chunk = full_start_token[((z-1)*400):(z*400)-1]
 
     # tokenize question and chunk
     input_ids = []
-    input_ids = tokenizer.encode(question, chunk)
+    question_tokens = tokenizer.encode(question)
+    input_ids = question_tokens + chunk
 
     # create tokens list for each for later
     tokens = tokenizer.convert_ids_to_tokens(input_ids)
@@ -47,39 +48,40 @@ def chunkedinf(tokenizer, full_start_token, z, question):
     # calculate average value of answer
     average_value = (answer_start_value + answer_end_value) / 2
 
-    # create answer
-    answer = tokens[answer_start]
+    if answer_start < len(tokens):
+        answer = tokens[answer_start]
+        for i in range(answer_start + 1, answer_end + 1):
 
-    # Select the remaining answer tokens and join them with whitespace.
-    for i in range(answer_start + 1, answer_end + 1):
+            # If it's a subword token, then recombine it with the previous token.
+            if tokens[i][0:2] == '##':
+                answer += tokens[i][2:]
 
-        # If it's a subword token, then recombine it with the previous token.
-        if tokens[i][0:2] == '##':
-            answer += tokens[i][2:]
+            # Otherwise, add a space then the token.
+            else:
+                answer += ' ' + tokens[i]
 
-        # Otherwise, add a space then the token.
-        else:
-            answer += ' ' + tokens[i]
+    else:
+        answer = ""
 
     print("chunk " + str(z) + " complete")
 
     return answer, average_value
 
-def chunkedinfoffs(tokenizer, full_start_token, z, question):
-
-    from transformers import BertForQuestionAnswering
+def chunkedinfoffs(tokenizer, full_start_token, z, question, model_path):
+    from transformers import MegatronBertModel
     import torch
 
     print("now working on chunk " + str(z))
     # load model
-    model = BertForQuestionAnswering.from_pretrained('bert-large-uncased-whole-word-masking-finetuned-squad')
+    model = MegatronBertModel.from_pretrained(model_path)
 
     # create chunk
     chunk = full_start_token[((z-1)*400)+200:((z*400)-1)+200]
 
     # tokenize question and chunk
     input_ids = []
-    input_ids = tokenizer.encode(question, chunk)
+    question_tokens = tokenizer.encode(question)
+    input_ids = question_tokens + chunk
 
     # create tokens list for each for later
     tokens = tokenizer.convert_ids_to_tokens(input_ids)
@@ -101,7 +103,6 @@ def chunkedinfoffs(tokenizer, full_start_token, z, question):
                                      token_type_ids=torch.tensor([segment_ids]),
                                      return_dict=False)  # The segment IDs to differentiate question from answer_text
 
-
     # find start and end indices of answer
     answer_start = torch.argmax(start_scores)
     answer_end = torch.argmax(end_scores)
@@ -114,21 +115,22 @@ def chunkedinfoffs(tokenizer, full_start_token, z, question):
     # calculate average value of answer
     average_value = (answer_start_value + answer_end_value) / 2
 
-    # create answer
-    answer = tokens[answer_start]
+    if answer_start < len(tokens):
+        answer = tokens[answer_start]
+        for i in range(answer_start + 1, answer_end + 1):
 
-    # Select the remaining answer tokens and join them with whitespace.
-    for i in range(answer_start + 1, answer_end + 1):
+            # If it's a subword token, then recombine it with the previous token.
+            if tokens[i][0:2] == '##':
+                answer += tokens[i][2:]
 
-        # If it's a subword token, then recombine it with the previous token.
-        if tokens[i][0:2] == '##':
-            answer += tokens[i][2:]
+            # Otherwise, add a space then the token.
+            else:
+                answer += ' ' + tokens[i]
 
-        # Otherwise, add a space then the token.
-        else:
-            answer += ' ' + tokens[i]
+    else:
+        answer = ""
 
-    print("chunk " + str(z) + " complete")
+    print("offset chunk " + str(z) + " complete")
 
 
     return answer, average_value

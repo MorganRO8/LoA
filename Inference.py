@@ -2,10 +2,12 @@ def Inference():
 
     import os
     import math
-    from transformers import BertTokenizer
+    import transformers
+    from transformers import AutoTokenizer
     from chunk import chunkedinf
     from chunk import chunkedinfoffs
     import pandas as pd
+
 
     # make sure the answers directory exists
 
@@ -15,15 +17,75 @@ def Inference():
     except:
         None
 
+    def download_model():
+        model_name = input("Please provide the name of the huggingface model you'd like to use: ")
+        filepath = f"models/{model_name}"
+        if not os.path.exists("models"):
+            os.mkdir("models")
+        if os.path.exists(filepath):
+            print("The model already exists in the models directory.")
+            return model_name
+        model = transformers.AutoModel.from_pretrained(model_name)
+        model.save_pretrained(filepath)
+        print("Model downloaded successfully.")
+        return model_name
+
+    def select_model():
+        models_dir = "models/"
+        if not os.path.exists(models_dir):
+            os.mkdir(models_dir)
+        subdirs = []
+        for dirpath, dirnames, filenames in os.walk(models_dir):
+            for dirname in dirnames:
+                subdir_path = os.path.join(dirpath, dirname)
+                for subdirname in os.listdir(subdir_path):
+                    subsubdir_path = os.path.join(subdir_path, subdirname)
+                    if os.path.isdir(subsubdir_path):
+                        subdirs.append(subsubdir_path)
+        if not subdirs:
+            print("No models found in the models directory.")
+            return download_model()
+        print("The following models are available:")
+        for i, subdir in enumerate(subdirs):
+            print(f"{i + 1}: {subdir}")
+        while True:
+            choice = input("Enter the number of the model you'd like to use or 'd' to download a new model: ")
+            if choice == "d":
+                return download_model()
+            try:
+                choice = int(choice)
+                if 1 <= choice <= len(subdirs):
+                    model_dir = subdirs[choice - 1]
+                    model_files = [os.path.join(model_dir, f) for f in os.listdir(model_dir) if
+                                   os.path.isfile(os.path.join(model_dir, f))]
+                    if model_files:
+                        return model_dir
+                    else:
+                        print(f"No models found in {model_dir} directory.")
+                else:
+                    print("Invalid choice. Please try again.")
+            except ValueError:
+                print("Invalid choice. Please try again.")
+
+    dlyn = input("Would you like to download a new model or use an existing one?(d/e)")
+
+    if dlyn == "d":
+        model_name = download_model()
+
+    elif dlyn == "e":
+        model_name = select_model()
+
+    else:
+        print("You must select d or e")
 
     # open tokenizer
-    tokenizer = BertTokenizer.from_pretrained('bert-large-uncased-whole-word-masking-finetuned-squad')
+    tokenizer = AutoTokenizer.from_pretrained(model_name.replace('models/',''), model_type='megatron-bert')
 
     # create question
     questions = []
 
     while True:
-        question = input("Please enter a question(use [answer] in your question to use previous answer in question: ")
+        question = input("Please enter a question (use [answer] in your question to use previous answer in question): ")
         questions.append(question)
 
         another = input("Would you like to input another question? (y/n) ")
@@ -106,7 +168,7 @@ def Inference():
             # loop through chunks
             for z in range(1, num_chunks):
 
-                answer, average_value = chunkedinf(tokenizer, full_start_token, z, question)
+                answer, average_value = chunkedinf(tokenizer, full_start_token, z, question, model_name)
 
                 # add answer to list
                 answer_list.append(answer)
@@ -116,7 +178,7 @@ def Inference():
 
             for z in range(1, num_chunks - 1):
 
-                answer, average_value = chunkedinfoffs(tokenizer, full_start_token, z, question)
+                answer, average_value = chunkedinfoffs(tokenizer, full_start_token, z, question, model_name)
 
                 # add answer to list
                 answer_list.append(answer)

@@ -51,6 +51,7 @@ def Scrape():
 
     # Save PDFs in current folder and name the files by their DOI
     json_name = '_'.join(queries).replace(" ", "").lower()
+    json_name = json_name
 
     try:
         os.mkdir(str(os.getcwd()) + "/pdfs")
@@ -70,13 +71,25 @@ def Scrape():
 
         save_pdf_from_dump(str(os.getcwd()) + "/arxiv/" + json_name + '.jsonl', pdf_path=str(os.getcwd()) + '/pdfs/' + json_name + '/', key_to_save='doi')
 
-        save_pdf_from_dump(str(os.getcwd()) + "/biorxiv/" + json_name + '.jsonl', pdf_path=str(os.getcwd()) + '/pdfs/' + json_name + '/', key_to_save='doi')
+        try:
+            save_pdf_from_dump(str(os.getcwd()) + "/biorxiv/" + json_name + '.jsonl', pdf_path=str(os.getcwd()) + '/pdfs/' + json_name + '/', key_to_save='doi')
+        except:
+            print("biorxiv pdf save failed")
 
-        save_pdf_from_dump(str(os.getcwd()) + "/chemrxiv/" + json_name + '.jsonl', pdf_path=str(os.getcwd()) + '/pdfs/' + json_name + '/', key_to_save='doi')
+        try:
+            save_pdf_from_dump(str(os.getcwd()) + "/chemrxiv/" + json_name + '.jsonl', pdf_path=str(os.getcwd()) + '/pdfs/' + json_name + '/', key_to_save='doi')
+        except:
+            print("chemrxiv pdf save failed")
 
-        save_pdf_from_dump(str(os.getcwd()) + "/medrxiv/" + json_name + '.jsonl', pdf_path=str(os.getcwd()) + '/pdfs/' + json_name + '/', key_to_save='doi')
+        try:
+            save_pdf_from_dump(str(os.getcwd()) + "/medrxiv/" + json_name + '.jsonl', pdf_path=str(os.getcwd()) + '/pdfs/' + json_name + '/', key_to_save='doi')
+        except:
+            print("medrxiv pdf save failed")
 
-        save_pdf_from_dump(str(os.getcwd()) + "/pubmed/" + json_name + '.jsonl', pdf_path=str(os.getcwd()) + '/pdfs/' + json_name + '/', key_to_save='doi')
+        try:
+            save_pdf_from_dump(str(os.getcwd()) + "/pubmed/" + json_name + '.jsonl', pdf_path=str(os.getcwd()) + '/pdfs/' + json_name + '/', key_to_save='doi')
+        except:
+            print("pubmed pdf save failed")
 
     elif regdlyn == "n":
         None
@@ -84,7 +97,7 @@ def Scrape():
     else:
         print("You must select y or n")
 
-    scihubyn = input("Would you like to search and download from scihub?(y/n)").lower()
+    scihubyn = input("Would you like to search and download from scihub?(y/n)")
 
     if scihubyn == "y":
         import re

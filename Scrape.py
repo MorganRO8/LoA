@@ -216,26 +216,31 @@ def Scrape():
 
     import subprocess
 
-    # fix pdf files that have html encoding
-    # Go through each pdf in folder
-    for filename in os.listdir(str(os.getcwd()) + '/pdfs/' + json_name + '/'):
-        # Check if file is a pdf
-        if filename.endswith(".pdf"):
-            # Repair pdf using ghostscript
-            try:
-                subprocess.call(["gs", "-sDEVICE=pdfwrite", "-dPDFSETTINGS=/prepress", "-dNOPAUSE", "-dBATCH", "-sOutputFile=" + str(os.getcwd()) + '/pdfs/' + json_name + '/' + filename + ".repaired.pdf", str(os.getcwd()) + '/pdfs/' + json_name + '/' + filename])
-            except:
-                None
-            # Delete original pdf
-            try:
-                os.remove(str(os.getcwd()) + '/pdfs/' + json_name + '/' + filename)
-            except:
-                None
-            try:
-                # Rename repaired pdf to original name
-                os.rename(str(os.getcwd()) + '/pdfs/' + json_name + '/' + filename + ".repaired.pdf", str(os.getcwd()) + '/pdfs/' + json_name + '/' + filename)
-            except:
-                None
+    fixbool = input("Would you like to go through and fix html encoding in pdfs? (must be done at least once to pdfs)").lower()
+
+    if fixbool == "y":
+        # fix pdf files that have html encoding
+        # Go through each pdf in folder
+        for filename in os.listdir(str(os.getcwd()) + '/pdfs/' + json_name + '/'):
+            # Check if file is a pdf
+            if filename.endswith(".pdf"):
+                # Repair pdf using ghostscript
+                try:
+                    subprocess.call(["gs", "-sDEVICE=pdfwrite", "-dPDFSETTINGS=/prepress", "-dNOPAUSE", "-dBATCH", "-sOutputFile=" + str(os.getcwd()) + '/pdfs/' + json_name + '/' + filename + ".repaired.pdf", str(os.getcwd()) + '/pdfs/' + json_name + '/' + filename])
+                except:
+                    None
+                # Delete original pdf
+                try:
+                    os.remove(str(os.getcwd()) + '/pdfs/' + json_name + '/' + filename)
+                except:
+                    None
+                try:
+                    # Rename repaired pdf to original name
+                    os.rename(str(os.getcwd()) + '/pdfs/' + json_name + '/' + filename + ".repaired.pdf", str(os.getcwd()) + '/pdfs/' + json_name + '/' + filename)
+                except:
+                    None
+    else:
+        None
 
 
     import PyPDF2
@@ -270,12 +275,13 @@ def Scrape():
         # For each page in the pdf, extract the text and write it to the output file
         for page_num in range(num_pages):
             page_obj = pdf_reader.pages[page_num]
+            text = page_obj.extract_text().replace("\n", " ")
             try:
-                text = page_obj.extract_text().replace("\n", " ")
                 output_file.write(text)
-            except UnicodeDecodeError:
-                print(f"Error: Could not extract text from page {page_num + 1} of {pdf}.")
-                continue
+            except UnicodeEncodeError:
+                output_file.write(text.encode('ascii', 'ignore').decode('ascii'))
+            except:
+                None
 
         # Add a line break to separate each pdf
         output_file.write("\n")

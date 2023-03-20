@@ -267,11 +267,13 @@ def Scrape():
         # Get number of pages in pdf
         num_pages = len(pdf_reader.pages)
 
-        # For each page in the pdf, extract the text and write it to the output file
-        for page_num in range(num_pages):
-            page_obj = pdf_reader.pages[page_num]
-            text = page_obj.extract_text().replace("\n", " ")
-            output_file.write(text)
+        # Open the output file with an encoding that can handle the problematic characters
+        with open(str(os.getcwd()) + '/pdfs/' + json_name + '/' + pdf, 'w', encoding='utf-8', errors='ignore') as output_file:
+            # For each page in the pdf, extract the text and write it to the output file
+            for page_num in range(num_pages):
+                page_obj = pdf_reader.pages[page_num]
+                text = page_obj.extract_text().replace("\n", " ")
+                output_file.write(text)
 
         # Add a line break to separate each pdf
         output_file.write("\n")

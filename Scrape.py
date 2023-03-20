@@ -222,9 +222,15 @@ def Scrape():
         # Check if file is a pdf
         if filename.endswith(".pdf"):
             # Repair pdf using ghostscript
-            subprocess.call(["gs", "-sDEVICE=pdfwrite", "-dPDFSETTINGS=/prepress", "-dNOPAUSE", "-dBATCH", "-sOutputFile=" + str(os.getcwd()) + '/pdfs/' + json_name + '/' + filename + ".repaired.pdf", str(os.getcwd()) + '/pdfs/' + json_name + '/' + filename])
+            try:
+                subprocess.call(["gs", "-sDEVICE=pdfwrite", "-dPDFSETTINGS=/prepress", "-dNOPAUSE", "-dBATCH", "-sOutputFile=" + str(os.getcwd()) + '/pdfs/' + json_name + '/' + filename + ".repaired.pdf", str(os.getcwd()) + '/pdfs/' + json_name + '/' + filename])
+            except:
+                None
             # Delete original pdf
-            os.remove(str(os.getcwd()) + '/pdfs/' + json_name + '/' + filename)
+            try:
+                os.remove(str(os.getcwd()) + '/pdfs/' + json_name + '/' + filename)
+            except:
+                None
             try:
                 # Rename repaired pdf to original name
                 os.rename(str(os.getcwd()) + '/pdfs/' + json_name + '/' + filename + ".repaired.pdf", str(os.getcwd()) + '/pdfs/' + json_name + '/' + filename)

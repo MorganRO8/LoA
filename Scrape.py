@@ -20,7 +20,7 @@ def Scrape():
         print("You must choose Y or N")
 
     # get search terms from user
-    search_terms = input("Enter search terms (comma separated): ")
+    search_terms = input("Enter search terms (comma separated): ").lower()
     search_terms = [term.strip() for term in search_terms.split(",")]
 
     # define queries using custom search terms
@@ -33,7 +33,7 @@ def Scrape():
     if scholarbool == "y":
         from paperscraper.scholar import get_and_dump_scholar_papers
 
-        scholar_query = input("Enter search query, as if google searching:  ")
+        scholar_query = input("Enter search query, as if google searching:  ").lower()
         try:
             os.mkdir(os.getcwd() + "/scholar/")
         except:
@@ -97,7 +97,7 @@ def Scrape():
     else:
         print("You must select y or n")
 
-    scihubyn = input("Would you like to search and download from scihub?(y/n)")
+    scihubyn = input("Would you like to search and download from scihub?(y/n)").lower()
 
     if scihubyn == "y":
         import re
@@ -199,7 +199,7 @@ def Scrape():
                     paper_type = "doi"
                     paper = ("https://doi.org/" + doi)
                     try:
-                        scihub_download(paper, paper_type=paper_type, out=str(os.getcwd() + '/pdfs/'))
+                        scihub_download(paper, paper_type=paper_type, out=str(os.getcwd() + '/pdfs/' + json_name + '/'))
                     except:
                         print("Error downloading " + doi)
 
@@ -267,21 +267,30 @@ def Scrape():
         # Open PDF file
         pdf_file = open(str(os.getcwd()) + '/pdfs/' + json_name + '/' + pdf, "rb")
         # Create PyPDF2 object
-        pdf_reader = PyPDF2.PdfReader(pdf_file)
+        try:
+            pdf_reader = PyPDF2.PdfReader(pdf_file)
+        except:
+            None
 
         # Get number of pages in pdf
-        num_pages = len(pdf_reader.pages)
+        try:
+            num_pages = len(pdf_reader.pages)
+        except:
+            None
 
         # For each page in the pdf, extract the text and write it to the output file
-        for page_num in range(num_pages):
-            page_obj = pdf_reader.pages[page_num]
-            text = page_obj.extract_text().replace("\n", " ")
-            try:
-                output_file.write(text)
-            except UnicodeEncodeError:
-                output_file.write(text.encode('ascii', 'ignore').decode('ascii'))
-            except:
-                None
+        try:
+            for page_num in range(num_pages):
+                page_obj = pdf_reader.pages[page_num]
+                text = page_obj.extract_text().replace("\n", " ")
+                try:
+                    output_file.write(text)
+                except UnicodeEncodeError:
+                    output_file.write(text.encode('UTF-8', 'ignore').decode('ascii'))
+                except:
+                    None
+        except:
+            None
 
         # Add a line break to separate each pdf
         output_file.write("\n")

@@ -85,10 +85,10 @@ def Inference():
     questions = []
 
     while True:
-        question = input("Please enter a question (use [answer] in your question to use previous answer in question): ")
+        question = input("Please enter a question (use [answer] in your question to use previous answer in question): ").lower()
         questions.append(question)
 
-        another = input("Would you like to input another question? (y/n) ")
+        another = input("Would you like to input another question? (y/n) ").lower()
         if another.lower() == "n":
             break
 

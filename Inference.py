@@ -170,7 +170,9 @@ def Inference():
 
                 answer, average_value = chunkedinf(tokenizer, full_start_token, z, question, model_name)
 
-                print("Primary chunk " + str(z) + " completed\nAnswer:" + str(answer) + "\nScore:" + average_value)
+                print("Primary chunk " + str(z) + " completed")
+                print("Answer:" + str(answer))
+                print("Score:" + str(average_value))
 
                 # add answer to list
                 answer_list.append(answer)

@@ -71,7 +71,6 @@ def chunkedinfoffs(tokenizer, full_start_token, z, question, model_path):
     from transformers import MegatronBertModel
     import torch
 
-    print("now working on chunk " + str(z))
     # load model
     model = MegatronBertModel.from_pretrained(model_path)
 
@@ -129,8 +128,6 @@ def chunkedinfoffs(tokenizer, full_start_token, z, question, model_path):
 
     else:
         answer = ""
-
-    print("offset chunk " + str(z) + " complete")
 
 
     return answer, average_value

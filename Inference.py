@@ -131,16 +131,14 @@ def Inference():
     # do something with the selected directory path
     print("You selected:", selected_dir_path)
 
-    with open(selected_dir_path + '/output.txt', 'r') as f:
-        lines = f.readlines()
-
-        p = 0
+    with open(selected_dir_path + '/output.txt', 'r') as p:
+        lines = p.readlines()
 
     for question in questions:
 
         # Check if the user wanted to use the previous answer as part of the next question
         if '[answer]' in question:
-            with open(os.getcwd() + "/answers/" + selected_dir + 'answers.txt') as f:
+            with open(os.getcwd() + "/answers/" + selected_dir + '/answers.txt') as f:
                 answers = f.readlines()
 
             # Get the last answer from the list (strip any leading/trailing whitespace)
@@ -149,7 +147,7 @@ def Inference():
             question = question.replace('[answer]', last_answer)
 
         for line in lines:
-            p = p + 1
+
             total_text = line.strip()
 
             # tokenize text
@@ -168,7 +166,11 @@ def Inference():
             # loop through chunks
             for z in range(1, num_chunks):
 
+                print("Now working on primary chunk " + str(z) + "/" + str(num_chunks))
+
                 answer, average_value = chunkedinf(tokenizer, full_start_token, z, question, model_name)
+
+                print("Primary chunk " + str(z) + " completed\nAnswer:" + str(answer) + "\nScore:" + average_value)
 
                 # add answer to list
                 answer_list.append(answer)
@@ -178,7 +180,11 @@ def Inference():
 
             for z in range(1, num_chunks - 1):
 
+                print("Now working on offset chunk " + str(z) + "/" + str(num_chunks - 1))
+
                 answer, average_value = chunkedinfoffs(tokenizer, full_start_token, z, question, model_name)
+
+                print("Offset chunk " + str(z) + " completed\nAnswer:" + str(answer) + "\nScore:" + average_value)
 
                 # add answer to list
                 answer_list.append(answer)
@@ -201,7 +207,7 @@ def Inference():
 
                 # write best answer to output file
                 g.write(best_answer + '\n')
-            print("Answer written to answers text file")
+            print("Answer written to answers text file:" + str(best_answer))
 
     print('Done!')
 

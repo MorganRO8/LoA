@@ -1,11 +1,10 @@
 def chunkedinf(tokenizer, full_start_token, z, question, model_path):
 
-    from transformers import MegatronBertModel
+    from transformers import MegatronBertForQuestionAnswering
     import torch
 
-    print("now working on chunk " + str(z))
     # load model
-    model = MegatronBertModel.from_pretrained(model_path)
+    model = MegatronBertForQuestionAnswering.from_pretrained(model_path)
 
     # create chunk
     chunk = full_start_token[((z-1)*400):(z*400)-1]
@@ -63,16 +62,14 @@ def chunkedinf(tokenizer, full_start_token, z, question, model_path):
     else:
         answer = ""
 
-    print("chunk " + str(z) + " complete")
-
     return answer, average_value
 
 def chunkedinfoffs(tokenizer, full_start_token, z, question, model_path):
-    from transformers import MegatronBertModel
+    from transformers import MegatronBertForQuestionAnswering
     import torch
 
     # load model
-    model = MegatronBertModel.from_pretrained(model_path)
+    model = MegatronBertForQuestionAnswering.from_pretrained(model_path)
 
     # create chunk
     chunk = full_start_token[((z-1)*400)+200:((z*400)-1)+200]

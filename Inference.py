@@ -197,10 +197,11 @@ def Inference():
 
             # open output file
 
-            with open(os.getcwd() + "/answers/" + selected_dir + 'answers.txt', 'w') as g:
+            with open(os.getcwd() + "/answers/" + selected_dir + '/answers.txt', 'w') as g:
 
                 # write best answer to output file
                 g.write(best_answer + '\n')
+            print("Answer written to answers text file")
 
     print('Done!')
 

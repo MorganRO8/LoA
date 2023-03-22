@@ -215,7 +215,7 @@ def Scrape(updownyn, search_terms, scholar_bool, scholar_query, regdlyn, scihuby
                     paper_type = "doi"
                     paper = ("https://doi.org/" + doi)
                     try:
-                        scihub_download(paper, paper_type=paper_type, out=str(os.getcwd() + '/pdfs/' + json_name + '/'))
+                        scihub_download(paper, paper_type=paper_type, out=str(os.getcwd()) + '/pdfs/' + json_name + '/')
                     except:
                         print("Error downloading " + doi)
 

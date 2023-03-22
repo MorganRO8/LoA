@@ -50,7 +50,7 @@ if "-auto" in sys.argv:
 
                     #Find the index of the corresponding line
                     count = 0
-                    for i, line in enumerate(command):
+                    for i, line in enumerate(commands):
                         if "task =" in line:
                             count += 1
                             if count == tnum:

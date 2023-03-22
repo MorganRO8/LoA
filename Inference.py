@@ -12,7 +12,7 @@ def Inference(model_name, questions, selected_dir, xlyn, auto):
     # make sure the answers directory exists
 
     try:
-        os.mkdir(os.getcwd() + "/answers/")
+        os.mkdir(str(os.getcwd()) + "/answers/")
 
     except:
         None
@@ -136,7 +136,7 @@ def Inference(model_name, questions, selected_dir, xlyn, auto):
 
     # make specific answers directory
     try:
-        os.mkdir(os.getcwd() + "/answers/" + selected_dir)
+        os.mkdir(str(os.getcwd()) + "/answers/" + selected_dir)
 
     except:
         None
@@ -151,7 +151,7 @@ def Inference(model_name, questions, selected_dir, xlyn, auto):
 
         # Check if the user wanted to use the previous answer as part of the next question
         if '[answer]' in question:
-            with open(os.getcwd() + "/answers/" + selected_dir + '/answers.txt') as f:
+            with open(str(os.getcwd()) + "/answers/" + selected_dir + '/answers.txt') as f:
                 answers = f.readlines()
 
             # Get the last answer from the list (strip any leading/trailing whitespace)
@@ -237,7 +237,7 @@ def Inference(model_name, questions, selected_dir, xlyn, auto):
 
             # open output file
 
-            with open(os.getcwd() + "/answers/" + selected_dir + '/answers.txt', 'w') as g:
+            with open(str(os.getcwd()) + "/answers/" + selected_dir + '/answers.txt', 'w') as g:
 
                 # write best answer to output file
                 g.write(best_answer + '\n')
@@ -253,7 +253,7 @@ def Inference(model_name, questions, selected_dir, xlyn, auto):
 
     if xlyn == "y":
         # Read in the answers from the text file
-        with open(os.getcwd() + "/answers/" + selected_dir + 'answers.txt', "r") as f:
+        with open(str(os.getcwd()) + "/answers/" + selected_dir + 'answers.txt', "r") as f:
             answers = f.readlines()
 
         # Create an empty dictionary to hold the answers for each question

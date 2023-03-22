@@ -35,7 +35,7 @@ if "-auto" in sys.argv:
     tnum = 0
 
     # Open the file in read mode
-    with open(os.getcwd + "/automatic.txt", "r") as auto:
+    with open(str(os.getcwd) + "/automatic.txt", "r") as auto:
 
         # Loop over each line in the file
         for line in auto:
@@ -44,7 +44,7 @@ if "-auto" in sys.argv:
                 #update the task number
                 tnum = tnum + 1
                 #get the rest of the variables
-                with open(os.getcwd + "/automatic.txt") as command:
+                with open(str(os.getcwd) + "/automatic.txt") as command:
 
                     commands = command.readlines()
 
@@ -77,7 +77,7 @@ if "-auto" in sys.argv:
                 # update the task number
                 tnum = tnum + 1
                 # get the rest of the variables
-                with open(os.getcwd + "/automatic.txt") as command:
+                with open(str(os.getcwd) + "/automatic.txt") as command:
 
                     commands = command.readlines()
 

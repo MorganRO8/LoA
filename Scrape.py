@@ -44,7 +44,7 @@ def Scrape(updownyn, search_terms, scholar_bool, scholar_query, regdlyn, scihuby
         else:
             scholar_query = input("Enter search query, as if google searching:  ").lower()
         try:
-            os.mkdir(os.getcwd() + "/scholar/")
+            os.mkdir(str(os.getcwd()) + "/scholar/")
         except:
             None
 

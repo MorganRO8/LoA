@@ -1,4 +1,4 @@
-def Inference():
+def Inference(model_name, questions, selected_dir, xlyn, auto):
 
     import os
     import math
@@ -67,59 +67,72 @@ def Inference():
             except ValueError:
                 print("Invalid choice. Please try again.")
 
-    dlyn = input("Would you like to download a new model or use an existing one?(d/e)").lower()
+    if model_name in locals():
 
-    if dlyn == "d":
-        model_name = download_model()
-
-    elif dlyn == "e":
-        model_name = select_model()
+        None
 
     else:
-        print("You must select d or e")
+
+        dlyn = input("Would you like to download a new model or use an existing one?(d/e)").lower()
+
+        if dlyn == "d":
+            model_name = download_model()
+
+        elif dlyn == "e":
+            model_name = select_model()
+
+        else:
+            print("You must select d or e")
 
     # open tokenizer
     tokenizer = AutoTokenizer.from_pretrained(model_name.replace('models/',''), model_type='megatron-bert')
 
-    # create question
-    questions = []
+    if questions in locals():
+        None
 
-    while True:
-        question = input("Please enter a question (use [answer] in your question to use previous answer in question): ").lower()
-        questions.append(question)
+        # create question
+        questions = []
 
-        another = input("Would you like to input another question? (y/n) ").lower()
-        if another.lower() == "n":
-            break
+        while True:
+            question = input("Please enter a question (use [answer] in your question to use previous answer in question): ").lower()
+            questions.append(question)
 
-    print("Here are the questions you entered:")
-    for question in questions:
-        print(question)
+            another = input("Would you like to input another question? (y/n) ").lower()
+            if another.lower() == "n":
+                break
+
+        print("Here are the questions you entered:")
+        for question in questions:
+            print(question)
 
     #define input directory
     import os
 
-    # specify the directory path to list the subdirectories
-    directory_path = str(os.getcwd()) + "/txts/"
+    if selected_dir in locals():
+        selected_dir_path = str(os.getcwd()) + '/' + selected_dir
 
-    # get a list of all directories in the specified directory
-    subdirectories = [x for x in os.listdir(directory_path) if os.path.isdir(os.path.join(directory_path, x))]
+    else:
+        # specify the directory path to list the subdirectories
+        directory_path = str(os.getcwd()) + "/txts/"
 
-    # print out the list of directories
-    print("The available scrape results are:")
-    for i, dir in enumerate(subdirectories):
-        print(f"{i + 1}. {dir}")
+        # get a list of all directories in the specified directory
+        subdirectories = [x for x in os.listdir(directory_path) if os.path.isdir(os.path.join(directory_path, x))]
 
-    # prompt the user to select a directory
-    while True:
-        selected_dir_num = input("Enter the number of the search you want to select: ")
-        if selected_dir_num.isdigit() and 1 <= int(selected_dir_num) <= len(subdirectories):
-            break
-        print("Invalid input. Please enter a number between 1 and", len(subdirectories))
+        # print out the list of directories
+        print("The available scrape results are:")
+        for i, dir in enumerate(subdirectories):
+            print(f"{i + 1}. {dir}")
 
-    # get the selected directory path
-    selected_dir = subdirectories[int(selected_dir_num) - 1]
-    selected_dir_path = os.path.join(directory_path, selected_dir)
+        # prompt the user to select a directory
+        while True:
+            selected_dir_num = input("Enter the number of the search you want to select: ")
+            if selected_dir_num.isdigit() and 1 <= int(selected_dir_num) <= len(subdirectories):
+                break
+            print("Invalid input. Please enter a number between 1 and", len(subdirectories))
+
+        # get the selected directory path
+        selected_dir = subdirectories[int(selected_dir_num) - 1]
+        selected_dir_path = os.path.join(directory_path, selected_dir)
 
     # make specific answers directory
     try:
@@ -146,15 +159,32 @@ def Inference():
 
             question = question.replace('[answer]', last_answer)
 
-        for line in lines:
+        original_text_list = []
+        tokenized_text_list = []
 
+        for line in lines:
             total_text = line.strip()
 
             # tokenize text
-            full_start_token = tokenizer.encode(total_text)
+            tokenized_text = tokenizer.encode(total_text)
+
+            # create corresponding original text list
+            original_text = total_text.split()
+            original_text_indices = 0
+            for token in tokenized_text:
+                sub_tokens = tokenizer.decode(token).split()
+                for sub_token in sub_tokens:
+                    if "#" in sub_token:
+                        original_text_list.append(original_text[original_text_indices])
+                        original_text_indices += 1
+                    else:
+                        original_text_list.append(sub_token)
+
+                # add token to tokenized text list
+                tokenized_text_list.append(token)
 
             # calculate number of chunks
-            num_chunks = math.ceil(len(full_start_token) / 400)
+            num_chunks = math.ceil(len(tokenized_text) / 400)
 
             # create list to store average values
             averages_list = []
@@ -168,7 +198,7 @@ def Inference():
 
                 print("Now working on primary chunk " + str(z) + "/" + str(num_chunks))
 
-                answer, average_value = chunkedinf(tokenizer, full_start_token, z, question, model_name)
+                answer, average_value = chunkedinf(tokenizer, tokenized_text, z, question, model_name, original_text_list)
 
                 print("Primary chunk " + str(z) + " completed")
                 print("Answer:" + str(answer))
@@ -184,7 +214,7 @@ def Inference():
 
                 print("Now working on offset chunk " + str(z) + "/" + str(num_chunks - 1))
 
-                answer, average_value = chunkedinfoffs(tokenizer, full_start_token, z, question, model_name)
+                answer, average_value = chunkedinfoffs(tokenizer, tokenized_text, z, question, model_name, original_text_list)
 
                 print("Offset chunk " + str(z) + " completed")
                 print("Answer:" + str(answer))
@@ -215,7 +245,11 @@ def Inference():
 
     print('Done!')
 
-    xlyn = input("Would you like to convert answers to excel format?(y/n)").lower()
+    if xlyn in locals():
+        None
+    else:
+        xlyn = input("Would you like to convert answers to excel format?(y/n)").lower()
+
 
     if xlyn == "y":
         # Read in the answers from the text file
@@ -242,6 +276,9 @@ def Inference():
     else:
         print("You must select y or n")
 
-    import sys
-    python = sys.executable
-    os.execl(python, python, *sys.argv)
+    if auto in locals():
+        return
+    else:
+        import sys
+        python = sys.executable
+        os.execl(python, python, *sys.argv)

@@ -1,4 +1,4 @@
-def chunkedinf(tokenizer, full_start_token, z, question, model_path):
+def chunkedinf(tokenizer, tokenized_text, z, question, model_path,original_text_list):
 
     from transformers import MegatronBertForQuestionAnswering
     import torch
@@ -7,7 +7,7 @@ def chunkedinf(tokenizer, full_start_token, z, question, model_path):
     model = MegatronBertForQuestionAnswering.from_pretrained(model_path)
 
     # create chunk
-    chunk = full_start_token[((z-1)*400):(z*400)-1]
+    chunk = tokenized_text[((z-1)*400):(z*400)-1]
 
     # tokenize question and chunk
     input_ids = []
@@ -64,7 +64,7 @@ def chunkedinf(tokenizer, full_start_token, z, question, model_path):
 
     return answer, average_value
 
-def chunkedinfoffs(tokenizer, full_start_token, z, question, model_path):
+def chunkedinfoffs(tokenizer, tokenized_text, z, question, model_path, original_text_list):
     from transformers import MegatronBertForQuestionAnswering
     import torch
 
@@ -72,7 +72,7 @@ def chunkedinfoffs(tokenizer, full_start_token, z, question, model_path):
     model = MegatronBertForQuestionAnswering.from_pretrained(model_path)
 
     # create chunk
-    chunk = full_start_token[((z-1)*400)+200:((z*400)-1)+200]
+    chunk = tokenized_text[((z-1)*400)+200:((z*400)-1)+200]
 
     # tokenize question and chunk
     input_ids = []
@@ -111,20 +111,17 @@ def chunkedinfoffs(tokenizer, full_start_token, z, question, model_path):
     # calculate average value of answer
     average_value = (answer_start_value + answer_end_value) / 2
 
-    if answer_start < len(tokens):
-        answer = tokens[answer_start]
-        for i in range(answer_start + 1, answer_end + 1):
-
-            # If it's a subword token, then recombine it with the previous token.
-            if tokens[i][0:2] == '##':
-                answer += tokens[i][2:]
-
-            # Otherwise, add a space then the token.
+    # get answer text
+    answer_tokens = []
+    if answer_start < len(tokenized_text):
+        for i in range(answer_start, answer_end + 1):
+            token = tokenized_text[i]
+            if "#" in tokenizer.decode(token):
+                answer_tokens.append(original_text_list[i])
             else:
-                answer += ' ' + tokens[i]
+                answer_tokens.append(tokenizer.decode(token))
 
-    else:
-        answer = ""
+    answer = " ".join(answer_tokens)
 
 
     return answer, average_value

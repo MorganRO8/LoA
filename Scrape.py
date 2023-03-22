@@ -1,11 +1,14 @@
-def Scrape():
+def Scrape(updownyn, search_terms, scholar_bool, scholar_query, regdlyn, scihubyn, fixbool, auto):
     import paperscraper
     import os
     from paperscraper.pdf import save_pdf_from_dump
 
 
     # update/download Metadata
-    updownyn = input("Update/Download Metadata? (y/n)").lower()
+    if updownyn in locals():
+        None
+    else:
+        updownyn = input("Update/Download Metadata? (y/n)").lower()
 
     if updownyn == "y":
         from paperscraper.get_dumps import biorxiv, medrxiv, chemrxiv
@@ -17,10 +20,14 @@ def Scrape():
         None
 
     else:
-        print("You must choose Y or N")
+        print("You must choose y or n")
 
     # get search terms from user
-    search_terms = input("Enter search terms (comma separated): ").lower()
+    if search_terms in locals():
+        None
+    else:
+        search_terms = input("Enter search terms (comma separated): ").lower()
+
     search_terms = [term.strip() for term in search_terms.split(",")]
 
     # define queries using custom search terms
@@ -32,8 +39,10 @@ def Scrape():
 
     if scholarbool == "y":
         from paperscraper.scholar import get_and_dump_scholar_papers
-
-        scholar_query = input("Enter search query, as if google searching:  ").lower()
+        if scholar_query in locals():
+            None
+        else:
+            scholar_query = input("Enter search query, as if google searching:  ").lower()
         try:
             os.mkdir(os.getcwd() + "/scholar/")
         except:
@@ -42,7 +51,8 @@ def Scrape():
         try:
             get_and_dump_scholar_papers(scholar_query, str(os.getcwd()) + "/scholar/")
         except:
-            print("Scholar search ended with error")
+            print("Couldn't finish google scholar search due to error")
+
 
     else:
         None
@@ -65,7 +75,10 @@ def Scrape():
     except:
         None
 
-    regdlyn = input("Would you like to try scrape pdfs that are available for free normally?(y/n)").lower()
+    if regdlyn in locals():
+        None
+    else:
+        regdlyn = input("Would you like to try scrape pdfs that are available for free normally?(y/n)").lower()
 
     if regdlyn == "y":
 
@@ -74,22 +87,22 @@ def Scrape():
         try:
             save_pdf_from_dump(str(os.getcwd()) + "/biorxiv/" + json_name + '.jsonl', pdf_path=str(os.getcwd()) + '/pdfs/' + json_name + '/', key_to_save='doi')
         except:
-            print("biorxiv pdf save failed")
+            print("biorxiv had no results")
 
         try:
             save_pdf_from_dump(str(os.getcwd()) + "/chemrxiv/" + json_name + '.jsonl', pdf_path=str(os.getcwd()) + '/pdfs/' + json_name + '/', key_to_save='doi')
         except:
-            print("chemrxiv pdf save failed")
+            print("chemrxiv had no results")
 
         try:
             save_pdf_from_dump(str(os.getcwd()) + "/medrxiv/" + json_name + '.jsonl', pdf_path=str(os.getcwd()) + '/pdfs/' + json_name + '/', key_to_save='doi')
         except:
-            print("medrxiv pdf save failed")
+            print("medrxiv had no results")
 
         try:
             save_pdf_from_dump(str(os.getcwd()) + "/pubmed/" + json_name + '.jsonl', pdf_path=str(os.getcwd()) + '/pdfs/' + json_name + '/', key_to_save='doi')
         except:
-            print("pubmed pdf save failed")
+            print("pubmed had no results")
 
     elif regdlyn == "n":
         None
@@ -97,7 +110,10 @@ def Scrape():
     else:
         print("You must select y or n")
 
-    scihubyn = input("Would you like to search and download from scihub?(y/n)").lower()
+    if scihubyn in locals():
+        None
+    else:
+        scihubyn = input("Would you like to search and download from scihub?(y/n)").lower()
 
     if scihubyn == "y":
         import re
@@ -216,7 +232,10 @@ def Scrape():
 
     import subprocess
 
-    fixbool = input("Would you like to go through and fix html encoding in pdfs? (must be done at least once to pdfs)").lower()
+    if fixbool in locals():
+        None
+    else:
+        fixbool = input("Would you like to go through and fix html encoding in pdfs? (must be done at least once to pdfs)(y/n)").lower()
 
     if fixbool == "y":
         # fix pdf files that have html encoding
@@ -308,7 +327,10 @@ def Scrape():
 
     print("Text document containing all of the pdfs has been created, you may now run inference.")
 
-    import sys
-    python = sys.executable
-    os.execl(python, python, *sys.argv)
+    if auto in locals():
+        return
+    else:
+        import sys
+        python = sys.executable
+        os.execl(python, python, *sys.argv)
 

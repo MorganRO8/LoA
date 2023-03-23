@@ -67,12 +67,7 @@ def Inference(model_name, questions, selected_dir, xlyn, auto):
             except ValueError:
                 print("Invalid choice. Please try again.")
 
-    if model_name in locals():
-
-        None
-
-    else:
-
+    if model_name is None:
         dlyn = input("Would you like to download a new model or use an existing one?(d/e)").lower()
 
         if dlyn == "d":
@@ -87,8 +82,7 @@ def Inference(model_name, questions, selected_dir, xlyn, auto):
     # open tokenizer
     tokenizer = AutoTokenizer.from_pretrained(model_name.replace('models/',''), model_type='megatron-bert')
 
-    if questions in locals():
-        None
+    if questions is None:
 
         # create question
         questions = []
@@ -108,10 +102,7 @@ def Inference(model_name, questions, selected_dir, xlyn, auto):
     #define input directory
     import os
 
-    if selected_dir in locals():
-        selected_dir_path = str(os.getcwd()) + '/' + selected_dir
-
-    else:
+    if selected_dir is None:
         # specify the directory path to list the subdirectories
         directory_path = str(os.getcwd()) + "/txts/"
 
@@ -133,6 +124,9 @@ def Inference(model_name, questions, selected_dir, xlyn, auto):
         # get the selected directory path
         selected_dir = subdirectories[int(selected_dir_num) - 1]
         selected_dir_path = os.path.join(directory_path, selected_dir)
+
+    else:
+        selected_dir_path = str(os.getcwd()) + '/' + selected_dir
 
     # make specific answers directory
     try:
@@ -245,9 +239,7 @@ def Inference(model_name, questions, selected_dir, xlyn, auto):
 
     print('Done!')
 
-    if xlyn in locals():
-        None
-    else:
+    if xlyn is None:
         xlyn = input("Would you like to convert answers to excel format?(y/n)").lower()
 
 

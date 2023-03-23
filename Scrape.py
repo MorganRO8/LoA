@@ -3,11 +3,9 @@ def Scrape(updownyn, search_terms, scholar_bool, scholar_query, regdlyn, scihuby
     import os
     from paperscraper.pdf import save_pdf_from_dump
 
-    print(str(locals()))
+
     # update/download Metadata
-    if updownyn in locals():
-        print(updownyn)
-    else:
+    if updownyn is None:
         updownyn = input("Update/Download Metadata? (y/n)").lower()
 
     if updownyn == "y":
@@ -23,9 +21,7 @@ def Scrape(updownyn, search_terms, scholar_bool, scholar_query, regdlyn, scihuby
         print("You must choose y or n")
 
     # get search terms from user
-    if search_terms in locals():
-        None
-    else:
+    if search_terms is None:
         search_terms = input("Enter search terms (comma separated): ").lower()
 
     search_terms = [term.strip() for term in search_terms.split(",")]
@@ -34,14 +30,12 @@ def Scrape(updownyn, search_terms, scholar_bool, scholar_query, regdlyn, scihuby
     queries = [query for query in search_terms if query]
 
     paperscraper.dump_queries([queries], '.')
-
-    scholarbool = input("Would you like to search Google Scholar?(y/n):  ")
+    if scholar_bool is None:
+        scholarbool = input("Would you like to search Google Scholar?(y/n):  ")
 
     if scholarbool == "y":
         from paperscraper.scholar import get_and_dump_scholar_papers
-        if scholar_query in locals():
-            None
-        else:
+        if scholar_query is None:
             scholar_query = input("Enter search query, as if google searching:  ").lower()
         try:
             os.mkdir(str(os.getcwd()) + "/scholar/")
@@ -75,9 +69,7 @@ def Scrape(updownyn, search_terms, scholar_bool, scholar_query, regdlyn, scihuby
     except:
         None
 
-    if regdlyn in locals():
-        None
-    else:
+    if regdlyn is None:
         regdlyn = input("Would you like to try scrape pdfs that are available for free normally?(y/n)").lower()
 
     if regdlyn == "y":
@@ -110,9 +102,7 @@ def Scrape(updownyn, search_terms, scholar_bool, scholar_query, regdlyn, scihuby
     else:
         print("You must select y or n")
 
-    if scihubyn in locals():
-        None
-    else:
+    if scihubyn is None:
         scihubyn = input("Would you like to search and download from scihub?(y/n)").lower()
 
     if scihubyn == "y":
@@ -232,9 +222,7 @@ def Scrape(updownyn, search_terms, scholar_bool, scholar_query, regdlyn, scihuby
 
     import subprocess
 
-    if fixbool in locals():
-        None
-    else:
+    if fixbool is None:
         fixbool = input("Would you like to go through and fix html encoding in pdfs? (must be done at least once to pdfs)(y/n)").lower()
 
     if fixbool == "y":

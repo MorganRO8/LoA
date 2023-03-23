@@ -141,11 +141,11 @@ if task == "1":
 
 elif task == "2":
     print("Checking for -rxiv dumps...")
-    Scrape()
+    Scrape(None, None, None, None, None, None, None, None)
 
 elif task == "3":
     print("Running inference...")
-    Inference()
+    Inference(None, None, None, None, None)
 
 else:
     print("Invalid task number. Please enter 1, 2, or 3.")

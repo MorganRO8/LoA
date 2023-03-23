@@ -137,7 +137,7 @@ if task == "1":
 
     # Loop through the packages and run 'pip install' command
     for package in packages:
-        subprocess.run(['pip', 'install', package])
+        subprocess.run(['pip', 'install', package, '--user'])
 
 elif task == "2":
     print("Checking for -rxiv dumps...")

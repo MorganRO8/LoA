@@ -3,10 +3,10 @@ def Scrape(updownyn, search_terms, scholar_bool, scholar_query, regdlyn, scihuby
     import os
     from paperscraper.pdf import save_pdf_from_dump
 
-
+    print(str(locals()))
     # update/download Metadata
     if updownyn in locals():
-        None
+        print(updownyn)
     else:
         updownyn = input("Update/Download Metadata? (y/n)").lower()
 

@@ -86,7 +86,7 @@ if task == "1":
     pip_packages = [
         "webdriver_manager",
         "pdfminer.six",
-        "unstructured",
+        '"unstructured[local-inference]"',
         "optuna",
         "snorkel",
         "textwrap3",

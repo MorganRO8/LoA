@@ -80,7 +80,6 @@ if task == "1":
         "pytorch",
         "nltk",
         "transformers",
-        "sentence-transformers",
         "scikit-learn",
         "snorkel",
         "optuna",
@@ -90,7 +89,8 @@ if task == "1":
     ]
 
     pip_packages = [
-        "webdriver_manager"
+        "webdriver_manager",
+        "sentence-transformers"
     ]
 
     system_dependencies = [

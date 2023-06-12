@@ -71,9 +71,11 @@ task = input("Enter the task number (1, 2, or 3): ")
 if task == "1":
     print("Installing dependencies...")
 
-    packages = [
+    def install_dependencies():
+    import subprocess
+
+    conda_packages = [
         "selenium",
-        "webdriver_manager",
         "beautifulsoup4",
         "requests",
         "spacy",
@@ -90,6 +92,10 @@ if task == "1":
         "textwrap3"
     ]
 
+    pip_packages = [
+        "webdriver_manager"
+    ]
+
     system_dependencies = [
         "libmagic",
         "poppler",
@@ -97,8 +103,11 @@ if task == "1":
         "libreoffice"
     ]
 
-    for package in packages:
+    for package in conda_packages:
         subprocess.check_call(["conda", "install", "-y", package])
+
+    for package in pip_packages:
+        subprocess.check_call(["pip", "install", package])
 
     for dependency in system_dependencies:
         subprocess.check_call(["conda", "install", "-y", "-c", "conda-forge", dependency])

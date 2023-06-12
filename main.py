@@ -81,13 +81,13 @@ if task == "1":
         "nltk",
         "transformers",
         "scikit-learn",
-        "unstructured",
         "pdfminer.six",
         "textwrap3"
     ]
 
     pip_packages = [
         "webdriver_manager",
+        "unstructured",
         "optuna",
         "snorkel",
         "sentence-transformers"

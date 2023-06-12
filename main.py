@@ -71,9 +71,6 @@ task = input("Enter the task number (1, 2, or 3): ")
 if task == "1":
     print("Installing dependencies...")
 
-    def install_dependencies():
-    import subprocess
-
     conda_packages = [
         "selenium",
         "beautifulsoup4",

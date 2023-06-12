@@ -1,97 +1,75 @@
-def Inference(model_name, questions, selected_dir, xlyn, auto):
+def Inference(args):
 
     import os
-    import math
-    import transformers
-    from transformers import AutoTokenizer
-    from chunk import chunkedinf
-    from chunk import chunkedinfoffs
-    import pandas as pd
+    from unstructured.partition.pdf import partition_pdf
+    from pdfminer.pdfparser import PDFSyntaxError
+    from transformers import pipeline, AutoTokenizer
 
+    questions = args.get('questions')
+    selected_dir = args.get('selected_dir')
+    model_id = args.get('model_id')
+    auto = args.get('auto')
 
-    # make sure the answers directory exists
+    def pdf_to_txt(selected_dir):
+        # Directory where the PDFs are stored
+        pdf_files_dir = str(os.getcwd()) + '/pdfs/' + selected_dir
 
-    try:
-        os.mkdir(str(os.getcwd()) + "/answers/")
+        try:
+            os.mkdir(str(os.getcwd()) + '/txts/')
+        except:
+            None
 
-    except:
-        None
+        try:
+            os.mkdir(str(os.getcwd()) + '/txts/' + selected_dir)
+        except:
+            None
 
-    def download_model():
-        model_name = input("Please provide the name of the huggingface model you'd like to use: ")
-        filepath = f"models/{model_name}"
-        if not os.path.exists("models"):
-            os.mkdir("models")
-        if os.path.exists(filepath):
-            print("The model already exists in the models directory.")
-            return model_name
-        model = transformers.AutoModel.from_pretrained(model_name)
-        model.save_pretrained(filepath)
-        print("Model downloaded successfully.")
-        return model_name
+        # Directory where the text files will be stored
+        text_files_dir = str(os.getcwd()) + '/txts/' + selected_dir
 
-    def select_model():
-        models_dir = "models/"
-        if not os.path.exists(models_dir):
-            os.mkdir(models_dir)
-        subdirs = []
-        for dirpath, dirnames, filenames in os.walk(models_dir):
-            for dirname in dirnames:
-                subdir_path = os.path.join(dirpath, dirname)
-                for subdirname in os.listdir(subdir_path):
-                    subsubdir_path = os.path.join(subdir_path, subdirname)
-                    if os.path.isdir(subsubdir_path):
-                        subdirs.append(subsubdir_path)
-        if not subdirs:
-            print("No models found in the models directory.")
-            return download_model()
-        print("The following models are available:")
-        for i, subdir in enumerate(subdirs):
-            print(f"{i + 1}: {subdir}")
-        while True:
-            choice = input("Enter the number of the model you'd like to use or 'd' to download a new model: ")
-            if choice == "d":
-                return download_model()
+        # Get the list of PDF files and TXT files
+        pdf_files = sorted([filename for filename in os.listdir(pdf_files_dir) if filename.endswith('.pdf')])
+        txt_files = sorted([filename for filename in os.listdir(text_files_dir) if filename.endswith('.txt')])
+
+        # If there are already some TXT files processed
+        if txt_files:
+            last_processed_file = txt_files[-1].replace('.txt', '.pdf')
+            last_index = pdf_files.index(last_processed_file)
+            pdf_files = pdf_files[last_index + 1:]  # Ignore already processed files
+
+        # Convert each PDF to a text file
+        for filename in pdf_files:
+            pdf_file_path = os.path.join(pdf_files_dir, filename)
+            text_file_path = os.path.join(text_files_dir, filename.replace('.pdf', '.txt'))
+            print(f"Now working on {filename}")
+
             try:
-                choice = int(choice)
-                if 1 <= choice <= len(subdirs):
-                    model_dir = subdirs[choice - 1]
-                    model_files = [os.path.join(model_dir, f) for f in os.listdir(model_dir) if
-                                   os.path.isfile(os.path.join(model_dir, f))]
-                    if model_files:
-                        return model_dir
-                    else:
-                        print(f"No models found in {model_dir} directory.")
-                else:
-                    print("Invalid choice. Please try again.")
-            except ValueError:
-                print("Invalid choice. Please try again.")
+                # Partition the PDF into elements
+                elements = partition_pdf(pdf_file_path)
 
-    if model_name is None:
-        dlyn = input("Would you like to download a new model or use an existing one?(d/e)").lower()
+                # Check if elements are empty
+                if not elements or all(not str(element).strip() for element in elements):
+                    print(f"Skipping {filename} as it does not contain any text.")
+                    continue
 
-        if dlyn == "d":
-            model_name = download_model()
+                # Write the elements to a text file
+                with open(text_file_path, 'w') as file:
+                    for element in elements:
+                        file.write(str(element) + '\n')
+            except (PDFSyntaxError, TypeError) as er:
+                print(f"Failed to process {filename} due to '{er}'.")
+                continue
 
-        elif dlyn == "e":
-            model_name = select_model()
-
-        else:
-            print("You must select d or e")
-
-    # open tokenizer
-    tokenizer = AutoTokenizer.from_pretrained(model_name.replace('models/',''), model_type='megatron-bert')
-
-    if questions is None:
+    def get_questions():
 
         # create question
         questions = []
 
         while True:
-            question = input("Please enter a question (use [answer] in your question to use previous answer in question): ").lower()
+            question = input("Please enter a question: ").lower()
             questions.append(question)
 
-            another = input("Would you like to input another question? (y/n) ").lower()
+            another = input("Would you like to input another question? (y/n)").lower()
             if another.lower() == "n":
                 break
 
@@ -99,12 +77,13 @@ def Inference(model_name, questions, selected_dir, xlyn, auto):
         for question in questions:
             print(question)
 
-    #define input directory
-    import os
+        return questions
 
-    if selected_dir is None:
+    def select_scrape_results():
+        import os
+
         # specify the directory path to list the subdirectories
-        directory_path = str(os.getcwd()) + "/txts/"
+        directory_path = str(os.getcwd()) + "/pdfs/"
 
         # get a list of all directories in the specified directory
         subdirectories = [x for x in os.listdir(directory_path) if os.path.isdir(os.path.join(directory_path, x))]
@@ -121,156 +100,121 @@ def Inference(model_name, questions, selected_dir, xlyn, auto):
                 break
             print("Invalid input. Please enter a number between 1 and", len(subdirectories))
 
-        # get the selected directory path
+        # get the selected directory
         selected_dir = subdirectories[int(selected_dir_num) - 1]
-        selected_dir_path = os.path.join(directory_path, selected_dir)
 
-    else:
-        selected_dir_path = str(os.getcwd()) + '/' + selected_dir
+        return selected_dir
 
-    # make specific answers directory
+    def get_and_write_answers(model_id, questions, selected_dir):
+        import csv
+        import textwrap
+
+        # Directory where the text files are stored
+        text_files_dir = str(os.getcwd()) + '/txts/' + selected_dir
+        csv_file_path = str(os.getcwd()) + '/answers/' + selected_dir + '/' + '_'.join(questions).replace(' ', '').lower() + '.csv'
+
+        # Get the list of TXT files
+        txt_files = sorted([filename for filename in os.listdir(text_files_dir) if filename.endswith('.txt')])
+
+        existing_dois = []
+
+        # Check if CSV file exists
+        if os.path.isfile(csv_file_path):
+            with open(csv_file_path, 'r') as f:
+                reader = csv.reader(f)
+                next(reader)  # Skip header
+                existing_dois = [row[0] for row in reader]
+
+        # Check for existing entries and skip them
+        if existing_dois:
+            last_processed_file = existing_dois[-1]
+            last_index = txt_files.index(last_processed_file)
+            txt_files = txt_files[last_index + 1:]  # Ignore already processed files
+
+        # Open CSV file for writing
+        with open(csv_file_path, 'a', newline='') as file:
+            writer = csv.writer(file)
+
+            # If CSV is empty, write headers
+            if os.stat(csv_file_path).st_size == 0:
+                headers = ["DOI"] + questions + ["References"]
+                writer.writerow(headers)
+
+            # Initialize the HuggingFace pipeline
+            qa_pipeline = pipeline('question-answering', model=model_id)
+
+            # Get the tokenizer to calculate the number of tokens
+            tokenizer = AutoTokenizer.from_pretrained(model_id)
+
+            # Query each question and write the answer to the CSV file
+            for filename in txt_files:
+                text_file_path = os.path.join(text_files_dir, filename)
+                print(f"Getting answers from {filename} currently")
+
+                with open(text_file_path, 'r') as file:
+                    document = file.read()
+
+                row = [filename]
+
+                for question in questions:
+                    print(question)
+                    # Split the document into chunks that are smaller than the token limit
+                    chunks = textwrap.wrap(document, width=tokenizer.model_max_length, break_long_words=False)
+
+                    best_answer = None
+                    best_score = -1
+
+                    for chunk in chunks:
+                        response = qa_pipeline({'context': chunk, 'question': question})
+
+                        # Compare the confidence of the resulting answers
+                        if response['score'] > best_score:
+                            best_score = response['score']
+                            best_answer = response['answer']
+
+                    print(f"{filename} says the answer is: {best_answer}")
+                    row.append(best_answer)
+
+                writer.writerow(row)
+
+    # have user select scrape results
+    if selected_dir is None:
+        selected_dir = select_scrape_results()
+
+    if model_id is None:
+        model_id = input("Please input the model id of the huggingface model you would like to use("
+                         "ex:mrm8488/longformer-base-4096-finetuned-squadv2):")
+
+    # make answers directory if necessary
     try:
-        os.mkdir(str(os.getcwd()) + "/answers/" + selected_dir)
-
+        os.mkdir(str(os.getcwd()) + "/answers/")
     except:
         None
 
-    # do something with the selected directory path
-    print("You selected:", selected_dir_path)
+    try:
+        os.mkdir(str(os.getcwd()) + "/answers/" + selected_dir)
+    except:
+        None
 
-    with open(selected_dir_path + '/output.txt', 'r') as p:
-        lines = p.readlines()
+    # Display selection
+    print("You selected:", selected_dir)
 
-    for question in questions:
+    # Get questions
+    if questions is None:
+        questions = get_questions()
 
-        # Check if the user wanted to use the previous answer as part of the next question
-        if '[answer]' in question:
-            with open(str(os.getcwd()) + "/answers/" + selected_dir + '/answers.txt') as f:
-                answers = f.readlines()
+    print("Now converting selected pdfs to plaintext...")
+    pdf_to_txt(selected_dir)
 
-            # Get the last answer from the list (strip any leading/trailing whitespace)
-            last_answer = answers[-1].strip()
-
-            question = question.replace('[answer]', last_answer)
-
-        original_text_list = []
-        tokenized_text_list = []
-
-        for line in lines:
-            total_text = line.strip()
-
-            # tokenize text
-            tokenized_text = tokenizer.encode(total_text)
-
-            # create corresponding original text list
-            original_text = total_text.split()
-            original_text_indices = 0
-            for token in tokenized_text:
-                sub_tokens = tokenizer.decode(token).split()
-                for sub_token in sub_tokens:
-                    if "#" in sub_token:
-                        original_text_list.append(original_text[original_text_indices])
-                        original_text_indices += 1
-                    else:
-                        original_text_list.append(sub_token)
-
-                # add token to tokenized text list
-                tokenized_text_list.append(token)
-
-            # calculate number of chunks
-            num_chunks = math.ceil(len(tokenized_text) / 400)
-
-            # create list to store average values
-            averages_list = []
-
-            # create list to store answers
-            answer_list = []
-
-
-            # loop through chunks
-            for z in range(1, num_chunks):
-
-                print("Now working on primary chunk " + str(z) + "/" + str(num_chunks))
-
-                answer, average_value = chunkedinf(tokenizer, tokenized_text, z, question, model_name, original_text_list)
-
-                print("Primary chunk " + str(z) + " completed")
-                print("Answer:" + str(answer))
-                print("Score:" + str(average_value))
-
-                # add answer to list
-                answer_list.append(answer)
-
-                # add average value to list
-                averages_list.append(average_value)
-
-            for z in range(1, num_chunks - 1):
-
-                print("Now working on offset chunk " + str(z) + "/" + str(num_chunks - 1))
-
-                answer, average_value = chunkedinfoffs(tokenizer, tokenized_text, z, question, model_name, original_text_list)
-
-                print("Offset chunk " + str(z) + " completed")
-                print("Answer:" + str(answer))
-                print("Score:" + str(average_value))
-
-                # add answer to list
-                answer_list.append(answer)
-
-                # add average value to list
-                averages_list.append(average_value)
-
-            # find maximum average value
-            average_max = max(averages_list)
-
-            # find index of maximum average value
-            best_index = averages_list.index(average_max)
-
-            # find best answer
-            best_answer = answer_list[best_index]
-
-            # open output file
-
-            with open(str(os.getcwd()) + "/answers/" + selected_dir + '/answers.txt', 'w') as g:
-
-                # write best answer to output file
-                g.write(best_answer + '\n')
-            print("Answer written to answers text file:" + str(best_answer))
+    print("Now getting answers from papers (woop woop!)")
+    get_and_write_answers(model_id, questions, selected_dir)
 
     print('Done!')
 
-    if xlyn is None:
-        xlyn = input("Would you like to convert answers to excel format?(y/n)").lower()
-
-
-    if xlyn == "y":
-        # Read in the answers from the text file
-        with open(str(os.getcwd()) + "/answers/" + selected_dir + 'answers.txt', "r") as f:
-            answers = f.readlines()
-
-        # Create an empty dictionary to hold the answers for each question
-        question_answers = {q: [] for q in questions}
-
-        # Loop through each answer and append it to the corresponding question's list
-        for i, ans in enumerate(answers):
-            question_answers[questions[i % len(questions)]].append(ans.strip())
-
-        # Create a DataFrame from the question_answers dictionary
-        df = pd.DataFrame(question_answers)
-
-        # Write the DataFrame to an Excel file
-        output_file = "output.xlsx"
-        df.to_excel(output_file, index=False)
-
-    elif xlyn == "n":
-        None
-
-    else:
-        print("You must select y or n")
-
-    if auto in locals():
-        return
-    else:
+    if auto is None:
         import sys
         python = sys.executable
         os.execl(python, python, *sys.argv)
+
+    else:
+        return None

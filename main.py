@@ -71,19 +71,37 @@ task = input("Enter the task number (1, 2, or 3): ")
 if task == "1":
     print("Installing dependencies...")
 
-    # Define the packages and versions to install
     packages = [
-        'torch==1.13.1',
-        'transformers==4.26.0',
-        'paperscraper==0.2.4',
-        'PyPDF2==3.0.1',
-        'scidownl==1.0.0',
-        'pandas==1.5.3'
+        "selenium",
+        "webdriver_manager",
+        "beautifulsoup4",
+        "requests",
+        "spacy",
+        "pandas",
+        "pytorch",
+        "nltk",
+        "transformers",
+        "sentence-transformers",
+        "scikit-learn",
+        "snorkel",
+        "optuna",
+        "unstructured",
+        "pdfminer.six",
+        "textwrap3"
     ]
 
-    # Loop through the packages and run 'pip install' command
+    system_dependencies = [
+        "libmagic",
+        "poppler",
+        "tesseract",
+        "libreoffice"
+    ]
+
     for package in packages:
-        subprocess.run(['pip', 'install', package, '--user'])
+        subprocess.check_call(["conda", "install", "-y", package])
+
+    for dependency in system_dependencies:
+        subprocess.check_call(["conda", "install", "-y", "-c", "conda-forge", dependency])
 
     # Download and run the EDirect installation script
     install_cmd = 'sh -c "$(wget -q ftp://ftp.ncbi.nlm.nih.gov/entrez/entrezdirect/install-edirect.sh -O -)"'

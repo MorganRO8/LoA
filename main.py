@@ -81,7 +81,6 @@ if task == "1":
         "nltk",
         "transformers",
         "scikit-learn",
-        "textwrap3"
     ]
 
     pip_packages = [
@@ -90,6 +89,7 @@ if task == "1":
         "unstructured",
         "optuna",
         "snorkel",
+        "textwrap3",
         "sentence-transformers"
     ]
 

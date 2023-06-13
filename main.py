@@ -85,7 +85,7 @@ if task == "1":
 
     pip_packages = [
         "webdriver_manager",
-        "git+https://github.com/facebookresearch/detectron2.git@e2ce8dc#egg=detectron2"
+        "git+https://github.com/facebookresearch/detectron2.git@e2ce8dc#egg=detectron2",
         "pdfminer.six",
         '"unstructured[local-inference]"',
         "optuna",

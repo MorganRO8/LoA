@@ -87,7 +87,7 @@ if task == "1":
         "webdriver_manager",
         "git+https://github.com/facebookresearch/detectron2.git@e2ce8dc#egg=detectron2",
         "pdfminer.six",
-        '"unstructured[local-inference]"',
+        'unstructured[local-inference]',
         "optuna",
         "snorkel",
         "textwrap3",

@@ -91,8 +91,6 @@ if task == "1":
         "optuna",
         "snorkel",
         "textwrap3",
-        "libxml2",
-        "libxslt",
         "libmagic-dev",
         "poppler-utils",
         "tesseract-ocr",

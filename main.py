@@ -85,29 +85,27 @@ if task == "1":
 
     pip_packages = [
         "webdriver_manager",
+        "git+https://github.com/facebookresearch/detectron2.git@e2ce8dc#egg=detectron2"
         "pdfminer.six",
         '"unstructured[local-inference]"',
         "optuna",
         "snorkel",
         "textwrap3",
+        "libxml2",
+        "libxslt",
+        "libmagic-dev",
+        "poppler-utils",
+        "tesseract-ocr",
+        "layoutparser",
         "sentence-transformers"
     ]
 
-    system_dependencies = [
-        "libmagic",
-        "poppler",
-        "tesseract",
-        "libreoffice"
-    ]
 
     for package in conda_packages:
         subprocess.check_call(["conda", "install", "-y", package])
 
     for package in pip_packages:
         subprocess.check_call(["pip", "install", package])
-
-    for dependency in system_dependencies:
-        subprocess.check_call(["conda", "install", "-y", "-c", "conda-forge", dependency])
 
     # Download and run the EDirect installation script
     install_cmd = 'sh -c "$(wget -q ftp://ftp.ncbi.nlm.nih.gov/entrez/entrezdirect/install-edirect.sh -O -)"'

@@ -20,7 +20,7 @@ CONVERT_URL = "https://www.ncbi.nlm.nih.gov/pmc/utils/idconv/v1.0/?ids={}&format
 EUTILS_URL = "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch.fcgi?db=pmc&id={}"
 ESEARCH_URL = 'https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esearch.fcgi'
 EFETCH_URL = 'https://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch.fcgi'
-DIRECTORIES = ['pdfs', 'arxiv', 'chemrxiv', 'medrxiv', 'biorxiv']
+DIRECTORIES = ['scraped_docs', 'arxiv', 'chemrxiv', 'medrxiv', 'biorxiv']
 
 def Scrape(args):
     updownyn = args.get('updownyn')
@@ -68,8 +68,7 @@ def Scrape(args):
                 return
 
             # Get a list of already downloaded files
-            downloaded_files = os.listdir(os.path.join(os.getcwd(), 'pdfs', output_directory_id))
-            downloaded_files = [file.replace('.xml', '') for file in downloaded_files]
+            downloaded_files = os.listdir(os.path.join(os.getcwd(), 'scraped_docs', output_directory_id))
 
             # For each UID, fetch the corresponding XML data
             for uid in uid_list:
@@ -94,7 +93,7 @@ def Scrape(args):
                     xml_data = efetch_response.text
 
                     # Save the XML data to a file
-                    with open(os.path.join(os.getcwd(), 'pdfs', output_directory_id, f"{uid}.xml"), 'w') as f:
+                    with open(os.path.join(os.getcwd(), 'scraped_docs', output_directory_id, f"{uid}.xml"), 'w') as f:
                         f.write(xml_data)
 
                     # Sleep for 1/3 of a second to avoid hitting the rate limit
@@ -278,14 +277,14 @@ def Scrape(args):
                     remove_lines_after(retmax, file_path)
 
                 try:
-                    save_pdf_from_dump(file_path, pdf_path=os.path.join(os.getcwd(), 'pdfs', output_directory_id),
+                    save_pdf_from_dump(file_path, pdf_path=os.path.join(os.getcwd(), 'scraped_docs', output_directory_id),
                                        key_to_save='doi')
                 except:
                     print(f"{directory} results empty, moving on")
 
     if auto is None:
         customdb = input("Would you like to search and download from a custom database?\nYou will need to place your "
-                         "metadata.db file in the operating directory, and provide a base url to fetch pdfs using "
+                         "metadata.db file in the operating directory, and provide a base url to fetch docs using "
                          "dois.(y/n)").lower()
 
     if customdb == "y":
@@ -297,10 +296,10 @@ def Scrape(args):
             # Define the base URL
             base_url = input("Enter base url:")
 
-        # Create the directory for the PDFs if it doesn't exist
-        pdf_dir = os.path.join(os.getcwd(), 'customdb-pdf')
+        # Create the directory for the docs if it doesn't exist
+        pdf_dir = os.path.join(os.getcwd(), 'scraped_docs', output_directory_id)
         os.makedirs(pdf_dir, exist_ok=True)
-        print(f"PDFs will be saved to: {pdf_dir}")
+        print(f"docs will be saved to: {pdf_dir}")
 
         # Iterate over all search terms
         for chunk in query_chunks:

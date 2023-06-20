@@ -1,34 +1,38 @@
+# Imports
+import os
+import re
+import spacy
+import pandas as pd
+import torch
+from nltk.corpus import wordnet
+from transformers import pipeline
+from sentence_transformers import SentenceTransformer
+from sklearn.metrics.pairwise import cosine_similarity
+from snorkel.labeling import PandasLFApplier
+from snorkel.labeling.model import LabelModel
+from transformers import AutoModelForQuestionAnswering, AutoTokenizer, TrainingArguments, Trainer
+from snorkel.types import DataPoint
+from sklearn.model_selection import train_test_split
+import optuna
+from torch.utils.data import Subset
+from functools import partial
+from unstructured.partition.auto import partition
+from unstructured.partition.pdf import partition_pdf
+from pdfminer.pdfparser import PDFSyntaxError
+
+
 def snorkel_train(args):
     tasks = args.get('tasks')
-    text_directory = args.get('text_directory')
+    text_dir = args.get('text_directory')
     model_type = args.get('model_type')
     model_path = args.get('model_path')
     auto = args.get('auto')
 
-    # Imports
-    import os
-    import re
-    import spacy
-    import pandas as pd
-    import torch
-    from nltk.corpus import wordnet
-    from transformers import pipeline
-    from sentence_transformers import SentenceTransformer
-    from sklearn.metrics.pairwise import cosine_similarity
-    from snorkel.labeling import PandasLFApplier
-    from snorkel.labeling.model import LabelModel
-    from transformers import AutoModelForQuestionAnswering, AutoTokenizer, TrainingArguments, Trainer
-    from snorkel.types import DataPoint
-    from sklearn.model_selection import train_test_split
-    import optuna
-    from torch.utils.data import Subset
-    from functools import partial
-
     # Definitions
     
-    def pdf_to_txt(text_dir):
+    def doc_to_txt(text_dir):
         # Directory where the PDFs are stored
-        pdf_files_dir = str(os.getcwd()) + '/pdfs/' + text_dir
+        pdf_files_dir = str(os.getcwd()) + '/scraped_docs/' + text_dir
 
         try:
             os.mkdir(str(os.getcwd()) + '/txts/')
@@ -45,6 +49,7 @@ def snorkel_train(args):
 
         # Get the list of PDF files and TXT files
         pdf_files = sorted([filename for filename in os.listdir(pdf_files_dir) if filename.endswith('.pdf')])
+        non_pdf_files = sorted([filename for filename in os.listdir(pdf_files_dir) if not filename.endswith('.pdf')])
         txt_files = sorted([filename for filename in os.listdir(text_files_dir) if filename.endswith('.txt')])
 
         # If there are already some TXT files processed
@@ -61,7 +66,7 @@ def snorkel_train(args):
 
             try:
                 # Partition the PDF into elements
-                elements = partition_pdf(pdf_file_path)
+                elements = partition_pdf(filename=pdf_file_path, strategy='hi_res', infer_table_structure=True)
 
                 # Check if elements are empty
                 if not elements or all(not str(element).strip() for element in elements):
@@ -75,6 +80,29 @@ def snorkel_train(args):
             except (PDFSyntaxError, TypeError) as er:
                 print(f"Failed to process {filename} due to '{er}'.")
                 continue
+
+        for filename in non_pdf_files:
+            non_pdf_file_path = os.path.join(pdf_files_dir, filename)
+            text_file_path = os.path.join(text_files_dir, filename.replace('.pdf', '.txt'))
+            print(f"Now working on {filename}")
+
+            try:
+                # Partition the PDF into elements
+                elements = partition(filename=non_pdf_file_path)
+
+                # Check if elements are empty
+                if not elements or all(not str(element).strip() for element in elements):
+                    print(f"Skipping {filename} as it does not contain any text.")
+                    continue
+
+                # Write the elements to a text file
+                with open(text_file_path, 'w') as file:
+                    for element in elements:
+                        file.write(str(element) + '\n')
+            except Exception as eek:
+                print(f"Error processing {filename}; {eek}")
+                continue
+
     
     def get_keywords(keywords):
         if keywords is None:
@@ -167,10 +195,13 @@ def snorkel_train(args):
                     texts.append(f.read())
         return texts
 
+    if auto is None:
+        # Have user select scrape results to use
+        text_dir = select_scrape_results()
+
     # Convert pdfs to plaintext
-    
     print("Now converting selected pdfs to plaintext...")
-    pdf_to_txt(text_dir)
+    doc_to_txt(text_dir)
 
     # Initialization
     nlp = spacy.load('en_core_web_sm')

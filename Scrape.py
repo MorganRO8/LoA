@@ -349,7 +349,7 @@ def Scrape(args):
                     pdf_link = None
                     for button in soup.find_all('button'):
                         if '.pdf' in button.get('onclick', ''):
-                            pdf_link = button['onclick'].split("'")[1].replace("'location.href='//", 'https://')
+                            pdf_link = button['onclick'].split("'")[1].replace("'location.href='", 'https://')
                             break
 
                     if pdf_link is not None:

@@ -10,56 +10,6 @@ def Inference(args):
     model_id = args.get('model_id')
     auto = args.get('auto')
 
-    def pdf_to_txt(selected_dir):
-        # Directory where the PDFs are stored
-        pdf_files_dir = str(os.getcwd()) + '/pdfs/' + selected_dir
-
-        try:
-            os.mkdir(str(os.getcwd()) + '/txts/')
-        except:
-            None
-
-        try:
-            os.mkdir(str(os.getcwd()) + '/txts/' + selected_dir)
-        except:
-            None
-
-        # Directory where the text files will be stored
-        text_files_dir = str(os.getcwd()) + '/txts/' + selected_dir
-
-        # Get the list of PDF files and TXT files
-        pdf_files = sorted([filename for filename in os.listdir(pdf_files_dir) if filename.endswith('.pdf')])
-        txt_files = sorted([filename for filename in os.listdir(text_files_dir) if filename.endswith('.txt')])
-
-        # If there are already some TXT files processed
-        if txt_files:
-            last_processed_file = txt_files[-1].replace('.txt', '.pdf')
-            last_index = pdf_files.index(last_processed_file)
-            pdf_files = pdf_files[last_index + 1:]  # Ignore already processed files
-
-        # Convert each PDF to a text file
-        for filename in pdf_files:
-            pdf_file_path = os.path.join(pdf_files_dir, filename)
-            text_file_path = os.path.join(text_files_dir, filename.replace('.pdf', '.txt'))
-            print(f"Now working on {filename}")
-
-            try:
-                # Partition the PDF into elements
-                elements = partition_pdf(pdf_file_path)
-
-                # Check if elements are empty
-                if not elements or all(not str(element).strip() for element in elements):
-                    print(f"Skipping {filename} as it does not contain any text.")
-                    continue
-
-                # Write the elements to a text file
-                with open(text_file_path, 'w') as file:
-                    for element in elements:
-                        file.write(str(element) + '\n')
-            except (PDFSyntaxError, TypeError) as er:
-                print(f"Failed to process {filename} due to '{er}'.")
-                continue
-
     def get_questions():
 
         # create question
@@ -178,10 +128,10 @@ def Inference(args):
                 writer.writerow(row)
 
     # have user select scrape results
-    if selected_dir is None:
+    if auto is None:
         selected_dir = select_scrape_results()
 
-    if model_id is None:
+    if auto is None:
         model_id = input("Please input the model id of the huggingface model you would like to use("
                          "ex:mrm8488/longformer-base-4096-finetuned-squadv2):")
 
@@ -200,11 +150,8 @@ def Inference(args):
     print("You selected:", selected_dir)
 
     # Get questions
-    if questions is None:
+    if auto is None:
         questions = get_questions()
-
-    print("Now converting selected pdfs to plaintext...")
-    pdf_to_txt(selected_dir)
 
     print("Now getting answers from papers (woop woop!)")
     get_and_write_answers(model_id, questions, selected_dir)

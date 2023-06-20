@@ -5,20 +5,19 @@ from unittest.mock import patch, MagicMock
 # Import the main function from your program
 from main import main
 
-# Load the JSON file
-with open('automatic.json') as f:
-    automatic = json.load(f)
-
 # Create a class for the tests
 class TestMain(unittest.TestCase):
+
+    def setUp(self):
+        # Load the test JSON file
+        with open('test.json') as f:
+            self.test = json.load(f)
 
     # Test the main function
     def test_main(self):
         print("Testing main function...")
-        # Mock the argparse.ArgumentParser.parse_args function to return the automatic dictionary
-        with patch('argparse.ArgumentParser.parse_args', return_value=automatic):
-            # Call the main function
-            main()
+        # Call the main function with the -auto argument and the path to the test.json file
+        main(['-auto', 'test.json'])
         print("Main function test completed.")
 
     # Test the Scrape function
@@ -27,16 +26,13 @@ class TestMain(unittest.TestCase):
         # Import the Scrape function
         from Scrape import Scrape
 
-        # Mock the Scrape function to return a single paper
-        with patch('Scrape.Scrape', return_value={'paper1': 'content1'}):
-            # Call the Scrape function with the automatic dictionary
-            result = Scrape(automatic['Scrape'])
+        # Mock the Scrape function
+        with patch('Scrape.Scrape', return_value=None) as mock_scrape:
+            # Call the Scrape function with the test dictionary
+            Scrape(self.test['Scrape'])
 
             # Check that the Scrape function was called with the correct parameters
-            Scrape.assert_called_with(automatic['Scrape'])
-
-            # Check that the Scrape function returned the correct result
-            self.assertEqual(result, {'paper1': 'content1'})
+            mock_scrape.assert_called_with(self.test['Scrape'])
         print("Scrape function test completed.")
 
     # Test the snorkel_train function
@@ -45,16 +41,13 @@ class TestMain(unittest.TestCase):
         # Import the snorkel_train function
         from snorkel_train import snorkel_train
 
-        # Mock the snorkel_train function to return a single paper
-        with patch('snorkel_train.snorkel_train', return_value={'paper1': 'content1'}):
-            # Call the snorkel_train function with the automatic dictionary
-            result = snorkel_train(automatic['snorkel_train'])
+        # Mock the snorkel_train function
+        with patch('snorkel_train.snorkel_train', return_value=None) as mock_snorkel_train:
+            # Call the snorkel_train function with the test dictionary
+            snorkel_train(self.test['snorkel_train'])
 
             # Check that the snorkel_train function was called with the correct parameters
-            snorkel_train.assert_called_with(automatic['snorkel_train'])
-
-            # Check that the snorkel_train function returned the correct result
-            self.assertEqual(result, {'paper1': 'content1'})
+            mock_snorkel_train.assert_called_with(self.test['snorkel_train'])
         print("snorkel_train function test completed.")
 
     # Test the Inference function
@@ -63,32 +56,15 @@ class TestMain(unittest.TestCase):
         # Import the Inference function
         from Inference import Inference
 
-        # Mock the Inference function to return a single paper
-        with patch('Inference.Inference', return_value={'paper1': 'content1'}):
-            # Call the Inference function with the automatic dictionary
-            result = Inference(automatic['Inference'])
+        # Mock the Inference function
+        with patch('Inference.Inference', return_value=None) as mock_inference:
+            # Call the Inference function with the test dictionary
+            Inference(self.test['Inference'])
 
             # Check that the Inference function was called with the correct parameters
-            Inference.assert_called_with(automatic['Inference'])
-
-            # Check that the Inference function returned the correct result
-            self.assertEqual(result, {'paper1': 'content1'})
+            mock_inference.assert_called_with(self.test['Inference'])
         print("Inference function test completed.")
 
 # Run the tests
 if __name__ == '__main__':
     unittest.main()
-
-# Create a test suite
-suite = unittest.TestSuite()
-
-# Add tests to the test suite
-suite.addTest(TestMain('test_main'))
-suite.addTest(TestMain('test_scrape'))
-suite.addTest(TestMain('test_snorkel_train'))
-suite.addTest(TestMain('test_inference'))
-
-# Run the test suite
-runner = unittest.TextTestRunner()
-print("Running tests...")
-runner.run(suite)

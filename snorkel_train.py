@@ -25,6 +25,57 @@ def snorkel_train(args):
     from functools import partial
 
     # Definitions
+    
+    def pdf_to_txt(text_dir):
+        # Directory where the PDFs are stored
+        pdf_files_dir = str(os.getcwd()) + '/pdfs/' + text_dir
+
+        try:
+            os.mkdir(str(os.getcwd()) + '/txts/')
+        except:
+            None
+
+        try:
+            os.mkdir(str(os.getcwd()) + '/txts/' + text_dir)
+        except:
+            None
+
+        # Directory where the text files will be stored
+        text_files_dir = str(os.getcwd()) + '/txts/' + text_dir
+
+        # Get the list of PDF files and TXT files
+        pdf_files = sorted([filename for filename in os.listdir(pdf_files_dir) if filename.endswith('.pdf')])
+        txt_files = sorted([filename for filename in os.listdir(text_files_dir) if filename.endswith('.txt')])
+
+        # If there are already some TXT files processed
+        if txt_files:
+            last_processed_file = txt_files[-1].replace('.txt', '.pdf')
+            last_index = pdf_files.index(last_processed_file)
+            pdf_files = pdf_files[last_index + 1:]  # Ignore already processed files
+
+        # Convert each PDF to a text file
+        for filename in pdf_files:
+            pdf_file_path = os.path.join(pdf_files_dir, filename)
+            text_file_path = os.path.join(text_files_dir, filename.replace('.pdf', '.txt'))
+            print(f"Now working on {filename}")
+
+            try:
+                # Partition the PDF into elements
+                elements = partition_pdf(pdf_file_path)
+
+                # Check if elements are empty
+                if not elements or all(not str(element).strip() for element in elements):
+                    print(f"Skipping {filename} as it does not contain any text.")
+                    continue
+
+                # Write the elements to a text file
+                with open(text_file_path, 'w') as file:
+                    for element in elements:
+                        file.write(str(element) + '\n')
+            except (PDFSyntaxError, TypeError) as er:
+                print(f"Failed to process {filename} due to '{er}'.")
+                continue
+    
     def get_keywords(keywords):
         if keywords is None:
             user_input = input("Enter a comma-separated list of keywords or a path to a .txt file: ")
@@ -106,7 +157,7 @@ def snorkel_train(args):
         # get the selected directory
         selected_dir = subdirectories[int(selected_dir_num) - 1]
 
-        return selected_dir
+        return text_dir
 
     def load_text_files(directory):
         texts = []
@@ -115,6 +166,11 @@ def snorkel_train(args):
                 with open(os.path.join(directory, filename), 'r') as f:
                     texts.append(f.read())
         return texts
+
+    # Convert pdfs to plaintext
+    
+    print("Now converting selected pdfs to plaintext...")
+    pdf_to_txt(text_dir)
 
     # Initialization
     nlp = spacy.load('en_core_web_sm')

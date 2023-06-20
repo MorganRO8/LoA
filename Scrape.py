@@ -1,6 +1,5 @@
 import os
 import requests
-import xml.etree.ElementTree as ET
 import sys
 from paperscraper.pdf import save_pdf_from_dump
 import time
@@ -324,8 +323,9 @@ def Scrape(args):
 
             # Iterate over the results
             for result in results:
-                # Extract the DOI
+                # Extract and format the DOI
                 doi = result[0]
+                encoded_doi = quote(doi, safe='')
                 print(f"Processing DOI: {doi}")
 
                 # Create the URL for the paper
@@ -349,13 +349,13 @@ def Scrape(args):
                     pdf_link = None
                     for button in soup.find_all('button'):
                         if '.pdf' in button.get('onclick', ''):
-                            pdf_link = button['onclick'].split("'")[1].replace("'location.href='", 'https://')
+                            pdf_link = 'https:' + button['onclick'].split("'")[1]
                             break
 
                     if pdf_link is not None:
                         # Download the PDF
                         try:
-                            pdf_response = requests.get('https://' + pdf_link)
+                            pdf_response = requests.get(pdf_link)  # Removed 'https://' from here
                             pdf_response.raise_for_status()
                         except requests.exceptions.RequestException as e:
                             print(f"Request failed: {e}")
@@ -366,8 +366,9 @@ def Scrape(args):
                             pdf = pdf_response.content
 
                             # Create the path for the PDF file
-                            pdf_path = os.path.join(pdf_dir, f'{doi}.pdf')
+                            pdf_path = os.path.join(pdf_dir, f'{encoded_doi}.pdf')
                             print(f"Saving PDF to: {pdf_path}")
+
 
                             # Write the PDF to a file
                             with open(pdf_path, 'wb') as f:

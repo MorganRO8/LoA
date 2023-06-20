@@ -113,19 +113,19 @@ def Scrape(args):
             file.writelines(lines)
 
     def timed_get_and_dump_arxiv_papers(search_term, output_filepath):
-    MAX_RETRIES = 10# Define the maximum number of retries
-    for attempt in range(MAX_RETRIES):
-        time.sleep(1) # Sleep at the beginning of loop to ensure we're not spamming.
-        try:
-            get_and_dump_arxiv_papers(search_term, output_filepath=output_filepath)
-            break  # If the request is successful, break the loop
-        except UnexpectedEmptyPageError:
-            print(f"Skipping search term {search_term} due to an empty page error.")
-        except ConnectionResetError:
-            if attempt < MAX_RETRIES - 1:  # If this isn't the last attempt
-                print(f"Connection reset by peer, retrying... (Attempt {attempt + 1})")
-            else:  # If this is the last attempt
-                print(f"Connection reset by peer, giving up after {MAX_RETRIES} attempts.")
+        MAX_RETRIES = 10# Define the maximum number of retries
+        for attempt in range(MAX_RETRIES):
+            time.sleep(1) # Sleep at the beginning of loop to ensure we're not spamming.
+            try:
+                get_and_dump_arxiv_papers(search_term, output_filepath=output_filepath)
+                break  # If the request is successful, break the loop
+            except UnexpectedEmptyPageError:
+                print(f"Skipping search term {search_term} due to an empty page error.")
+            except ConnectionResetError:
+                if attempt < MAX_RETRIES - 1:  # If this isn't the last attempt
+                    print(f"Connection reset by peer, retrying... (Attempt {attempt + 1})")
+                else:  # If this is the last attempt
+                    print(f"Connection reset by peer, giving up after {MAX_RETRIES} attempts.")
 
 
     def create_directory(path):

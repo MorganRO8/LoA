@@ -40,18 +40,24 @@ def Scrape(args):
     base_url = args.get('base_url')
 
     async def scrape_scienceopen(search_terms, retmax, output_directory_id):
-        # Launch the browser
-        browser = await launch()
-        page = await browser.newPage()
+        # Start the async loop
+        print("Starting the async loop...")
+        asyncio.get_running_loop()
+        print("Async loop started, attempting to launch browser..")
 
-        print(f"Now searching ScienceOpen for {search_terms}")
+        # Launch the browser
+        browser = await launch(autoClose=False)
+        print("Headless browser launched, trying to open new tab")
+
+        # Open new page in browser
+        page = await browser.newPage()
+        print("New tab successfully opened in browser")
 
         # Generate the starting URL
         url = f"https://www.scienceopen.com/search#('v'~4_'id'~''_'queryType'~1_'context'~null_'kind'~77_'order'~0_'orderLowestFirst'~false_'query'~'{' '.join(search_terms)}'_'filters'~!('kind'~84_'openAccess'~true)*_'hideOthers'~false)"
-        print(f"Starting url for current search: {url}")
+        print(f"Starting url for current search: {url}\nVisiting page...")
 
         # Visit the URL
-        print("Visiting page...")
         await page.goto(url)
         print("Page visited.")
 
@@ -354,25 +360,16 @@ def Scrape(args):
 
         if soyn != "y":
             soyn = input("Would you like to scrape ScienceOpen?(y/n):").lower()
+        else:
+            print("You must select y or n")
 
         if soyn == "y":
-            runner = CrawlerRunner()
-
+            tasks = []
             for chunk in query_chunks:
-
-                asyncio.get_event_loop().run_until_complete(scrape_scienceopen(chunk, retmax, output_directory_id))
-
-    if soyn == "y":
-
-        d = runner.join()
-        d.addBoth(lambda _: reactor.stop())
-
-        # Only start the reactor if it's not already running
-        if not reactor.running:
-            reactor.run()
-
-        elif soyn != "n":
-            print("You must select y or n")
+                print(f"Now running ScienceOpen scrape for {chunk}")
+                tasks.append(scrape_scienceopen(chunk, retmax, output_directory_id))
+            loop = asyncio.get_event_loop()
+            loop.run_until_complete(asyncio.gather(*tasks))
 
     if auto is None:
         customdb = input("Would you like to search and download from a custom database?\nYou will need to place your "

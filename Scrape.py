@@ -17,6 +17,8 @@ from scrapy import Spider, Request
 from scrapy.crawler import CrawlerRunner
 from twisted.internet import reactor
 from scrapy_splash import SplashRequest
+import asyncio
+from pyppeteer import launch
 
 # Constants
 CONVERT_URL = "https://www.ncbi.nlm.nih.gov/pmc/utils/idconv/v1.0/?ids={}&format=json"
@@ -24,6 +26,7 @@ EUTILS_URL = "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch.fcgi?db=pmc&i
 ESEARCH_URL = 'https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esearch.fcgi'
 EFETCH_URL = 'https://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch.fcgi'
 DIRECTORIES = ['scraped_docs', 'arxiv', 'chemrxiv', 'medrxiv', 'biorxiv']
+
 
 def Scrape(args):
     updownyn = args.get('updownyn')
@@ -36,81 +39,68 @@ def Scrape(args):
     retmax = args.get('retmax')
     base_url = args.get('base_url')
 
-    class ScienceOpenSpider(Spider):
-        name = "scienceopen_spider"
-        custom_settings = {
-            'TELNETCONSOLE_ENABLED': False,
-            'SPLASH_URL': 'http://localhost:8050',
-            'DOWNLOADER_MIDDLEWARES': {
-                'scrapy_splash.SplashCookiesMiddleware': 723,
-                'scrapy_splash.SplashMiddleware': 725,
-                'scrapy.downloadermiddlewares.httpcompression.HttpCompressionMiddleware': 810,
-            },
-            'SPIDER_MIDDLEWARES': {
-                'scrapy_splash.SplashDeduplicateArgsMiddleware': 100,
-            },
-            'DUPEFILTER_CLASS': 'scrapy_splash.SplashAwareDupeFilter',
-        }
+    async def scrape_scienceopen(search_terms, retmax, output_directory_id):
+        # Launch the browser
+        browser = await launch()
+        page = await browser.newPage()
 
-        def __init__(self, search_terms=None, retmax=None, output_directory=None, *args, **kwargs):
-            super(ScienceOpenSpider, self).__init__(*args, **kwargs)
-            self.search_terms = search_terms
-            self.retmax = retmax
-            self.output_directory = output_directory
-            self.count = 0  # Add a counter to keep track of the number of articles scraped
+        print(f"Now searching ScienceOpen for {search_terms}")
 
-        def start_requests(self):
-            # Generate the starting URL
-            url = f"https://www.scienceopen.com/search#('v'~4_'id'~''_'queryType'~1_'context'~null_'kind'~77_'order'~0_'orderLowestFirst'~false_'query'~'{'+'.join(self.search_terms)}'_'filters'~!('kind'~84_'openAccess'~true)*_'hideOthers'~false)"
-            print(f"The generated start url is: {url}")
-            print(f"The current settings for scrapy are as follows:\n{self.settings.attributes.keys()}")
-            # Yield a Request to the starting URL
-            yield SplashRequest(url=url, callback=self.parse, cb_kwargs={'start_url': url})
+        # Generate the starting URL
+        url = f"https://www.scienceopen.com/search#('v'~4_'id'~''_'queryType'~1_'context'~null_'kind'~77_'order'~0_'orderLowestFirst'~false_'query'~'{' '.join(search_terms)}'_'filters'~!('kind'~84_'openAccess'~true)*_'hideOthers'~false)"
+        print(f"Starting url for current search: {url}")
 
-        def parse(self, response, start_url):
-            print(f"Visited {response.url}")  # Print the URL of the page the spider is visiting
-            print(response.text)  # Print the HTML of the page the spider is visiting
+        # Visit the URL
+        print("Visiting page...")
+        await page.goto(url)
+        print("Page visited.")
 
-            # If the response URL is different from the start URL, it means that a redirect has occurred
-            if response.url != start_url:
-                print(f"Redirected from {start_url} to {response.url}")
+        # Initialize the counter
+        count = 0
 
-            articles = response.css('a::attr(href)').re(r'https://www.scienceopen.com/document/.*')
+        # Loop until we reach the maximum number of papers
+        while count < retmax:
+            print(f"Finding paper {count+1}/{retmax}")
+            # Extract the article links
+            article_links = await page.querySelectorAllEval('a[href^="https://www.scienceopen.com/document/"]',
+                                                            '(elements) => elements.map((element) => element.href)')
+            print(f"Found these links on the page:\n{article_links}")
 
-            # If no articles are found, stop the spider
-            if not articles:
-                print("No articles found, stopping the spider.")
-                return
+            # Visit each article page
+            for link in article_links:
+                print(f"Following link: {link}")
+                if count >= retmax:
+                    break
 
-            for article in articles:
-                if self.count < self.retmax:  # Only make a request if the count is less than retmax
-                    yield SplashRequest(url=article, callback=self.parse_article)
+                # Visit the article page
+                print("Awaiting article page response...")
+                await page.goto(link)
+                print("Article page responded, extracting PDF link...")
 
-        def parse_article(self, response):
-            print(f"Visited {response.url}")  # Print the URL of the page the spider is visiting
-            print(response.text)  # Print the HTML of the page the spider is visiting
+                # Extract the PDF download link
+                pdf_link = await page.querySelectorEval('a[title="Download PDF"]',
+                                                        '(element) => element.getAttribute("onclick").match(/\'(https:.+)\'/)[1]')
+                print(f"PDF link extracted: {pdf_link}\nDownloading PDF...")
 
-            download_button = response.css('a[title="Download PDF"]::attr(onclick)').re_first(r"'(https:.+)'")
-            if download_button:
-                self.count += 1  # Increment the counter each time an article is scraped
-                yield SplashRequest(url=download_button, callback=self.save_pdf)
+                if pdf_link:
+                    # Download the PDF
+                    pdf_response = await page.goto(pdf_link)
+                    print("PDF file accessed, saving to local machine...")
 
-        def save_pdf(self, response):
-            filename = response.url.split("/")[-1] + ".pdf"
-            with open(os.path.join(self.output_directory, filename), 'wb') as f:
-                f.write(response.body)
+                    # Save the PDF
+                    filename = pdf_link.split("/")[-1] + ".pdf"
+                    with open(os.path.join(output_directory_id, filename), 'wb') as f:
+                        f.write(await pdf_response.buffer())
+                    print("PDF saved.")
 
-    def schedule_next_crawl(null, chunks):
-        if chunks:
-            chunk = chunks.pop(0)
-            deferred = scrape_scienceopen(chunk, retmax, output_directory_id, schedule_next_crawl, chunks)
-            deferred.addBoth(schedule_next_crawl, chunks)
+                    # Increment the counter
+                    count += 1
 
-    def scrape_scienceopen(search_terms, retmax, output_directory_id):
-        output_directory = os.path.join(os.getcwd(), 'scraped_docs', output_directory_id)
-        os.makedirs(output_directory, exist_ok=True)
-        return runner.crawl(ScienceOpenSpider, search_terms=search_terms, retmax=retmax,
-                            output_directory=output_directory)
+            # Click the "Load more" button
+            await page.click('.so--tall')
+
+        # Close the browser
+        await browser.close()
 
     class XRXivQueryWrapper(XRXivQuery):
         def __init__(self, dump_filepath, retmax, fields=["title", "doi", "authors", "abstract", "date", "journal"]):
@@ -369,7 +359,8 @@ def Scrape(args):
             runner = CrawlerRunner()
 
             for chunk in query_chunks:
-                runner.crawl(ScienceOpenSpider, search_terms=chunk, retmax=retmax, output_directory=output_directory_id)
+
+                asyncio.get_event_loop().run_until_complete(scrape_scienceopen(chunk, retmax, output_directory_id))
 
     if soyn == "y":
 

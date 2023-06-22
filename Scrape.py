@@ -4,16 +4,18 @@ import sys
 from paperscraper.pdf import save_pdf_from_dump
 import time
 import itertools
-from paperscraper.arxiv import get_and_dump_arxiv_papers
+from paperscraper.arxiv import *
 from paperscraper.xrxiv.xrxiv_query import XRXivQuery
 import glob
 import pkg_resources
 from paperscraper.get_dumps import biorxiv, medrxiv, chemrxiv
 import concurrent.futures
-from arxiv.arxiv import UnexpectedEmptyPageError
 import sqlite3
 from urllib.parse import quote
 from bs4 import BeautifulSoup
+from scrapy import Spider, Request
+from scrapy.crawler import CrawlerRunner
+from twisted.internet import reactor
 
 # Constants
 CONVERT_URL = "https://www.ncbi.nlm.nih.gov/pmc/utils/idconv/v1.0/?ids={}&format=json"
@@ -33,6 +35,86 @@ def Scrape(args):
     retmax = args.get('retmax')
     base_url = args.get('base_url')
 
+    class ScienceOpenSpider(Spider):
+        name = "scienceopen_spider"
+        custom_settings = {
+            'TELNETCONSOLE_ENABLED': False,
+        }
+
+        def __init__(self, search_terms=None, retmax=None, output_directory=None, *args, **kwargs):
+            super(ScienceOpenSpider, self).__init__(*args, **kwargs)
+            self.search_terms = search_terms
+            self.retmax = retmax
+            self.output_directory = output_directory
+            self.count = 0  # Add a counter to keep track of the number of articles scraped
+
+        def start_requests(self):
+            # Generate the starting URL
+            url = f"https://www.scienceopen.com/search#('v'~4_'id'~''_'queryType'~1_'context'~null_'kind'~77_'order'~0_'orderLowestFirst'~false_'query'~'{'+'.join(self.search_terms)}'_'filters'~!('kind'~84_'openAccess'~true)*_'hideOthers'~false)"
+            print(f"The generated start url is: {url}")
+            print(f"The current settings for scrapy are as follows:\n{self.settings.attributes.keys()}")
+            # Yield a Request to the starting URL
+            yield Request(url=url, callback=self.parse, cb_kwargs={'start_url': url})
+
+        def parse(self, response, start_url):
+            print(f"Visited {response.url}")  # Print the URL of the page the spider is visiting
+            print(response.text)  # Print the HTML of the page the spider is visiting
+
+            # If the response URL is different from the start URL, it means that a redirect has occurred
+            if response.url != start_url:
+                print(f"Redirected from {start_url} to {response.url}")
+
+            articles = response.css('a::attr(href)').re(r'https://www.scienceopen.com/document/.*')
+
+            # If no articles are found, stop the spider
+            if not articles:
+                print("No articles found, stopping the spider.")
+                return
+
+            for article in articles:
+                if self.count < self.retmax:  # Only make a request if the count is less than retmax
+                    yield Request(url=article, callback=self.parse_article)
+
+        def parse_article(self, response):
+            print(f"Visited {response.url}")  # Print the URL of the page the spider is visiting
+            print(response.text)  # Print the HTML of the page the spider is visiting
+
+            download_button = response.css('a[title="Download PDF"]::attr(onclick)').re_first(r"'(https:.+)'")
+            if download_button:
+                self.count += 1  # Increment the counter each time an article is scraped
+                yield Request(url=download_button, callback=self.save_pdf)
+
+        def save_pdf(self, response):
+            filename = response.url.split("/")[-1] + ".pdf"
+            with open(os.path.join(self.output_directory, filename), 'wb') as f:
+                f.write(response.body)
+
+    def schedule_next_crawl(null, chunks):
+        if chunks:
+            chunk = chunks.pop(0)
+            deferred = scrape_scienceopen(chunk, retmax, output_directory_id, schedule_next_crawl, chunks)
+            deferred.addBoth(schedule_next_crawl, chunks)
+
+    def scrape_scienceopen(search_terms, retmax, output_directory_id):
+        output_directory = os.path.join(os.getcwd(), 'scraped_docs', output_directory_id)
+        os.makedirs(output_directory, exist_ok=True)
+        return runner.crawl(ScienceOpenSpider, search_terms=search_terms, retmax=retmax,
+                            output_directory=output_directory)
+
+    class XRXivQueryWrapper(XRXivQuery):
+        def __init__(self, dump_filepath, retmax, fields=["title", "doi", "authors", "abstract", "date", "journal"]):
+            super().__init__(dump_filepath, fields)
+            self.retmax = retmax
+
+        def search_keywords(self, keywords, fields=None, output_filepath=None):
+            df = super().search_keywords(keywords, fields, output_filepath)
+            return df.head(self.retmax)
+
+    def get_and_dump_arxiv_papers_wrapper(keywords, output_filepath, retmax,
+                                          fields=["title", "authors", "date", "abstract", "journal", "doi"], *args,
+                                          **kwargs):
+        papers = get_arxiv_papers(get_query_from_keywords(keywords), fields, max_results=retmax, *args, **kwargs)
+        dump_papers(papers.head(retmax), output_filepath)
 
     def pubmed_search(search_terms, retmax, output_directory_id):
         # Combine search terms with AND operator
@@ -99,7 +181,6 @@ def Scrape(args):
                     # Sleep for 1/3 of a second to avoid hitting the rate limit
                     time.sleep(1/3)
 
-
     def remove_lines_after(line_number, file_path):
         lines = []
         with open(file_path, 'r') as file:
@@ -109,22 +190,6 @@ def Scrape(args):
 
         with open(file_path, 'w') as file:
             file.writelines(lines)
-
-    def timed_get_and_dump_arxiv_papers(search_term, output_filepath):
-        MAX_RETRIES = 10# Define the maximum number of retries
-        for attempt in range(MAX_RETRIES):
-            time.sleep(1) # Sleep at the beginning of loop to ensure we're not spamming.
-            try:
-                get_and_dump_arxiv_papers(search_term, output_filepath=output_filepath)
-                break  # If the request is successful, break the loop
-            except UnexpectedEmptyPageError:
-                print(f"Skipping search term {search_term} due to an empty page error.")
-            except ConnectionResetError:
-                if attempt < MAX_RETRIES - 1:  # If this isn't the last attempt
-                    print(f"Connection reset by peer, retrying... (Attempt {attempt + 1})")
-                else:  # If this is the last attempt
-                    print(f"Connection reset by peer, giving up after {MAX_RETRIES} attempts.")
-
 
     def create_directory(path):
         try:
@@ -231,22 +296,19 @@ def Scrape(args):
         directory = pkg_resources.resource_filename("paperscraper", "server_dumps")
         chemrxiv_files = glob.glob(os.path.join(directory, 'chemrxiv_*.jsonl'))
         most_recent_chemrxiv_file = max(chemrxiv_files, key=os.path.getctime)
-        querierchem = XRXivQuery(most_recent_chemrxiv_file)
 
         medrxiv_files = glob.glob(os.path.join(directory, 'medrxiv_*.jsonl'))
         most_recent_medrxiv_file = max(medrxiv_files, key=os.path.getctime)
-        queriermed = XRXivQuery(most_recent_medrxiv_file)
 
         biorxiv_files = glob.glob(os.path.join(directory, 'biorxiv_*.jsonl'))
         most_recent_biorxiv_file = max(biorxiv_files, key=os.path.getctime)
-        querierbio = XRXivQuery(most_recent_biorxiv_file)
 
-        # Define the dictionary
+        # Define the dictionary of queriers
         queriers = {
-            "arxiv": timed_get_and_dump_arxiv_papers,
-            "chemrxiv": querierchem.search_keywords,
-            "medrxiv": queriermed.search_keywords,
-            "biorxiv": querierbio.search_keywords
+            "arxiv": get_and_dump_arxiv_papers_wrapper,
+            "chemrxiv": XRXivQueryWrapper(most_recent_chemrxiv_file, retmax).search_keywords,
+            "medrxiv": XRXivQueryWrapper(most_recent_medrxiv_file, retmax).search_keywords,
+            "biorxiv": XRXivQueryWrapper(most_recent_biorxiv_file, retmax).search_keywords
         }
 
         for chunk in query_chunks:
@@ -267,11 +329,13 @@ def Scrape(args):
                                 future.result(timeout=300)
                             except concurrent.futures.TimeoutError:
                                 print(f"Skipping {directory} for {chunk} due to timeout.")
+                                continue
                     else:
                         try:
                             querier(chunk, output_filepath=file_path)
-                        except:
-                            print(f"Error occurred while querying {directory} for {chunk}")
+                        except Exception as oops:
+                            print(f"Error occurred while querying {directory} for {chunk} because {oops}")
+                            continue
                 else:
                     print(f"file for {directory} search already exists, skipping")
                     remove_lines_after(retmax, file_path)
@@ -281,6 +345,32 @@ def Scrape(args):
                                        key_to_save='doi')
                 except:
                     print(f"{directory} results empty, moving on")
+
+    if auto is None:
+        soyn = input("Would you like to scrape ScienceOpen?(y/n):").lower()
+
+    while soyn != "n":
+
+        if soyn != "y":
+            soyn = input("Would you like to scrape ScienceOpen?(y/n):").lower()
+
+        if soyn == "y":
+            runner = CrawlerRunner()
+
+            for chunk in query_chunks:
+                runner.crawl(ScienceOpenSpider, search_terms=chunk, retmax=retmax, output_directory=output_directory_id)
+
+    if soyn == "y":
+
+        d = runner.join()
+        d.addBoth(lambda _: reactor.stop())
+
+        # Only start the reactor if it's not already running
+        if not reactor.running:
+            reactor.run()
+
+        elif soyn != "n":
+            print("You must select y or n")
 
     if auto is None:
         customdb = input("Would you like to search and download from a custom database?\nYou will need to place your "

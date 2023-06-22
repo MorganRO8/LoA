@@ -16,6 +16,7 @@ from bs4 import BeautifulSoup
 from scrapy import Spider, Request
 from scrapy.crawler import CrawlerRunner
 from twisted.internet import reactor
+from scrapy_splash import SplashRequest
 
 # Constants
 CONVERT_URL = "https://www.ncbi.nlm.nih.gov/pmc/utils/idconv/v1.0/?ids={}&format=json"
@@ -39,6 +40,16 @@ def Scrape(args):
         name = "scienceopen_spider"
         custom_settings = {
             'TELNETCONSOLE_ENABLED': False,
+            'SPLASH_URL': 'http://localhost:8050',
+            'DOWNLOADER_MIDDLEWARES': {
+                'scrapy_splash.SplashCookiesMiddleware': 723,
+                'scrapy_splash.SplashMiddleware': 725,
+                'scrapy.downloadermiddlewares.httpcompression.HttpCompressionMiddleware': 810,
+            },
+            'SPIDER_MIDDLEWARES': {
+                'scrapy_splash.SplashDeduplicateArgsMiddleware': 100,
+            },
+            'DUPEFILTER_CLASS': 'scrapy_splash.SplashAwareDupeFilter',
         }
 
         def __init__(self, search_terms=None, retmax=None, output_directory=None, *args, **kwargs):
@@ -54,7 +65,7 @@ def Scrape(args):
             print(f"The generated start url is: {url}")
             print(f"The current settings for scrapy are as follows:\n{self.settings.attributes.keys()}")
             # Yield a Request to the starting URL
-            yield Request(url=url, callback=self.parse, cb_kwargs={'start_url': url})
+            yield SplashRequest(url=url, callback=self.parse, cb_kwargs={'start_url': url})
 
         def parse(self, response, start_url):
             print(f"Visited {response.url}")  # Print the URL of the page the spider is visiting
@@ -73,7 +84,7 @@ def Scrape(args):
 
             for article in articles:
                 if self.count < self.retmax:  # Only make a request if the count is less than retmax
-                    yield Request(url=article, callback=self.parse_article)
+                    yield SplashRequest(url=article, callback=self.parse_article)
 
         def parse_article(self, response):
             print(f"Visited {response.url}")  # Print the URL of the page the spider is visiting
@@ -82,7 +93,7 @@ def Scrape(args):
             download_button = response.css('a[title="Download PDF"]::attr(onclick)').re_first(r"'(https:.+)'")
             if download_button:
                 self.count += 1  # Increment the counter each time an article is scraped
-                yield Request(url=download_button, callback=self.save_pdf)
+                yield SplashRequest(url=download_button, callback=self.save_pdf)
 
         def save_pdf(self, response):
             filename = response.url.split("/")[-1] + ".pdf"

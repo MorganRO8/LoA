@@ -34,6 +34,7 @@ def Scrape(args):
     maybe_search_terms = args.get('maybe_search_terms')
     pubmedyn = args.get('pubmedyn')
     arxivyn = args.get('arxivyn')
+    soyn = args.get('ScienceOpenyn')
     customdb = args.get('customdb')
     auto = args.get('auto')
     retmax = args.get('retmax')

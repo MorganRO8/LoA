@@ -5,6 +5,7 @@
     "pubmedyn": "y",
     "arxivyn": "y",
     "updownyn": "n",
+    "ScienceOpenyn": "n",
     "customdb": "n",
     "base_url": null,
     "retmax": 5,

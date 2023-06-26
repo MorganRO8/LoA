@@ -2,7 +2,6 @@ from Inference import *
 from Scrape import *
 from snorkel_train import *
 import sys
-import subprocess
 import os
 import json
 

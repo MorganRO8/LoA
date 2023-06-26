@@ -1,6 +1,7 @@
 import os
 import requests
 import sys
+from tqdm import tqdm
 from paperscraper.pdf import save_pdf_from_dump
 import time
 import itertools
@@ -13,12 +14,16 @@ import concurrent.futures
 import sqlite3
 from urllib.parse import quote
 from bs4 import BeautifulSoup
-from scrapy import Spider, Request
-from scrapy.crawler import CrawlerRunner
-from twisted.internet import reactor
-from scrapy_splash import SplashRequest
-import asyncio
-from pyppeteer import launch
+from selenium import webdriver
+from selenium.common import TimeoutException
+from selenium.webdriver.chrome.service import Service
+from selenium.webdriver.common.by import By
+from selenium.webdriver.chrome.options import Options
+from selenium.webdriver.support.ui import WebDriverWait
+from selenium.webdriver.support import expected_conditions as EC
+from webdriver_manager.chrome import ChromeDriverManager
+import logging
+from selenium.webdriver.remote.remote_connection import LOGGER
 
 # Constants
 CONVERT_URL = "https://www.ncbi.nlm.nih.gov/pmc/utils/idconv/v1.0/?ids={}&format=json"
@@ -40,74 +45,124 @@ def Scrape(args):
     retmax = args.get('retmax')
     base_url = args.get('base_url')
 
-    async def scrape_scienceopen(search_terms, retmax, output_directory_id):
-        # Start the async loop
-        print("Starting the async loop...")
-        asyncio.get_running_loop()
-        print("Async loop started, attempting to launch browser..")
+    def scrape_scienceopen(search_terms, retmax, output_directory_id):
+        # Turn off the ridiculous amount of logging selenium does
+        LOGGER = logging.getLogger()
+        LOGGER.setLevel(logging.WARNING)
 
-        # Launch the browser
-        browser = await launch(autoClose=False)
-        print("Headless browser launched, trying to open new tab")
+        # Setup Chrome options
+        chrome_options = Options()
+        chrome_options.add_argument("--headless")  # Ensure GUI is off
+        chrome_options.add_argument("--no-sandbox")
+        chrome_options.add_argument("--disable-dev-shm-usage")
+        chrome_options.add_argument("--disable-crash-reporter")
+        chrome_options.add_argument("--disable-extensions")
+        chrome_options.add_argument("--disable-in-process-stack-traces")
+        chrome_options.add_argument("--disable-logging")
+        chrome_options.add_argument("--disable-dev-shm-usage")
+        chrome_options.add_argument("--log-level=3")
+        chrome_options.add_argument("--output=/dev/null")
+        chrome_options.add_experimental_option("excludeSwitches", ["enable-logging"])
 
-        # Open new page in browser
-        page = await browser.newPage()
-        print("New tab successfully opened in browser")
+        # Set path to chromedriver as per your configuration
+        webdriver_service = Service(ChromeDriverManager().install())
 
-        # Generate the starting URL
+        # Choose Chrome Browser
+        driver = webdriver.Chrome(service=webdriver_service, options=chrome_options)
+        wait = WebDriverWait(driver, 10)
+
         url = f"https://www.scienceopen.com/search#('v'~4_'id'~''_'queryType'~1_'context'~null_'kind'~77_'order'~0_'orderLowestFirst'~false_'query'~'{' '.join(search_terms)}'_'filters'~!('kind'~84_'openAccess'~true)*_'hideOthers'~false)"
-        print(f"Starting url for current search: {url}\nVisiting page...")
+        driver.get(url)
 
-        # Visit the URL
-        await page.goto(url)
-        print("Page visited.")
+        # Create a directory to store the scraped links if it doesn't exist
+        scraped_links_dir = os.path.join(os.getcwd(), 'SO_searches')
+        os.makedirs(scraped_links_dir, exist_ok=True)
 
-        # Initialize the counter
+        # Create a file to store the scraped links
+        scraped_links_file_path = os.path.join(scraped_links_dir, f"{output_directory_id}.txt")
+
+        # Load the already scraped links
+        if os.path.exists(scraped_links_file_path):
+            with open(scraped_links_file_path, 'r') as file:
+                scraped_links = file.read().splitlines()
+        else:
+            scraped_links = []
+
+        article_links = []
+        while len(article_links) < retmax:
+            # Extract all the article links
+            new_links = driver.find_elements(By.CSS_SELECTOR, 'div.so-article-list-item > div > h3 > a')
+            new_links = [link.get_attribute('href') for link in new_links if
+                         link.get_attribute('href') not in scraped_links]
+
+            # Filter out the already scraped links
+            article_links.extend(new_links)
+
+            # Click the "Load More" button
+            try:
+                load_more_button = WebDriverWait(driver, 10).until(
+                    EC.presence_of_element_located((By.CSS_SELECTOR, '.so--tall'))
+                )
+                driver.execute_script("arguments[0].click();", load_more_button)
+                time.sleep(5)
+            except TimeoutException:
+                break
+
+        start_time = time.time()
+        pbar = tqdm(total=retmax, dynamic_ncols=True)
         count = 0
+        for link in article_links:
+            if count >= retmax:
+                break
 
-        # Loop until we reach the maximum number of papers
-        while count < retmax:
-            print(f"Finding paper {count+1}/{retmax}")
-            # Extract the article links
-            article_links = await page.querySelectorAllEval('a[href^="https://www.scienceopen.com/document/"]',
-                                                            '(elements) => elements.map((element) => element.href)')
-            print(f"Found these links on the page:\n{article_links}")
+            # Open a new tab and switch to it
+            driver.execute_script("window.open('');")
+            driver.switch_to.window(driver.window_handles[-1])
 
-            # Visit each article page
-            for link in article_links:
-                print(f"Following link: {link}")
-                if count >= retmax:
-                    break
-
+            try:
                 # Visit the article page
-                print("Awaiting article page response...")
-                await page.goto(link)
-                print("Article page responded, extracting PDF link...")
+                driver.get(link)
 
                 # Extract the PDF download link
-                pdf_link = await page.querySelectorEval('a[title="Download PDF"]',
-                                                        '(element) => element.getAttribute("onclick").match(/\'(https:.+)\'/)[1]')
-                print(f"PDF link extracted: {pdf_link}\nDownloading PDF...")
+                pdf_link_element = wait.until(
+                    EC.presence_of_element_located((By.CSS_SELECTOR, '#id2e > li:nth-child(1) > a:nth-child(1)')))
+                pdf_link = pdf_link_element.get_attribute('href')
 
-                if pdf_link:
+                # Extract the DOI
+                soup = BeautifulSoup(driver.page_source, 'html.parser')
+                doi_element = soup.find('meta', attrs={'name': 'citation_doi'})
+                if doi_element is not None:
+                    doi = doi_element.get('content')
+                    encoded_doi = quote(doi, safe='')
+
                     # Download the PDF
-                    pdf_response = await page.goto(pdf_link)
-                    print("PDF file accessed, saving to local machine...")
+                    pdf_response = requests.get(pdf_link)
+                    filename = f"{encoded_doi}.pdf"
+                    with open(os.path.join(os.getcwd(), 'scraped_docs', output_directory_id, filename), 'wb') as f:
+                        f.write(pdf_response.content)
 
-                    # Save the PDF
-                    filename = pdf_link.split("/")[-1] + ".pdf"
-                    with open(os.path.join(output_directory_id, filename), 'wb') as f:
-                        f.write(await pdf_response.buffer())
-                    print("PDF saved.")
-
-                    # Increment the counter
                     count += 1
+                    elapsed_time = time.time() - start_time
+                    avg_time_per_pdf = elapsed_time / count
+                    est_time_remaining = avg_time_per_pdf * (retmax - count)
+                    pbar.set_description(
+                        f"DOI: {doi}, Count: {count}/{retmax}, Avg time per PDF: {avg_time_per_pdf:.2f}s, Est. time remaining: {est_time_remaining:.2f}s")
+                    pbar.update(1)
 
-            # Click the "Load more" button
-            await page.click('.so--tall')
+                    # Append the scraped link to the file
+                    with open(scraped_links_file_path, 'a') as file:
+                        file.write(f"{link}\n")
+            except Exception as e:
+                print(f"An error occurred while processing the article: {e}")
+            finally:
+                # Close the tab and switch back to the original tab
+                driver.close()
+                driver.switch_to.window(driver.window_handles[0])
 
-        # Close the browser
-        await browser.close()
+        driver.switch_to.window(driver.window_handles[0])
+
+        driver.quit()
+        pbar.close()
 
     class XRXivQueryWrapper(XRXivQuery):
         def __init__(self, dump_filepath, retmax, fields=["title", "doi", "authors", "abstract", "date", "journal"]):
@@ -359,18 +414,17 @@ def Scrape(args):
 
     while soyn != "n":
 
-        if soyn != "y":
+        if soyn is None:
             soyn = input("Would you like to scrape ScienceOpen?(y/n):").lower()
-        else:
-            print("You must select y or n")
 
         if soyn == "y":
-            tasks = []
             for chunk in query_chunks:
                 print(f"Now running ScienceOpen scrape for {chunk}")
-                tasks.append(scrape_scienceopen(chunk, retmax, output_directory_id))
-            loop = asyncio.get_event_loop()
-            loop.run_until_complete(asyncio.gather(*tasks))
+                scrape_scienceopen(chunk, retmax, output_directory_id)
+            break
+
+        if soyn != "y" or "n":
+            print("You must select y or n")
 
     if auto is None:
         customdb = input("Would you like to search and download from a custom database?\nYou will need to place your "

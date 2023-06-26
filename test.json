@@ -5,10 +5,10 @@
     "pubmedyn": "y",
     "arxivyn": "y",
     "updownyn": "n",
-    "ScienceOpenyn": "n",
+    "ScienceOpenyn": "y",
     "customdb": "n",
     "base_url": null,
-    "retmax": 5,
+    "retmax": 50,
     "auto": true
   },
   "snorkel_train": {

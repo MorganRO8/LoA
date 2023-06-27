@@ -17,6 +17,7 @@ dependencies:
   - pip:
     - unstructured[local-inference]
     - scrapy
+    - spacy
     - tqdm
     - paperscraper
     - torch

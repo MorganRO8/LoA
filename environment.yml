@@ -21,6 +21,7 @@ dependencies:
     - tqdm
     - paperscraper
     - sentence_transformers
+    - optuna
     - torch
     - torchvision
     - torchaudio

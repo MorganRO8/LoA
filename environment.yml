@@ -20,6 +20,7 @@ dependencies:
     - spacy
     - tqdm
     - paperscraper
+    - sentence_transformers
     - torch
     - torchvision
     - torchaudio

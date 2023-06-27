@@ -4,7 +4,7 @@
     "maybe_search_terms": ["chemical", "chemistry", "protein"],
     "pubmedyn": "y",
     "arxivyn": "y",
-    "updownyn": "n",
+    "updownyn": "y",
     "ScienceOpenyn": "y",
     "customdb": "n",
     "base_url": null,

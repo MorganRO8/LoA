@@ -1,8 +1,6 @@
 def Inference(args):
 
     import os
-    from unstructured.partition.pdf import partition_pdf
-    from pdfminer.pdfparser import PDFSyntaxError
     from transformers import pipeline, AutoTokenizer
 
     questions = args.get('questions')

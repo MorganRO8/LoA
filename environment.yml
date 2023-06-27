@@ -16,6 +16,8 @@ dependencies:
   - cython
   - pip:
     - unstructured[local-inference]
+    - scrapy
+    - tqdm
     - paperscraper
     - torch
     - torchvision

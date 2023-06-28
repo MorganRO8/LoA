@@ -22,6 +22,7 @@ from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 from webdriver_manager.chrome import ChromeDriverManager
+from selenium.common.exceptions import StaleElementReferenceException
 import logging
 from selenium.webdriver.remote.remote_connection import LOGGER
 
@@ -104,8 +105,11 @@ def Scrape(args):
                     EC.presence_of_element_located((By.CSS_SELECTOR, '.so--tall'))
                 )
                 driver.execute_script("arguments[0].click();", load_more_button)
-                time.sleep(5)
+                time.sleep(2)
             except TimeoutException:
+                break
+            except StaleElementReferenceException:
+                print("No more results to load.")
                 break
 
         start_time = time.time()
@@ -335,7 +339,6 @@ def Scrape(args):
         for chunk in query_chunks:
             print("Current search: " + str(chunk))
             pubmed_search(chunk, retmax, output_directory_id)
-            time.sleep(1/3)
     else:
         None
 

@@ -171,7 +171,10 @@ def Scrape(args):
 
         def search_keywords(self, keywords, fields=None, output_filepath=None):
             df = super().search_keywords(keywords, fields, output_filepath)
-            return df.head(self.retmax)
+            df = df.head(self.retmax)
+            if output_filepath is not None:
+                df.to_json(output_filepath, orient="records", lines=True)
+            return df
 
     def get_and_dump_arxiv_papers_wrapper(keywords, output_filepath, retmax,
                                           fields=["title", "authors", "date", "abstract", "journal", "doi"], *args,
@@ -387,7 +390,7 @@ def Scrape(args):
 
                     if directory == "arxiv":
                         with concurrent.futures.ThreadPoolExecutor() as executor:
-                            future = executor.submit(querier, chunk, file_path)
+                            future = executor.submit(querier, chunk, file_path, retmax)
                             try:
                                 future.result(timeout=300)
                             except concurrent.futures.TimeoutError:

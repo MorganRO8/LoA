@@ -1,30 +1,30 @@
-import os
-import requests
-import sys
-from tqdm import tqdm
-from paperscraper.pdf import save_pdf_from_dump
-import time
-import itertools
-from paperscraper.arxiv import *
-from paperscraper.xrxiv.xrxiv_query import XRXivQuery
-import glob
-import pkg_resources
-from paperscraper.get_dumps import biorxiv, medrxiv, chemrxiv
 import concurrent.futures
+import glob
+import itertools
+import logging
+import os
 import sqlite3
+import sys
+import time
 from urllib.parse import quote
+
+import pkg_resources
+import requests
 from bs4 import BeautifulSoup
+from paperscraper.arxiv import *
+from paperscraper.get_dumps import biorxiv, medrxiv, chemrxiv
+from paperscraper.pdf import save_pdf_from_dump
+from paperscraper.xrxiv.xrxiv_query import XRXivQuery
 from selenium import webdriver
 from selenium.common import TimeoutException
+from selenium.common.exceptions import StaleElementReferenceException
+from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.chrome.service import Service
 from selenium.webdriver.common.by import By
-from selenium.webdriver.chrome.options import Options
-from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
+from selenium.webdriver.support.ui import WebDriverWait
+from tqdm import tqdm
 from webdriver_manager.chrome import ChromeDriverManager
-from selenium.common.exceptions import StaleElementReferenceException
-import logging
-from selenium.webdriver.remote.remote_connection import LOGGER
 
 # Constants
 CONVERT_URL = "https://www.ncbi.nlm.nih.gov/pmc/utils/idconv/v1.0/?ids={}&format=json"
@@ -72,7 +72,9 @@ def Scrape(args):
         driver = webdriver.Chrome(service=webdriver_service, options=chrome_options)
         wait = WebDriverWait(driver, 10)
 
-        url = f"https://www.scienceopen.com/search#('v'~4_'id'~''_'queryType'~1_'context'~null_'kind'~77_'order'~0_'orderLowestFirst'~false_'query'~'{' '.join(search_terms)}'_'filters'~!('kind'~84_'openAccess'~true)*_'hideOthers'~false)"
+        url = f"https://www.scienceopen.com/search#('v'~4_'id'~''_'queryType'~1_'context'~null_'kind'~77_'order'~0_" \
+              f"'orderLowestFirst'~false_'query'~'{' '.join(search_terms)}'_'filters'~!(" \
+              f"'kind'~84_'openAccess'~true)*_'hideOthers'~false)"
         driver.get(url)
 
         # Create a directory to store the scraped links if it doesn't exist
@@ -111,7 +113,7 @@ def Scrape(args):
             except StaleElementReferenceException:
                 print("No more results to load.")
                 break
-            except Exception as other
+            except Exception as other:
                 print(f"An unknown exception occurred, please let the dev know: {other}")
 
         start_time = time.time()
@@ -152,7 +154,8 @@ def Scrape(args):
                     avg_time_per_pdf = elapsed_time / count
                     est_time_remaining = avg_time_per_pdf * (retmax - count)
                     pbar.set_description(
-                        f"DOI: {doi}, Count: {count}/{retmax}, Avg time per PDF: {avg_time_per_pdf:.2f}s, Est. time remaining: {est_time_remaining:.2f}s")
+                        f"DOI: {doi}, Count: {count}/{retmax}, Avg time per PDF: {avg_time_per_pdf:.2f}s, Est. time "
+                        f"remaining: {est_time_remaining:.2f}s")
                     pbar.update(1)
 
                     # Append the scraped link to the file
@@ -251,7 +254,7 @@ def Scrape(args):
                         f.write(xml_data)
 
                     # Sleep for 1/2 of a second to avoid hitting the rate limit
-                    time.sleep(1/2)
+                    time.sleep(1 / 2)
 
     def remove_lines_after(line_number, file_path):
         lines = []
@@ -271,7 +274,8 @@ def Scrape(args):
 
     if auto is None:
         # get 'definitely contains' search terms from user
-        def_search_terms_input = input("Enter 'definitely contains' search terms (comma separated) or type 'None' to only use maybe search terms: ").lower()
+        def_search_terms_input = input(
+            "Enter 'definitely contains' search terms (comma separated) or type 'None' to only use maybe search terms: ").lower()
         if def_search_terms_input == "none":
             print("No definite search terms selected.")
             def_search_terms = None
@@ -280,7 +284,8 @@ def Scrape(args):
             def_search_terms.sort()
 
         # get 'maybe contains' search terms from user
-        maybe_search_terms_input = input("Enter 'maybe contains' search terms (comma separated) or type 'None' to only use definite search terms: ").lower()
+        maybe_search_terms_input = input(
+            "Enter 'maybe contains' search terms (comma separated) or type 'None' to only use definite search terms: ").lower()
         if maybe_search_terms_input == "none":
             print("No maybe search terms selected, only using definite search terms.")
             maybe_search_terms = None
@@ -298,13 +303,15 @@ def Scrape(args):
             output_directory_id = f"{'_'.join(['def'] + def_search_terms + ['maybe'] + maybe_search_terms).replace(' ', '')}"
 
             # define queries as all the combinations of 'maybe contains' search terms
-            combinations = list(itertools.chain.from_iterable(itertools.combinations(maybe_search_terms, r) for r in range(0, len(maybe_search_terms) + 1)))
+            combinations = list(itertools.chain.from_iterable(
+                itertools.combinations(maybe_search_terms, r) for r in range(0, len(maybe_search_terms) + 1)))
             queries = [def_search_terms + list(comb) for comb in combinations]
         else:
             output_directory_id = f"{'_'.join(['maybe'] + maybe_search_terms).replace(' ', '')}"
 
             # define queries as all the combinations of 'maybe contains' search terms
-            combinations = list(itertools.chain.from_iterable(itertools.combinations(maybe_search_terms, r) for r in range(1, len(maybe_search_terms) + 1)))
+            combinations = list(itertools.chain.from_iterable(
+                itertools.combinations(maybe_search_terms, r) for r in range(1, len(maybe_search_terms) + 1)))
             queries = [list(comb) for comb in combinations]
 
         print(" Ok! your adjusted searches are: " + str(queries))
@@ -412,7 +419,8 @@ def Scrape(args):
                     remove_lines_after(retmax, file_path)
 
                 try:
-                    save_pdf_from_dump(file_path, pdf_path=os.path.join(os.getcwd(), 'scraped_docs', output_directory_id),
+                    save_pdf_from_dump(file_path,
+                                       pdf_path=os.path.join(os.getcwd(), 'scraped_docs', output_directory_id),
                                        key_to_save='doi')
                 except:
                     print(f"{directory} results empty, moving on")
@@ -520,7 +528,6 @@ def Scrape(args):
                             pdf_path = os.path.join(pdf_dir, f'{encoded_doi}.pdf')
                             print(f"Saving PDF to: {pdf_path}")
 
-
                             # Write the PDF to a file
                             with open(pdf_path, 'wb') as f:
                                 f.write(pdf)
@@ -551,6 +558,3 @@ def Scrape(args):
 
     else:
         return None
-
-
-                   

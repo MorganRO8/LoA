@@ -16,6 +16,9 @@ dependencies:
   - cython
   - pip:
     - unstructured[local-inference]
+    - unstructured_paddleocr
+    - pdf2image
+    - pillow
     - scrapy
     - spacy
     - tqdm

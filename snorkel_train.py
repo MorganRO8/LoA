@@ -19,6 +19,10 @@ from functools import partial
 from unstructured.partition.auto import partition
 from unstructured.partition.pdf import partition_pdf
 from pdfminer.pdfparser import PDFSyntaxError
+import logging
+from pdf2image import convert_from_path
+from PIL import Image
+import numpy as np
 
 
 def snorkel_train(args):
@@ -29,8 +33,48 @@ def snorkel_train(args):
     auto = args.get('auto')
 
     # Definitions
+   
+
+    def has_multiple_columns(pdf_path):
+        # Convert the first page of the PDF to an image
+        images = convert_from_path(pdf_path, dpi=200, first_page=1, last_page=1)
+        image = images[0]
+
+        # Convert the image to grayscale and binarize it
+        image = image.convert('L')
+        image = image.point(lambda x: 0 if x < 128 else 255, '1')
+
+        # Convert the image to a NumPy array for easier processing
+        image_array = np.array(image)
+
+        # Get the dimensions of the image
+        height, width = image_array.shape
+
+        # Scan the middle of the image vertically
+        for x in range(width // 2 - 5, width // 2 + 5):
+            white_pixels = 0
+            for y in range(height):
+                if image_array[y, x] == 255:
+                    white_pixels += 1
+                    if white_pixels > 50:
+                        return True
+                else:
+                    white_pixels = 0
+
+        # If no tall line of white pixels was found, return False
+        return False
+
     
     def doc_to_txt(text_dir):
+    
+        # Turn off the ridiculous amount of logging unstructured does
+        LOGGER = logging.getLogger()
+        LOGGER.setLevel(logging.CRITICAL)
+        
+        # Set the number of threads in a slurm env
+        os.environ["OMP_NUM_THREADS"] = os.getenv('SLURM_CPUS_PER_TASK', '1')  # default to 1 if the variable is not set
+        print(f"Number of threads set to {os.environ['OMP_NUM_THREADS']}")
+    
         # Directory where the PDFs are stored
         pdf_files_dir = str(os.getcwd()) + '/scraped_docs/' + text_dir
 
@@ -63,23 +107,54 @@ def snorkel_train(args):
             pdf_file_path = os.path.join(pdf_files_dir, filename)
             text_file_path = os.path.join(text_files_dir, filename.replace('.pdf', '.txt'))
             print(f"Now working on {filename}")
-
+            
             try:
-                # Partition the PDF into elements
-                elements = partition_pdf(filename=pdf_file_path, strategy='hi_res', infer_table_structure=True)
+                columns = has_multiple_columns(pdf_file_path)
+                
+                if columns is True:
 
-                # Check if elements are empty
-                if not elements or all(not str(element).strip() for element in elements):
-                    print(f"Skipping {filename} as it does not contain any text.")
-                    continue
+                    print("Multiple columns detected, running default strategy")
 
-                # Write the elements to a text file
-                with open(text_file_path, 'w') as file:
-                    for element in elements:
-                        file.write(str(element) + '\n')
-            except (PDFSyntaxError, TypeError) as er:
-                print(f"Failed to process {filename} due to '{er}'.")
-                continue
+                    try:
+                        # Partition the PDF into elements
+                        elements = partition_pdf(filename=pdf_file_path, strategy='auto')
+
+                        # Check if elements are empty
+                        if not elements or all(not str(element).strip() for element in elements):
+                            print(f"Skipping {filename} as it does not contain any text.")
+                            continue
+
+                        # Write the elements to a text file
+                        with open(text_file_path, 'w') as file:
+                            for element in elements:
+                                file.write(str(element) + '\n')
+                    except (PDFSyntaxError, TypeError) as er:
+                        print(f"Failed to process {filename} due to '{er}'.")
+                        continue
+                        
+                elif columns is False:
+                
+                    print("Multiple columns not detected, running advanced strategy")
+                
+                    try:
+                        # Partition the PDF into elements
+                        elements = partition_pdf(filename=pdf_file_path, strategy='hi_res', infer_table_structure=True)
+
+                        # Check if elements are empty
+                        if not elements or all(not str(element).strip() for element in elements):
+                            print(f"Skipping {filename} as it does not contain any text.")
+                            continue
+
+                        # Write the elements to a text file
+                        with open(text_file_path, 'w') as file:
+                            for element in elements:
+                                file.write(str(element) + '\n')
+                    except (PDFSyntaxError, TypeError) as er:
+                        print(f"Failed to process {filename} due to '{er}'.")
+                        continue
+            except Exception as dangit:
+                print(f"Got an exception, {dangit}")
+                    
 
         for filename in non_pdf_files:
             non_pdf_file_path = os.path.join(pdf_files_dir, filename)
@@ -165,7 +240,7 @@ def snorkel_train(args):
         import os
 
         # specify the directory path to list the subdirectories
-        directory_path = str(os.getcwd()) + "/txts/"
+        directory_path = str(os.getcwd()) + "/scraped_docs/"
 
         # get a list of all directories in the specified directory
         subdirectories = [x for x in os.listdir(directory_path) if os.path.isdir(os.path.join(directory_path, x))]
@@ -185,7 +260,7 @@ def snorkel_train(args):
         # get the selected directory
         selected_dir = subdirectories[int(selected_dir_num) - 1]
 
-        return text_dir
+        return selected_dir
 
     def load_text_files(directory):
         texts = []
@@ -238,9 +313,8 @@ def snorkel_train(args):
             })
         tasks = new_tasks
 
-        # Load text files
-        text_directory = select_scrape_results()
-    texts = load_text_files(text_directory)
+    # Load text files
+    texts = load_text_files(text_dir)
 
     # Convert texts to DataFrame
     df_train = pd.DataFrame(texts, columns=['text'])

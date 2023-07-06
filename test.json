@@ -2,9 +2,9 @@
   "Scrape": {
     "def_search_terms": null,
     "maybe_search_terms": ["chemical", "chemistry", "protein"],
-    "pubmedyn": "y",
-    "arxivyn": "y",
-    "updownyn": "y",
+    "pubmedyn": "n",
+    "arxivyn": "n",
+    "updownyn": "n",
     "ScienceOpenyn": "y",
     "customdb": "n",
     "base_url": null,

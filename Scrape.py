@@ -111,6 +111,8 @@ def Scrape(args):
             except StaleElementReferenceException:
                 print("No more results to load.")
                 break
+            except Exception as other
+                print(f"An unknown exception occurred, please let the dev know: {other}")
 
         start_time = time.time()
         pbar = tqdm(total=retmax, dynamic_ncols=True)
@@ -248,8 +250,8 @@ def Scrape(args):
                     with open(os.path.join(os.getcwd(), 'scraped_docs', output_directory_id, f"{uid}.xml"), 'w') as f:
                         f.write(xml_data)
 
-                    # Sleep for 1/3 of a second to avoid hitting the rate limit
-                    time.sleep(1/3)
+                    # Sleep for 1/2 of a second to avoid hitting the rate limit
+                    time.sleep(1/2)
 
     def remove_lines_after(line_number, file_path):
         lines = []

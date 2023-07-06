@@ -3,7 +3,7 @@
 #SBATCH --job-name LoA_Test
 #SBATCH --gres=gpu:1
 #SBATCH --mem=50GB
-#SBATCH -q express
+#SBATCH -q primary
 #SBATCH -p earwp
 #SBATCH -N 1
 #SBATCH -n 3

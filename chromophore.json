@@ -1,0 +1,123 @@
+{
+  "Scrape": {
+    "def_search_terms": ["chromophore"],
+    "maybe_search_terms": ["quantum yield", "absorption wavelength", "emission wavelength"],
+    "pubmedyn": "n",
+    "arxivyn": "n",
+    "updownyn": "n",
+    "ScienceOpenyn": "n",
+    "customdb": "n",
+    "base_url": null,
+    "retmax": 5000,
+    "auto": true
+  },
+  "snorkel_train": {
+    "tasks": [
+      {
+        "name": "Identify Chromophore Name",
+        "keywords": ["chromophore", "dye", "fluorophore"],
+        "model_identifiers": ["alvaroalon2/biobert_chemical_ner", "recobo/chemical-bert-uncased-squad2"],
+        "questions": ["Is a chromophore mentioned?", "What is the name of the chromophore?"],
+        "sentences": [
+          "The chromophore used in the study was",
+          "We used a chromophore known as"
+        ]
+      },
+      {
+        "name": "Identify Chromophore Structure",
+        "keywords": ["structure", "molecular structure"],
+        "model_identifiers": ["alvaroalon2/biobert_chemical_ner", "recobo/chemical-bert-uncased-squad2"],
+        "questions": ["Is the structure of the chromophore mentioned?"],
+        "sentences": [
+          "The structure of the chromophore is",
+          "The chromophore's structure was determined to be"
+        ]
+      },
+      {
+        "name": "Identify Chromophore SMILES String",
+        "keywords": ["SMILES", "SMILES string"],
+        "model_identifiers": ["alvaroalon2/biobert_chemical_ner", "recobo/chemical-bert-uncased-squad2"],
+        "questions": ["Is the SMILES string of the chromophore mentioned?"],
+        "sentences": [
+          "The SMILES string of the chromophore is",
+          "The SMILES representation of the chromophore is"
+        ]
+      },
+      {
+        "name": "Identify Formal Charge",
+        "keywords": ["charge", "formal charge"],
+        "model_identifiers": ["alvaroalon2/biobert_chemical_ner", "recobo/chemical-bert-uncased-squad2"],
+        "questions": ["Is the formal charge of the chromophore mentioned?"],
+        "sentences": [
+          "The formal charge of the chromophore is",
+          "The chromophore has a formal charge of",
+          "The charge of the chromophore was found to be"
+        ]
+      },
+      {
+        "name": "Identify Fluorescence Quantum Yield",
+        "keywords": ["quantum yield", "fluorescence", "photoluminescence"],
+        "model_identifiers": ["alvaroalon2/biobert_chemical_ner", "recobo/chemical-bert-uncased-squad2"],
+        "questions": ["Is the fluorescence quantum yield of the chromophore mentioned?"],
+        "sentences": [
+          "The fluorescence quantum yield of the chromophore is",
+          "The chromophore has a fluorescence quantum yield of",
+          "The quantum yield of the chromophore was measured to be"
+        ]
+     },
+      {
+        "name": "Identify Absorption Wavelength",
+        "keywords": ["absorption", "wavelength"],
+        "model_identifiers": ["alvaroalon2/biobert_chemical_ner", "recobo/chemical-bert-uncased-squad2"],
+        "questions": ["Is the absorption wavelength of the chromophore mentioned?"],
+        "sentences": [
+          "The absorption wavelength of the chromophore is",
+          "The chromophore absorbs light at a wavelength of",
+          "The chromophore has an absorption peak at"
+        ]
+      },
+      {
+        "name": "Identify Emission Wavelength",
+        "keywords": ["emission", "wavelength"],
+        "model_identifiers": ["alvaroalon2/biobert_chemical_ner", "recobo/chemical-bert-uncased-squad2"],
+        "questions": ["Is the emission wavelength of the chromophore mentioned?"],
+        "sentences": [
+          "The emission wavelength of the chromophore is",
+          "The chromophore emits light at a wavelength of",
+          "The chromophore has an emission peak at"
+        ]
+      },
+      {
+        "name": "Identify Theoretical Values",
+        "keywords": ["theoretical"],
+        "model_identifiers": ["alvaroalon2/biobert_chemical_ner", "recobo/chemical-bert-uncased-squad2"],
+        "questions": ["Are the values obtained theoretical?"],
+        "sentences": [
+          "The values obtained were theoretical",
+          "We used theoretical values for"
+        ]
+      },
+      {
+        "name": "Identify Solvent",
+        "keywords": ["solvent", "solution"],
+        "model_identifiers": ["alvaroalon2/biobert_chemical_ner", "recobo/chemical-bert-uncased-squad2"],
+        "questions": ["What solvent was used in the experiment?"],
+        "sentences": [
+          "The solvent used in the experiment was",
+          "We used a solvent known as",
+          "The experiment was conducted in a solution of"
+        ]
+      }
+    ],
+    "text_directory": "def_chromophore_maybe_quantumyield_absorptionwavelength_emissionwavelength",
+    "model_type": "bert",
+    "model_path": "/wsu/home/gi/gi16/gi1632/LoA/testmodel/",
+    "auto": true
+  },
+  "Inference": {
+    "questions": ["What chromophores were mentioned?", "What is the structure of the chromophore?", "What is the SMILES string of the chromophore?", "What is the formal charge?", "What is the fluorescence quantum yield?", "What is the absorption wavelength?", "What is the emission wavelength?", "Are the values obtained theoretical?", "What solvent was used in the experiment?"],
+    "selected_dir": "chromophores_quantum_yield_absorption_emission",
+    "model_id": "/wsu/home/gi/gi16/gi1632/LoA/testmodel/",
+    "auto": true
+  }
+}

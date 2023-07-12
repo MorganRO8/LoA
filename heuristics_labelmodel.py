@@ -1,0 +1,223 @@
+# Imports
+import re
+from functools import partial
+
+import pandas as pd
+import spacy
+from nltk.corpus import wordnet
+from sentence_transformers import SentenceTransformer
+from sklearn.metrics.pairwise import cosine_similarity
+from snorkel.labeling import PandasLFApplier
+from snorkel.labeling.model import LabelModel
+from snorkel.types import DataPoint
+from transformers import pipeline
+
+from utils import *
+
+
+def heuristics_labelmodel(args):
+    tasks = args.get('tasks')
+    def_search_terms = args.get('def_search_terms')
+    maybe_search_terms = args.get('maybe_search_terms')
+    model_type = args.get('model_type')
+    auto = args.get('auto')
+
+    if auto is None:
+        csv_folder = select_csv()
+
+    else:
+        output_directory_id, trash = get_out_id(def_search_terms, maybe_search_terms)
+        csv_folder = os.path.join(os.getcwd(), 'snorkel', output_directory_id)
+
+    # Definitions
+
+    def get_keywords(keywords):
+        if keywords is None:
+            user_input = input("Enter a comma-separated list of keywords or a path to a .txt file: ")
+            if os.path.isfile(user_input):
+                with open(user_input, 'r') as f:
+                    keywords = f.read().splitlines()
+            else:
+                keywords = user_input.split(',')
+        return keywords
+
+    def get_model_identifiers(model_identifiers):
+        if model_identifiers is None:
+            user_input = input("Enter a comma-separated list of Hugging Face model identifiers: ")
+            model_identifiers = user_input.split(',')
+        return model_identifiers
+
+    def get_questions(questions):
+        if questions is None:
+            user_input = input("Enter a comma-separated list of yes/no questions: ")
+            questions = user_input.split(',')
+        return questions
+
+    def get_synonyms(word):
+        synonyms = set()
+        for syn in wordnet.synsets(word):
+            for lemma in syn.lemmas():
+                synonyms.add(lemma.name())
+        return list(synonyms)
+
+    def generate_synonym_sentences(sentence):
+        doc = nlp(sentence)
+        synonym_sentences = []
+        for token in doc:
+            if token.dep_ in ['nsubj', 'dobj']:
+                synonyms = get_synonyms(token.text)
+                for synonym in synonyms:
+                    synonym_sentence = sentence.replace(token.text, synonym)
+                    synonym_sentences.append(synonym_sentence)
+        return synonym_sentences
+
+    def escape_nouns(sentence):
+        doc = nlp(sentence)
+        for token in doc:
+            if token.pos_ == 'NOUN':
+                sentence = sentence.replace(token.text, r'\b\w+\b')
+        return sentence
+
+    def get_sentences(sentences):
+        if sentences is None:
+            user_input = input("Enter a comma-separated list of sentences or a path to a .txt file: ")
+            if os.path.isfile(user_input):
+                with open(user_input, 'r') as f:
+                    sentences = [line.strip() for line in f]
+            else:
+                sentences = user_input.split(',')
+        return sentences
+
+    if auto is None:
+        # Have user select scrape results to use
+        output_directory_id = select_scrape_results()
+
+    # Initialization
+    nlp = spacy.load('en_core_web_sm')
+    if auto is None:
+        tasks = []
+        task_count = int(input("Enter the number of tasks: ")) if tasks is None else len(tasks)
+        for i in range(task_count):
+            task_name = input(f"Enter the name of task {i + 1}: ")
+            keywords = get_keywords(None)
+            regexes = input(
+                "Please input any regular expressions you would like to use as labels, separated by triple bars (|||):").split(
+                '|||')
+            model_identifiers = get_model_identifiers(None)
+            questions = get_questions(None)
+            sentences = get_sentences(None)
+            tasks.append({
+                'name': task_name,
+                'keywords': keywords,
+                'model_identifiers': model_identifiers,
+                'questions': questions,
+                'sentences': sentences,
+            })
+    else:
+        new_tasks = []
+        for task in tasks:
+            task_name = task.get('name')
+            keywords = get_keywords(task.get('keywords'))
+            regexes = task.get('regexes')
+            model_identifiers = get_model_identifiers(task.get('model_identifiers'))
+            questions = get_questions(task.get('questions'))
+            sentences = get_sentences(task.get('sentences'))
+            new_tasks.append({
+                'name': task_name,
+                'keywords': keywords,
+                'model_identifiers': model_identifiers,
+                'questions': questions,
+                'sentences': sentences,
+            })
+        tasks = new_tasks
+
+    # Load text files
+    texts = load_text_files(os.getcwd() + '/txts/' + output_directory_id, model_type)
+
+    # Convert texts to DataFrame
+    df_train = pd.DataFrame(texts, columns=['text'])
+
+    # Instantiate lfs list
+    lfs = []
+
+    def lf_regex_search(x: DataPoint, regexes) -> int:
+        for regex in regexes:
+            if re.search(regex, x.text):
+                return 1
+        return 0
+
+    # Define the labeling functions outside the loop
+    def lf_keyword_search(x: DataPoint, keyword) -> int:
+        return 1 if keyword in x.text.lower() else 0
+
+    def lf_question_answering(x: DataPoint, nlp, question) -> int:
+        answer = nlp(question=question, context=x.text)
+        if answer['score'] > 0.5:
+            return 1 if answer['answer'].lower() == 'yes' else -1
+        else:
+            return 0
+
+    def lf_sentence_similarity(x: DataPoint, model, sentence_embedding) -> int:
+        x_embedding = model.encode([x.text])
+        similarity = cosine_similarity([sentence_embedding], [x_embedding])[0][0]
+        if similarity > 0.8:
+            return 1
+        elif similarity > 0.3:
+            return 0
+        else:
+            return -1
+
+    def lf_sentence_matching(x: DataPoint, sentence) -> int:
+        return 1 if re.search(sentence, x.text) else 0
+
+    # Labeling Functions
+    for task in tasks:
+        for keyword in task['keywords']:
+            lf = partial(lf_keyword_search, keyword=keyword)
+            lfs.append(lf)
+
+        for model_id in task['model_identifiers']:
+            for question in task['questions']:
+                nlpr = pipeline('question-answering', model=model_id)
+                lf = partial(lf_question_answering, nlp=nlpr, question=question)
+                lfs.append(lf)
+
+        comprehensive_sentences = []
+        for sentence in task['sentences']:
+            escaped_sentence = escape_nouns(sentence)
+            synonym_sentences = generate_synonym_sentences(escaped_sentence)
+            comprehensive_sentences.extend(synonym_sentences)
+
+        comprehensive_sentences = list(set(comprehensive_sentences))  # remove duplicates
+
+        for model_id in task['model_identifiers']:
+            model = SentenceTransformer(model_id)
+
+            for sentence in comprehensive_sentences:
+                sentence_embedding = model.encode([sentence])
+                lf = partial(lf_sentence_similarity, model=model, sentence_embedding=sentence_embedding)
+                lfs.append(lf)
+
+                lf = partial(lf_sentence_matching, sentence=sentence)
+                lfs.append(lf)
+
+        # Create the regex based lfs
+        lfs.append(partial(lf_regex_search, regexes))
+
+        # Apply the labeling functions to your dataset
+        applier = PandasLFApplier(lfs)
+        L_train = applier.apply(df_train)
+
+        # Train a Snorkel LabelModel to combine the labels
+        label_model = LabelModel(cardinality=2, verbose=True)
+        label_model.fit(L_train, n_epochs=500, log_freq=100, seed=123)
+
+        # Transform the labels into a single set of noise-aware probabilistic labels
+        df_train[task['name'] + "_label"] = label_model.predict(L=L_train, tie_break_policy="abstain")
+
+        # Add a column for positive results for each task
+        df_train[task['name'] + "_positive"] = df_train[task['name'] + "_label"].apply(lambda x: x if x == 1 else None)
+
+    # Save the DataFrame to a CSV file
+    os.makedirs(csv_folder, exist_ok=True)  # create the directory if it doesn't exist
+    df_train.to_csv(os.path.join(csv_folder, 'initial_label_data.csv'), index=False)

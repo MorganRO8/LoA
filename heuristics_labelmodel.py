@@ -14,6 +14,13 @@ from transformers import pipeline
 
 from utils import *
 
+# Check if nltk_data directory exists
+try:
+    nltk.data.find('corpora/wordnet')
+    print("WordNet is already downloaded.")
+except LookupError:
+    print("WordNet is not downloaded. Downloading now...")
+    nltk.download('wordnet')
 
 def heuristics_labelmodel(args):
     tasks = args.get('tasks')

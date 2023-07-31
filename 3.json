@@ -1,0 +1,8 @@
+{
+    "train_final_model": {
+        "auto": "value",
+        "def_search_terms": ["term1", "term2"],
+        "maybe_search_terms": ["term3", "term4"],
+        "n_epochs": "value"
+    }
+}

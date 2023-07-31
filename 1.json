@@ -1,0 +1,26 @@
+{
+    "scrape": {
+        "updownyn": "value",
+        "def_search_terms": ["term1", "term2"],
+        "maybe_search_terms": ["term3", "term4"],
+        "pubmedyn": "value",
+        "arxivyn": "value",
+        "ScienceOpenyn": "value",
+        "customdb": "value",
+        "auto": "value",
+        "retmax": "value",
+        "base_url": "value"
+    },
+    "doc_to_txt": {
+        "auto": "value",
+        "def_search_terms": ["term1", "term2"],
+        "maybe_search_terms": ["term3", "term4"]
+    },
+    "heuristics_labelmodel": {
+        "tasks": ["task1", "task2"],
+        "def_search_terms": ["term1", "term2"],
+        "maybe_search_terms": ["term3", "term4"],
+        "model_type": "value",
+        "auto": "value"
+    }
+}

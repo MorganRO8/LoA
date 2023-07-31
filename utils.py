@@ -99,7 +99,7 @@ def load_text_files(directory, model_type):
 def get_out_id(def_search_terms_input, maybe_search_terms_input):
     # Method for getting terms from user, to be moved to json generator for auto mode
 
-    """
+
     if def_search_terms_input == "none":
         print("No definite search terms selected.")
         def_search_terms = None
@@ -107,7 +107,6 @@ def get_out_id(def_search_terms_input, maybe_search_terms_input):
         def_search_terms = [term.strip() for term in def_search_terms_input.split(",")]
         def_search_terms.sort()
     # Method for getting terms from user, to be moved to json generator for auto mode
-    """
 
     if maybe_search_terms_input == "none":
         print("No maybe search terms selected, only using definite search terms.")

@@ -213,14 +213,14 @@ def heuristics_labelmodel(args):
             def named_lf_sentence_similarity(x: DataPoint) -> int:
                 return lf_sentence_similarity(x, model=model, sentence_embedding=sentence_embedding)
 
-        named_lf_sentence_similarity.__name__ = f"lf_sentence_similarity_{model_id}_{sentence}"
-        lfs.append(named_lf_sentence_similarity)
+            named_lf_sentence_similarity.__name__ = f"lf_sentence_similarity_{model_id}_{sentence}"
+            lfs.append(named_lf_sentence_similarity)
 
-        def named_lf_sentence_matching(x: DataPoint) -> int:
-            return lf_sentence_matching(x, sentence=sentence)
+            def named_lf_sentence_matching(x: DataPoint) -> int:
+                return lf_sentence_matching(x, sentence=sentence)
 
-        named_lf_sentence_matching.__name__ = f"lf_sentence_matching_{sentence}"
-        lfs.append(named_lf_sentence_matching)
+            named_lf_sentence_matching.__name__ = f"lf_sentence_matching_{sentence}"
+            lfs.append(named_lf_sentence_matching)
 
         # Create the regex based lfs
         def named_lf_regex_search(x: DataPoint) -> int:

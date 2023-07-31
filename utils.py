@@ -87,7 +87,7 @@ def load_text_files(directory, model_type):
 
     for filename in os.listdir(os.path.join(directory, 'train')):
         if filename.endswith(".txt"):
-            with open(os.path.join(directory, filename), 'r') as f:
+            with open(os.path.join(directory, 'train', filename), 'r') as f:
                 file_text = f.read()
                 narrative = NarrativeText(text=file_text)
                 elements = stage_for_transformers([narrative], tokenizer)

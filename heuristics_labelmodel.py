@@ -22,6 +22,7 @@ except LookupError:
     nltk.download('wordnet')
 from nltk.corpus import wordnet
 
+# Modify the original function with function names
 def heuristics_labelmodel(args):
     tasks = args.get('tasks')
     def_search_terms = args.get('def_search_terms')
@@ -182,6 +183,7 @@ def heuristics_labelmodel(args):
         for keyword in task['keywords']:
             def named_lf_keyword_search(x: DataPoint) -> int:
                 return lf_keyword_search(x, keyword=keyword)
+            named_lf_keyword_search.__name__ = f"lf_keyword_search_{keyword}"
             lfs.append(named_lf_keyword_search)
 
         for model_id in task['model_identifiers']:
@@ -191,6 +193,7 @@ def heuristics_labelmodel(args):
                 def named_lf_question_answering(x: DataPoint) -> int:
                     return lf_question_answering(x, nlp=nlpr, question=question)
 
+                named_lf_question_answering.__name__ = f"lf_question_answering_{model_id}_{question}"
                 lfs.append(named_lf_question_answering)
 
         comprehensive_sentences = []
@@ -201,26 +204,29 @@ def heuristics_labelmodel(args):
 
         comprehensive_sentences = list(set(comprehensive_sentences))  # remove duplicates
 
-        for model_id in task['model_identifiers']:
-            model = SentenceTransformer(model_id)
 
-            for sentence in comprehensive_sentences:
-                sentence_embedding = model.encode([sentence])
+        model = SentenceTransformer(sentence-transformers/LaBSE)
 
-                def named_lf_sentence_similarity(x: DataPoint) -> int:
-                    return lf_sentence_similarity(x, model=model, sentence_embedding=sentence_embedding)
+        for sentence in comprehensive_sentences:
+            sentence_embedding = model.encode([sentence])
 
-                lfs.append(named_lf_sentence_similarity)
+            def named_lf_sentence_similarity(x: DataPoint) -> int:
+                return lf_sentence_similarity(x, model=model, sentence_embedding=sentence_embedding)
 
-                def named_lf_sentence_matching(x: DataPoint) -> int:
-                    return lf_sentence_matching(x, sentence=sentence)
+        named_lf_sentence_similarity.__name__ = f"lf_sentence_similarity_{model_id}_{sentence}"
+        lfs.append(named_lf_sentence_similarity)
 
-                lfs.append(named_lf_sentence_matching)
+        def named_lf_sentence_matching(x: DataPoint) -> int:
+            return lf_sentence_matching(x, sentence=sentence)
+
+        named_lf_sentence_matching.__name__ = f"lf_sentence_matching_{sentence}"
+        lfs.append(named_lf_sentence_matching)
 
         # Create the regex based lfs
         def named_lf_regex_search(x: DataPoint) -> int:
             return lf_regex_search(x, regexes)
 
+        named_lf_regex_search.__name__ = "lf_regex_search"
         lfs.append(named_lf_regex_search)
 
         # Apply the labeling functions to your dataset

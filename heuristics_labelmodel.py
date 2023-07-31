@@ -152,8 +152,8 @@ def heuristics_labelmodel(args):
 
     def lf_question_answering(x: DataPoint, nlp, question) -> int:
         answer = nlp(question=question, context=x.text)
-        if answer['score'] > 0.5:
-            return 1 if answer['answer'].lower() == 'yes' else -1
+        if answer['score'] > 0.7:
+            return 1
         else:
             return 0
 

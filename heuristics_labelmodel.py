@@ -180,14 +180,18 @@ def heuristics_labelmodel(args):
     # Labeling Functions
     for task in tasks:
         for keyword in task['keywords']:
-            lf = partial(lf_keyword_search, keyword=keyword)
-            lfs.append(lf)
+            def named_lf_keyword_search(x: DataPoint) -> int:
+                return lf_keyword_search(x, keyword=keyword)
+            lfs.append(named_lf_keyword_search)
 
         for model_id in task['model_identifiers']:
             for question in task['questions']:
                 nlpr = pipeline('question-answering', model=model_id)
-                lf = partial(lf_question_answering, nlp=nlpr, question=question)
-                lfs.append(lf)
+
+                def named_lf_question_answering(x: DataPoint) -> int:
+                    return lf_question_answering(x, nlp=nlpr, question=question)
+
+                lfs.append(named_lf_question_answering)
 
         comprehensive_sentences = []
         for sentence in task['sentences']:
@@ -202,14 +206,22 @@ def heuristics_labelmodel(args):
 
             for sentence in comprehensive_sentences:
                 sentence_embedding = model.encode([sentence])
-                lf = partial(lf_sentence_similarity, model=model, sentence_embedding=sentence_embedding)
-                lfs.append(lf)
 
-                lf = partial(lf_sentence_matching, sentence=sentence)
-                lfs.append(lf)
+                def named_lf_sentence_similarity(x: DataPoint) -> int:
+                    return lf_sentence_similarity(x, model=model, sentence_embedding=sentence_embedding)
+
+                lfs.append(named_lf_sentence_similarity)
+
+                def named_lf_sentence_matching(x: DataPoint) -> int:
+                    return lf_sentence_matching(x, sentence=sentence)
+
+                lfs.append(named_lf_sentence_matching)
 
         # Create the regex based lfs
-        lfs.append(partial(lf_regex_search, regexes))
+        def named_lf_regex_search(x: DataPoint) -> int:
+            return lf_regex_search(x, regexes)
+
+        lfs.append(named_lf_regex_search)
 
         # Apply the labeling functions to your dataset
         applier = PandasLFApplier(lfs)

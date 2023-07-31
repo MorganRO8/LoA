@@ -1,10 +1,9 @@
 # Imports
 import re
 from functools import partial
-
+import nltk
 import pandas as pd
 import spacy
-from nltk.corpus import wordnet
 from sentence_transformers import SentenceTransformer
 from sklearn.metrics.pairwise import cosine_similarity
 from snorkel.labeling import PandasLFApplier
@@ -21,6 +20,7 @@ try:
 except LookupError:
     print("WordNet is not downloaded. Downloading now...")
     nltk.download('wordnet')
+from nltk.corpus import wordnet
 
 def heuristics_labelmodel(args):
     tasks = args.get('tasks')

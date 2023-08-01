@@ -186,7 +186,7 @@ def heuristics_labelmodel(args):
             def named_lf_keyword_search(x: DataPoint) -> int:
                 return lf_keyword_search(x, keyword=keyword)
 
-            named_lf_keyword_search.__name__ = f"lf_keyword_search_{keyword}".replace(" ", "_")
+            named_lf_keyword_search.name = f"lf_keyword_search_{keyword}".replace(" ", "_")
             lfs.append(named_lf_keyword_search)
 
         for model_id in task['model_identifiers']:
@@ -197,7 +197,7 @@ def heuristics_labelmodel(args):
                 def named_lf_question_answering(x: DataPoint) -> int:
                     return lf_question_answering(x, nlp=nlpr, question=question)
 
-                named_lf_question_answering.__name__ = f"lf_question_answering_{model_id}_{question}".replace(" ", "_")
+                named_lf_question_answering.name = f"lf_question_answering_{model_id}_{question}".replace(" ", "_")
                 lfs.append(named_lf_question_answering)
 
         model = SentenceTransformer("sentence-transformers/LaBSE")
@@ -208,13 +208,13 @@ def heuristics_labelmodel(args):
             def named_lf_sentence_similarity(x: DataPoint) -> int:
                 return lf_sentence_similarity(x, model=model, sentence_embedding=sentence_embedding)
 
-            named_lf_sentence_similarity.__name__ = f"lf_sentence_similarity_{model_id}_{sentence}".replace(" ", "_")
+            named_lf_sentence_similarity.name = f"lf_sentence_similarity_{model_id}_{sentence}".replace(" ", "_")
             lfs.append(named_lf_sentence_similarity)
 
             def named_lf_sentence_matching(x: DataPoint) -> int:
                 return lf_sentence_matching(x, sentence=sentence)
 
-            named_lf_sentence_matching.__name__ = f"lf_sentence_matching_{sentence}".replace(" ", "_")
+            named_lf_sentence_matching.name = f"lf_sentence_matching_{sentence}".replace(" ", "_")
             lfs.append(named_lf_sentence_matching)
 
         def make_lf_regex_search(regex):
@@ -225,7 +225,7 @@ def heuristics_labelmodel(args):
             sanitized_regex = regex.replace("\\", "").replace("(", "").replace(")", "").replace("+", "").replace("*",
                                                                                                                  "").replace(
                 " ", "_")
-            lf.__name__ = f"lf_regex_search_{task}_{sanitized_regex}"
+            lf.name = f"lf_regex_search_{task}_{sanitized_regex}"
             return lf
 
         # Create the labeling functions
@@ -233,10 +233,12 @@ def heuristics_labelmodel(args):
             lfs.append(make_lf_regex_search(regex))
 
         # Debug print for lfs
+        print(f"There are {len(lfs)} labeling functions")
         print("Labeling function names:")
         print()
         for lf in lfs:
-            print(lf.__name__)
+            print(lf)
+            print(lf.name)
             print()
 
         # Apply the labeling functions to your dataset

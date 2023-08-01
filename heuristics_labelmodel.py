@@ -222,12 +222,19 @@ def heuristics_labelmodel(args):
             named_lf_sentence_matching.__name__ = f"lf_sentence_matching_{sentence}"
             lfs.append(named_lf_sentence_matching)
 
-        # Create the regex based lfs
-        def named_lf_regex_search(x: DataPoint) -> int:
-            return lf_regex_search(x, regexes)
+        def make_lf_regex_search(regex):
+            def lf(document):
+                return CLASS if re.search(regex, document.text) else ABSTAIN
 
-        named_lf_regex_search.__name__ = "lf_regex_search"
-        lfs.append(named_lf_regex_search)
+            # Sanitize the regex and use it as the function name
+            sanitized_regex = regex.replace("\\", "").replace("(", "").replace(")", "").replace("+", "").replace("*",
+                                                                                                                 "")
+            lf.__name__ = f"lf_regex_search_{sanitized_regex}"
+            return lf
+
+        # Create the labeling functions
+        for regex in regexes:
+            lfs.append(make_lf_regex_search(regex))
 
         # Apply the labeling functions to your dataset
         applier = PandasLFApplier(lfs)

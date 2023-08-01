@@ -205,7 +205,7 @@ def heuristics_labelmodel(args):
         comprehensive_sentences = list(set(comprehensive_sentences))  # remove duplicates
 
 
-        model = SentenceTransformer(sentence-transformers/LaBSE)
+        model = SentenceTransformer("sentence-transformers/LaBSE")
 
         for sentence in comprehensive_sentences:
             sentence_embedding = model.encode([sentence])

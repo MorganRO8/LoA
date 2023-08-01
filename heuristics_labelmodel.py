@@ -22,6 +22,7 @@ except LookupError:
     nltk.download('wordnet')
 from nltk.corpus import wordnet
 
+
 # Modify the original function with function names
 def heuristics_labelmodel(args):
     tasks = args.get('tasks')
@@ -160,8 +161,9 @@ def heuristics_labelmodel(args):
 
     def lf_question_answering(x: DataPoint, nlp, question) -> int:
         answer = nlp(question=question, context=x.text)
-        if answer['score'] > 0.7:
-            return 1
+        if answer == 'yes':
+            if answer['score'] > 0.5:
+                return 1
         else:
             return 0
 
@@ -183,43 +185,36 @@ def heuristics_labelmodel(args):
         for keyword in task['keywords']:
             def named_lf_keyword_search(x: DataPoint) -> int:
                 return lf_keyword_search(x, keyword=keyword)
-            named_lf_keyword_search.__name__ = f"lf_keyword_search_{keyword}"
+
+            named_lf_keyword_search.__name__ = f"lf_keyword_search_{keyword}".replace(" ", "_")
             lfs.append(named_lf_keyword_search)
 
         for model_id in task['model_identifiers']:
             for question in task['questions']:
+                question = question + " Answer simply yes or no."
                 nlpr = pipeline('question-answering', model=model_id)
 
                 def named_lf_question_answering(x: DataPoint) -> int:
                     return lf_question_answering(x, nlp=nlpr, question=question)
 
-                named_lf_question_answering.__name__ = f"lf_question_answering_{model_id}_{question}"
+                named_lf_question_answering.__name__ = f"lf_question_answering_{model_id}_{question}".replace(" ", "_")
                 lfs.append(named_lf_question_answering)
-
-        comprehensive_sentences = []
-        for sentence in task['sentences']:
-            escaped_sentence = escape_nouns(sentence)
-            synonym_sentences = generate_synonym_sentences(escaped_sentence)
-            comprehensive_sentences.extend(synonym_sentences)
-
-        comprehensive_sentences = list(set(comprehensive_sentences))  # remove duplicates
-
 
         model = SentenceTransformer("sentence-transformers/LaBSE")
 
-        for sentence in comprehensive_sentences:
+        for sentence in task['sentences']:
             sentence_embedding = model.encode([sentence])
 
             def named_lf_sentence_similarity(x: DataPoint) -> int:
                 return lf_sentence_similarity(x, model=model, sentence_embedding=sentence_embedding)
 
-            named_lf_sentence_similarity.__name__ = f"lf_sentence_similarity_{model_id}_{sentence}"
+            named_lf_sentence_similarity.__name__ = f"lf_sentence_similarity_{model_id}_{sentence}".replace(" ", "_")
             lfs.append(named_lf_sentence_similarity)
 
             def named_lf_sentence_matching(x: DataPoint) -> int:
                 return lf_sentence_matching(x, sentence=sentence)
 
-            named_lf_sentence_matching.__name__ = f"lf_sentence_matching_{sentence}"
+            named_lf_sentence_matching.__name__ = f"lf_sentence_matching_{sentence}".replace(" ", "_")
             lfs.append(named_lf_sentence_matching)
 
         def make_lf_regex_search(regex):
@@ -228,13 +223,21 @@ def heuristics_labelmodel(args):
 
             # Sanitize the regex and use it as the function name
             sanitized_regex = regex.replace("\\", "").replace("(", "").replace(")", "").replace("+", "").replace("*",
-                                                                                                                 "")
+                                                                                                                 "").replace(
+                " ", "_")
             lf.__name__ = f"lf_regex_search_{task}_{sanitized_regex}"
             return lf
 
         # Create the labeling functions
         for regex in regexes:
             lfs.append(make_lf_regex_search(regex))
+
+        # Debug print for lfs
+        print("Labeling function names:")
+        print()
+        for lf in lfs:
+            print(lf.__name__)
+            print()
 
         # Apply the labeling functions to your dataset
         applier = PandasLFApplier(lfs)

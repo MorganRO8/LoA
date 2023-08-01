@@ -229,7 +229,7 @@ def heuristics_labelmodel(args):
             # Sanitize the regex and use it as the function name
             sanitized_regex = regex.replace("\\", "").replace("(", "").replace(")", "").replace("+", "").replace("*",
                                                                                                                  "")
-            lf.__name__ = f"lf_regex_search_{sanitized_regex}"
+            lf.__name__ = f"lf_regex_search_{task}_{sanitized_regex}"
             return lf
 
         # Create the labeling functions

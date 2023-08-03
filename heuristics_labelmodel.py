@@ -243,20 +243,50 @@ def heuristics_labelmodel(args):
             print(lf.name)
             print()
 
-        # Apply the labeling functions to your dataset
-        applier = PandasLFApplier(lfs)
-        L_train = applier.apply(df_train)
+        # File paths for the CSV file and model checkpoint
+        csv_file_path = os.path.join(csv_folder, f"{task['name']}_label_data.csv")
+        model_file_path = os.path.join(csv_folder, f"{task['name']}_label_model.pkl")
 
-        # Train a Snorkel LabelModel to combine the labels
-        label_model = LabelModel(cardinality=2, verbose=True)
-        label_model.fit(L_train, n_epochs=500, log_freq=100, seed=123)
+        # Check if a CSV file exists for the task
+        if os.path.isfile(csv_file_path):
+            print(f"CSV file found for task {task['name']}. Skipping labeling.")
+            # Load the dataframe from the CSV file
+            df_train = pd.read_csv(csv_file_path)
+        else:
+            # Apply the labeling functions to your dataset
+            applier = PandasLFApplier(lfs)
+            L_train = applier.apply(df_train)
 
-        # Transform the labels into a single set of noise-aware probabilistic labels
-        df_train[task['name'] + "_label"] = label_model.predict(L=L_train, tie_break_policy="abstain")
+            # Add the labels to the dataframe
+            df_train[task['name'] + "_label"] = label_model.predict(L=L_train, tie_break_policy="abstain")
 
-        # Add a column for positive results for each task
-        df_train[task['name'] + "_positive"] = df_train[task['name'] + "_label"].apply(lambda x: x if x == 1 else None)
+            # Add a column for positive results for each task
+            df_train[task['name'] + "_positive"] = df_train[task['name'] + "_label"].apply(
+                lambda x: x if x == 1 else None)
 
-    # Save the DataFrame to a CSV file
-    os.makedirs(csv_folder, exist_ok=True)  # create the directory if it doesn't exist
-    df_train.to_csv(os.path.join(csv_folder, 'initial_label_data.csv'), index=False)
+            # Save the dataframe to a CSV file
+            df_train.to_csv(csv_file_path, index=False)
+
+        # Check if a model checkpoint exists for the task
+        if os.path.isfile(model_file_path):
+            print(f"Model checkpoint found for task {task['name']}. Skipping training.")
+            # Load the model from the checkpoint
+            label_model = LabelModel.load(model_file_path)
+        else:
+            # Train a Snorkel LabelModel to combine the labels
+            label_model = LabelModel(cardinality=2, verbose=True)
+            label_model.fit(L_train, n_epochs=5000, log_freq=100, seed=123, lr=0.001, lr_scheduler="linear")
+
+            # Save the model to a checkpoint
+            label_model.save(model_file_path)
+
+            # Transform the labels into a single set of noise-aware probabilistic labels
+            df_train[task['name'] + "_label"] = label_model.predict(L=L_train, tie_break_policy="abstain")
+
+            # Add a column for positive results for each task
+            df_train[task['name'] + "_positive"] = df_train[task['name'] + "_label"].apply(
+                lambda x: x if x == 1 else None)
+
+            # Save the DataFrame to a CSV file
+            os.makedirs(csv_folder, exist_ok=True)  # create the directory if it doesn't exist
+            df_train.to_csv(os.path.join(csv_folder, 'initial_label_data.csv'), index=False)

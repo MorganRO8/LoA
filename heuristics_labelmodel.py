@@ -171,8 +171,6 @@ def heuristics_labelmodel(args):
 
     def lf_sentence_similarity(x: DataPoint, model, sentence_embedding) -> int:
         x_embedding = model.encode([x.text])
-        print(f"Sentence embedding dims: {sentence_embedding.ndim}")
-        print(f"x_embedding dims: {x_embedding.ndim}")
         similarity = cosine_similarity(sentence_embedding, x_embedding)[0][0]
         if similarity > 0.8:
             return 1

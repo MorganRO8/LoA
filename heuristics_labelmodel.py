@@ -263,7 +263,7 @@ def heuristics_labelmodel(args):
 
             # Train a Snorkel LabelModel to combine the labels
             label_model = LabelModel(cardinality=2, verbose=True)
-            label_model.fit(L_train, n_epochs=5000, log_freq=100, seed=123, lr=0.001, lr_scheduler="linear")
+            label_model.fit(L_train, n_epochs=5000, log_freq=100, seed=123, lr=0.001)
 
             # Save the model to a checkpoint
             label_model.save(model_file_path)

@@ -68,7 +68,7 @@ def prepare_test_folder(directory):
         # create 'train' directory
         os.mkdir(test_dir)
         # calculate number of files to move (5% of all files)
-        num_files_to_move = len(txt_files) * 0.05
+        num_files_to_move = int(len(txt_files) * 0.05)
         # select random files to move
         files_to_move = random.sample(txt_files, num_files_to_move)
         # move selected files to 'test' directory

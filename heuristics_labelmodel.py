@@ -120,7 +120,7 @@ def heuristics_labelmodel(args):
     texts = load_text_files(os.getcwd() + '/txts/' + output_directory_id, model_type)
 
     # Debug staging
-    print(texts[:10])
+    # print(texts[:10])
 
     # Convert texts to DataFrame
     df_train = pd.DataFrame(texts, columns=['text'])

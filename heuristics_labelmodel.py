@@ -228,7 +228,7 @@ def heuristics_labelmodel(args):
 
             def make_lf_regex_search(regex):
                 def lf(document):
-                    return CLASS if re.search(regex, document.text) else ABSTAIN
+                    return 1 if re.search(regex, document.text) else 0
 
                 # Sanitize the regex and use it as the function name
                 sanitized_regex = regex.replace("\\", "").replace("(", "").replace(")", "").replace("+", "").replace(

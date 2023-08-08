@@ -64,11 +64,11 @@ def prepare_test_folder(directory):
     test_dir = os.path.join(directory, 'train')
     if not os.path.exists(test_dir):
         # get all .txt files in the directory
-        txt_files = [f for f in os.listdir(directory) if f.endswith(".txt")]
+        txt_files = [f for f in os.listdir(directory)]
         # create 'train' directory
         os.mkdir(test_dir)
-        # calculate number of files to move (10% of all .txt files)
-        num_files_to_move = len(txt_files) // 10
+        # calculate number of files to move (5% of all files)
+        num_files_to_move = len(txt_files) * 0.05
         # select random files to move
         files_to_move = random.sample(txt_files, num_files_to_move)
         # move selected files to 'test' directory
@@ -90,7 +90,7 @@ def load_text_files(directory, model_type):
             with open(os.path.join(directory, 'train', filename), 'r') as f:
                 file_text = f.read()
                 narrative = NarrativeText(text=file_text)
-                elements = stage_for_transformers([narrative], tokenizer)
+                elements = stage_for_transformers([narrative], tokenizer, buffer=50)
                 for element in elements:
                     texts.append(element.text)
     return texts
@@ -98,7 +98,6 @@ def load_text_files(directory, model_type):
 
 def get_out_id(def_search_terms_input, maybe_search_terms_input):
     # Method for getting terms from user, to be moved to json generator for auto mode
-
 
     if def_search_terms_input == "none":
         print("No definite search terms selected.")

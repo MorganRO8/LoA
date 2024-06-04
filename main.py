@@ -1,25 +1,18 @@
-import json
 import os
 import sys
+import json
+import datetime
+import builtins
 
-# Set env variables for rwkv here, because they need to be loaded before the package is imported
+# Check for and create the folders used by the program if necessary
+os.makedirs(os.path.join(os.getcwd(), 'scraped_docs'), exist_ok=True)
+os.makedirs(os.path.join(os.getcwd(), 'dataModels'), exist_ok=True)
+os.makedirs(os.path.join(os.getcwd(), 'logs'), exist_ok=True)
 
-os.environ["RWKV_JIT_ON"] = '1'
-os.environ["RWKV_CUDA_ON"] = '1'
-os.environ["RWKV_T_MAX"] = f'{int(2 ^ 18)}'
-os.environ["RWKV_FLOAT_MODE"] = "fp32"
-
+builtins.a = os.path.join(os.getcwd(), "logs", f"{str(datetime.datetime.now()).replace(' ', '_')}.txt")
+from src.utils import print
 
 def main():
-    from answer_curation import answer_curation
-    from doc_to_txt import doc_to_txt
-    from guess_answers import guess_answers
-    from heuristics_labelmodel import heuristics_labelmodel
-    from inference import inference
-    from label_curation import label_curation
-    from scrape import scrape
-    from train_final_model import train_final_model
-
     print("""
     
               _____           _______                   _____          
@@ -45,6 +38,9 @@ def main():
             \::/    /         ~~                      \::/    /        
              \/____/                                   \/____/         
     """)
+    
+    # initialize variables
+    task = 0
 
     if "-auto" in sys.argv:
         # Get the index of the -auto argument
@@ -65,78 +61,45 @@ def main():
             # Loop over each task in the file
             for task_name, task_params in tasks.items():
                 if task_name.lower() == "scrape":
+                    from src import scrape
                     scrape(task_params)
 
-                elif task_name.lower() == "doc_to_txt":
-                    doc_to_txt(task_params)
-
-                elif task_name.lower() == "heuristics_labelmodel":
-                    heuristics_labelmodel(task_params)
-
-                elif task_name.lower() == "label_curation":
-                    label_curation(task_params)
-
-                elif task_name.lower() == "guess_answers":
-                    guess_answers(task_params)
-
-                elif task_name.lower() == "answer_curation":
-                    answer_curation(task_params)
-
-                elif task_name.lower() == "train_final_model":
-                    train_final_model(task_params)
-
-                elif task_name.lower() == "inference":
-                    inference(task_params)
+                elif task_name.lower() == "extract":
+                    from src.extract import extract
+                    extract(task_params)
 
                 else:
                     print(f"Unknown task type: {task_name}")
                     sys.exit(1)
+                    
+    else:   
+        while task != 1 and task != 2 and task != 3:
+            # prompt the user to select a task
+            print("Please select a task:")
+            print("1. Scrape Papers")
+            print("2. Define a CSV Structure")
+            print("3. Extract Data from Papers into Defined CSV Structure")
 
-    # prompt the user to select a task
-    print("Please select a task:")
-    print("1. Scrape Papers")
-    print("2. Convert Scraped Docs to Plaintext")
-    print("3. Label Data with Heuristics")
-    print("4. Curate labels")
-    print("5. Have a Model Guess Answers from Labelled Data")
-    print("6. Curate Answers")
-    print("7. Train QA Model")
-    print("8. Run Question Answering")
+            # get user input
+            task = input("Enter the task number (1, 2, or 3): ")
 
-    # get user input
-    task = input("Enter the task number (1 to 8): ")
+            # check user input and perform the selected task
 
-    # check user input and perform the selected task
+            if task == "1":
+                from src.scrape import scrape
+                scrape({})
 
-    if task == "1":
-        scrape({})
+            elif task == "2":
+                from src.meta_model import UI_schema_creator      
+                UI_schema_creator()
 
-    elif task == "2":
-        doc_to_txt({})
+            elif task == "3":
+                print("Loading models, please wait...")
+                from src.extract import extract
+                extract({})
+                
+            else:
+                print("Invalid task number. Please enter 1 to 3")
 
-    elif task == "3":
-        heuristics_labelmodel({})
-
-    elif task == "4":
-        label_curation({})
-
-    elif task == "5":
-        guess_answers({})
-
-    elif task == "6":
-        answer_curation({})
-
-    elif task == "7":
-        train_final_model({})
-
-    elif task == "8":
-        inference({})
-
-    else:
-        print("Invalid task number. Please enter 1 to 8")
-
-        python = sys.executable
-        os.execl(python, python, *sys.argv)
-
-
-main()
+if __name__ == '__main__':
+    main()

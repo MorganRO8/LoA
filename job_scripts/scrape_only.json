@@ -1,0 +1,15 @@
+{
+  "scrape": {
+    "def_search_terms": ["term1", "term2"],
+    "maybe_search_terms": ["term3", "term4"],
+    "pubmedyn": "y",
+    "arxivyn": "n",
+    "ScienceOpenyn": "n",
+    "customdb": "n",
+    "auto": true,
+    "retmax": 100,
+    "base_url": "",
+    "Unpaywallyn": "n",
+    "Email": ""
+  }
+}

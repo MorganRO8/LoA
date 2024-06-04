@@ -10,7 +10,6 @@ pip install torch==2.0.1 torchvision==0.15.2 torchaudio==2.0.2 torchmetrics==1.0
 
 pip install 'git+https://github.com/facebookresearch/detectron2.git@v0.6'
 pip install pillow==9.5.0
-pip install langchain langchain-community
 pip install pikepdf==7.2.0
 
 pip install selenium
@@ -19,9 +18,7 @@ pip install webdriver_manager
 pip install "unstructured[all-docs]"
 pip install "unstructured[local-inference]"
 pip install libmagic poppler-utils pytesseract
-conda install tesseract
-
-pip install ollama
+conda install -y tesseract
 
 curl -L https://ollama.com/download/ollama-linux-amd64 -o ./ollama
 chmod +x ./ollama

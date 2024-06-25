@@ -61,27 +61,32 @@ def main():
             # Loop over each task in the file
             for task_name, task_params in tasks.items():
                 if task_name.lower() == "scrape":
-                    from src import scrape
+                    from src.scrape import scrape
                     scrape(task_params)
 
                 elif task_name.lower() == "extract":
                     from src.extract import extract
                     extract(task_params)
 
+                elif task_name.lower() == 'concurrent':
+                    from src.single_paper import scrape_and_extract_concurrent
+                    scrape_and_extract_concurrent(task_params)
+
                 else:
                     print(f"Unknown task type: {task_name}")
                     sys.exit(1)
                     
-    else:   
-        while task != 1 and task != 2 and task != 3:
+    else:
+        while task != 1 and task != 2 and task != 3 and task != 4:
             # prompt the user to select a task
             print("Please select a task:")
             print("1. Scrape Papers")
             print("2. Define a CSV Structure")
             print("3. Extract Data from Papers into Defined CSV Structure")
+            print("4. Scrape and Extract Concurrently")
 
             # get user input
-            task = input("Enter the task number (1, 2, or 3): ")
+            task = input("Enter the task number (1, 2, 3, or 4): ")
 
             # check user input and perform the selected task
 
@@ -97,7 +102,9 @@ def main():
                 print("Loading models, please wait...")
                 from src.extract import extract
                 extract({})
-                
+            elif task == "4":
+                from src.single_paper import scrape_and_extract_concurrent
+                scrape_and_extract_concurrent({})
             else:
                 print("Invalid task number. Please enter 1 to 3")
 

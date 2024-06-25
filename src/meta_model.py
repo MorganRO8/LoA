@@ -71,6 +71,9 @@ def UI_schema_creator():
         columnDescription = input(f"Please enter a brief description of the data to be stored in this column: ")
 
         if columnType == "1":
+            allowed_values_input = input(
+                f"Enter allowed values for column {i + 1}, separated by commas (leave blank for no restriction): ")
+            allowed_values = [value.strip() for value in allowed_values_input.split(',') if value.strip()]
             min_length = input(f"Enter the minimum length for column {i+1} (leave blank for no minimum): ")
             max_length = input(f"Enter the maximum length for column {i+1} (leave blank for no maximum): ")
             whitelist_substrings = input(f"Enter required substrings for column {i+1}, separated by commas (leave blank for none): ").split(',')
@@ -83,9 +86,13 @@ def UI_schema_creator():
                 'min_length': int(min_length) if min_length else None,
                 'max_length': int(max_length) if max_length else None,
                 'whitelist_substrings': [substring.strip() for substring in whitelist_substrings if substring.strip()],
-                'blacklist_substrings': [substring.strip() for substring in blacklist_substrings if substring.strip()]
+                'blacklist_substrings': [substring.strip() for substring in blacklist_substrings if substring.strip()],
+                'allowed_values': allowed_values if allowed_values else None
             })
         elif columnType == "2":
+            allowed_values_input = input(
+                f"Enter allowed values for column {i + 1}, separated by commas (leave blank for no restriction): ")
+            allowed_values = [value.strip() for value in allowed_values_input.split(',') if value.strip()]
             min_value = input(f"Enter the minimum value for column {i+1} (leave blank for no minimum): ")
             max_value = input(f"Enter the maximum value for column {i+1} (leave blank for no maximum): ")
             fields.append({
@@ -94,7 +101,34 @@ def UI_schema_creator():
                 'name': columnName,
                 'description': columnDescription,
                 'min_value': int(min_value) if min_value else None,
-                'max_value': int(max_value) if max_value else None
+                'max_value': int(max_value) if max_value else None,
+                'allowed_values': allowed_values if allowed_values else None
+            })
+        elif columnType == "3":
+            allowed_values_input = input(
+                f"Enter allowed values for column {i + 1}, separated by commas (leave blank for no restriction): ")
+            allowed_values = [value.strip() for value in allowed_values_input.split(',') if value.strip()]
+            min_value = input(f"Enter the minimum value for column {i+1} (leave blank for no minimum): ")
+            max_value = input(f"Enter the maximum value for column {i+1} (leave blank for no maximum): ")
+            fields.append({
+                'column_number': i+1,
+                'type': columnType,
+                'name': columnName,
+                'description': columnDescription,
+                'min_value': float(min_value) if min_value else None,
+                'max_value': float(max_value) if max_value else None,
+                'allowed_values': allowed_values if allowed_values else None
+            })
+        elif columnType == "5":
+            min_value = input(f"Enter the lowest minimum value for column {i + 1} (leave blank for no minimum): ")
+            max_value = input(f"Enter the highest maximum value for column {i + 1} (leave blank for no maximum): ")
+            fields.append({
+                'column_number': i + 1,
+                'type': columnType,
+                'name': columnName,
+                'description': columnDescription,
+                'min_value': float(min_value) if min_value else None,
+                'max_value': float(max_value) if max_value else None
             })
         else:
             fields.append({

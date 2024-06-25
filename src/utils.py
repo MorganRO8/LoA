@@ -1,15 +1,14 @@
 # Imports
 import itertools
 import os
+import re
 import hashlib
 import csv
-import importlib
-import pandas as pd
 import numpy as np
 from pdf2image import convert_from_path
 import builtins
 import datetime
-import json
+import random
 import xml.etree.ElementTree as ET
 
 
@@ -40,6 +39,7 @@ def truncate_filename(directory, filename, max_path_length=255):
 def select_search_info_file():
     search_info_dir = os.path.join(os.getcwd(), 'search_info')
     search_info_files = [file for file in os.listdir(search_info_dir) if file.endswith('.txt')]
+    search_info_files.insert(0, 'All')
 
     print("Available search info files:")
     for i, file in enumerate(search_info_files):
@@ -47,14 +47,16 @@ def select_search_info_file():
 
     while True:
         choice = input("Enter the number of the search info file you want to use: ")
-        if choice.isdigit() and 1 <= int(choice) <= len(search_info_files):
+        if int(choice) == 1:
+            return 'All'
+        if choice.isdigit() and 2 <= int(choice) <= len(search_info_files):
             return os.path.join(search_info_dir, search_info_files[int(choice) - 1])
         else:
             print("Invalid choice. Please try again.")
 
 def select_data_model_file():
     data_models_dir = os.path.join(os.getcwd(), 'dataModels')
-    data_model_files = [file for file in os.listdir(data_models_dir) if file.endswith('.py')]
+    data_model_files = [file for file in os.listdir(data_models_dir) if file.endswith('.pkl')]
 
     print("Available data model files:")
     for i, file in enumerate(data_model_files):
@@ -261,21 +263,6 @@ def elements_to_string(elements_list):
     return formatted_output
     
 
-def process_output(model_output, pydantic_model):
-    try:
-        # Parse the model output as a JSON object
-        output_data = json.loads(model_output)
-
-        # Validate and parse the output data using the Pydantic model
-        validated_data = pydantic_model(**output_data)
-
-        return validated_data
-
-    except (json.JSONDecodeError, ValidationError) as e:
-        print(f"Error processing model output: {e}")
-        return None
-    
-
 def select_schema_file():
     schema_dir = os.path.join(os.getcwd(), 'dataModels')
     schema_files = [file for file in os.listdir(schema_dir) if file.endswith('.pkl')]
@@ -298,102 +285,118 @@ def load_schema_file(schema_file):
     key_columns = []
     if lines[0].startswith("Key Columns:"):
         key_columns = [int(column.strip()) for column in lines[0].split(':')[1].strip().split(',') if column.strip()]
-        lines = lines[2:]  # Skip the key columns line and the empty line
+        lines = lines[1:]  # Skip the key columns line
 
     schema_data = {}
-    for i in range(0, len(lines), 4):
-        column_number = int(lines[i].split('-')[0].strip())
-        column_type = lines[i].split(':')[1].strip().strip("'")
-        column_name = lines[i + 1].split(':')[1].strip().strip("'")
-        column_description = lines[i + 2].split(':')[1].strip().strip("'")
+    current_column = None
 
-        schema_data[column_number] = {
-            'type': column_type,
-            'name': column_name,
-            'description': column_description
-        }
-        
-        if column_type == 'str':
-            min_length = lines[i + 3].split(':')[1].strip().strip("'")
-            max_length = lines[i + 4].split(':')[1].strip().strip("'")
-            whitelist_substrings = lines[i + 5].split(':')[1].strip().strip("'").split(',')
-            blacklist_substrings = lines[i + 6].split(':')[1].strip().strip("'").split(',')
-            schema_data[column_number]['min_length'] = int(min_length) if min_length else None
-            schema_data[column_number]['max_length'] = int(max_length) if max_length else None
-            schema_data[column_number]['whitelist_substrings'] = [substring.strip() for substring in whitelist_substrings if substring.strip()]
-            schema_data[column_number]['blacklist_substrings'] = [substring.strip() for substring in blacklist_substrings if substring.strip()]
-        elif column_type == 'int':
-            min_value = lines[i + 3].split(':')[1].strip().strip("'")
-            max_value = lines[i + 4].split(':')[1].strip().strip("'")
-            schema_data[column_number]['min_value'] = int(min_value) if min_value else None
-            schema_data[column_number]['max_value'] = int(max_value) if max_value else None
+    for line in lines:
+        line = line.strip()
+        if not line:
+            continue
 
-    print(f"Schema data: {schema_data}")
+        parts = line.split('-')
+        if len(parts) == 2:
+            column_number = int(parts[0].strip())
+            info_type, info_value = parts[1].split(':', 1)
+            info_type = info_type.strip()
+            info_value = info_value.strip().strip("'")
+
+            if info_type == "Type":
+                current_column = column_number
+                schema_data[current_column] = {'type': info_value}
+            elif current_column is not None:
+                if info_type == "Name":
+                    schema_data[current_column]['name'] = info_value
+                elif info_type == "Description":
+                    schema_data[current_column]['description'] = info_value
+                elif info_type == "Allowed Values":
+                    schema_data[current_column]['allowed_values'] = [value.strip() for value in info_value.split(',') if value.strip()]
+                elif info_type == "Min Length":
+                    schema_data[current_column]['min_length'] = int(info_value) if info_value else None
+                elif info_type == "Max Length":
+                    schema_data[current_column]['max_length'] = int(info_value) if info_value else None
+                elif info_type == "Min Value":
+                    schema_data[current_column]['min_value'] = float(info_value) if info_value else None
+                elif info_type == "Max Value":
+                    schema_data[current_column]['max_value'] = float(info_value) if info_value else None
+                elif info_type == "Required Substrings":
+                    schema_data[current_column]['required_substrings'] = [substring.strip() for substring in info_value.split(',') if substring.strip()]
+                elif info_type == "Blacklisted Substrings":
+                    schema_data[current_column]['blacklisted_substrings'] = [substring.strip() for substring in info_value.split(',') if substring.strip()]
+
+    # Fill in missing 'description' keys with empty strings
+    for column_data in schema_data.values():
+        if 'description' not in column_data:
+            column_data['description'] = ''
+
     return schema_data, key_columns
+
 
 def generate_prompt(schema_data, user_instructions, key_columns=[]):
     num_columns = len(schema_data)
     schema_info = ""
+    schema_diagram = ""
 
     for column_number, column_data in schema_data.items():
-        schema_info += f"Column {column_number}:\n"
-        schema_info += f"Name: {column_data['name']}\n"
-        schema_info += f"Description: {column_data['description']}\n"
-        schema_info += f"Type of data allowed: {column_data['type']}\n\n"
-        
-        
-    if key_columns != []:
-        key_column_names = []
-        
-        for key_column in key_columns:
-            key_column_names.append(schema_data[int(key_column)]['name'])
-    
-        key_column_info = f"The column(s) {key_column_names} will be used as a key to check for duplicates within each paper. Please ensure that the values in this column are unique for each row extracted from the same paper."
-    else:
-        key_column_info = ""
+        schema_info += f"Column {column_number}: {column_data['name']} ({column_data['type']})\n"
+        schema_info += f"Description: {column_data['description']}\n\n"
+        schema_diagram += f"{column_data['name']}, "
+    schema_diagram = schema_diagram[:-2]
+
+    key_column_names = [schema_data[int(column)]['name'] for column in key_columns]
+    key_column_info = f"The column(s) {', '.join(key_column_names)} will be used as a key to check for duplicates within each paper. Ensure that the values in these columns are unique for each row extracted."
 
     prompt = f"""
-    System: 
-    
-    Instruction: Please extract all information from the provided paper that fits into the CSV schema defined below. There are {num_columns} specific fields of information we are trying to extract. The information will ultimately be put inside an excel spreadsheet with the following layout:
-    {schema_info}
-    {key_column_info}
-    
+Please extract information from the provided research paper that fits into the following CSV schema:
 
-    General instructions for every extraction task:
-    Remember this information is going to be put in a spreadsheet, so grouping of information matters. Please extract any occurrences of the specified information from the text and provide them back as comma separated values, where newline characters represent moving to the next row of the spreadsheet. If you can find information for some of a row, but not all of it, still provide it in your response, but fill in the missing information with 'null' only, which will signal the post-processing that there is no value available for that entry. Make sure to adhere to this structure exactly for your entire response, because natural language wull cause errors as everything in your response will be appended directly to a CSV file. If you don't find an instance of the information available, simply respond with triple bar characters: ||| and this will trigger the code to stop retrying the information extraction. Remember we have {num_columns} columns in the target CSV, so if you find information that fits, your response should be a number of entries that is a multiple of {num_columns}, all of which are separated by a comma, as in the source of a CSV file. Do not explain anything, talk to me in natural language, or try to work as a chat agent. Instead, reply only with information in the specified format. Note that the document you will be reading has been extracted using optical character recognition, so there will be some artifacts of that you will need to work around. Ignore the references, I know they are obtuse, but there is no good way to exclude them. Do not include a title or the headers in your response, or any foratting that does not strictly follow the provided format. As well, make sure you understand that each comma in your response corresponds to a new column, and each newline character corresponds to a new row. Overall, be very careful and deliberate in your response, so you don't cause errors! Thank you!
-    
-    Something to keep in mind as well, is that the text you will be given is from a scraping process, that sometimes may be tough to interpret. To keep the results accurate, you should only pull information thar matches the format, but also only information that is well supported by the text. Things like titles of referenced papers, single sentences surrounded by random characters picked up by the OCR for pdfs, and formatting artifacts from sources like pubmed, tell you that you should not be including that information, even if it seems relevant. Basically, please consider context (or lack thereof) and try to use context to gauge whether or not you should include a piece of information.
-    
-    
-    Specific instructions for this extraction task:
-    {user_instructions}
+{schema_info}
+{key_column_info if key_columns else ''}
+
+Instructions:
+- Extract relevant information and provide it as comma-separated values.
+- Each line should contain {num_columns} values, corresponding to the {num_columns} columns in the schema.
+- If information is missing for a column, use 'null' as a placeholder.
+- Do not use anything other than 'null' as a placeholder.
+- Enclose all string values in quotes.
+- For range values, use the format "min-max".
+- Do not include headers, explanations, or any additional formatting.
+- If no relevant information is found, respond with '|||'.
+
+Below I shall provide a few examples to help you understand the desired output format.
+
+Here is an example with just the names of the columns instead of actual values, and just a single entry:
+{schema_diagram}
+
+Here are a few examples with randomly generated values where appropriate (be sure to note these values mean nothing, and should be ignored, this is just to show the proper structure):
+
+Example where the paper contains a single piece of information to extract:
+{generate_examples(schema_data, 1)}
+
+Example where the paper contains two pieces of information to extract:
+{generate_examples(schema_data, 2)}
+
+Example where the paper contains three pieces of information to extract:
+{generate_examples(schema_data, 3)}
+
+Hopefully that is enough examples for you to see the desired output format.
+
+User Instructions: {user_instructions}
+
+Paper Contents:
     """
 
     return prompt
 
 def parse_llm_response(response, num_columns):
     lines = response.strip().split('\n')
+    lines = [line for line in lines if 'example_string' not in line]
     parsed_data = []
-    current_span = []
-    max_span = []
 
-    for line in lines:
-        columns = line.split(',')
-        if len(columns) == num_columns:
-            current_span.append(columns)
-        else:
-            if len(current_span) > len(max_span):
-                max_span = current_span
-            current_span = []
-
-    if len(current_span) > len(max_span):
-        max_span = current_span
-
-    if len(max_span) == 1 and len(parsed_data) == 0:
-        parsed_data = [line.split(',') for line in lines if len(line.split(',')) == num_columns]
-    else:
-        parsed_data = max_span
+    reader = csv.reader(lines, quotechar='"', skipinitialspace=True)
+    for row in reader:
+        if len(row) == num_columns:
+            parsed_data.append(row)
 
     # Remove duplicate entries
     unique_data = []
@@ -403,12 +406,32 @@ def parse_llm_response(response, num_columns):
 
     return unique_data
 
+
+def normalize_numeric_value(value):
+    # Remove any special characters and spaces
+    value = re.sub(r'[^\d.eE+-]', '', value)
+
+    # Check if the value is in scientific notation
+    if 'e' in value.lower():
+        try:
+            # Convert scientific notation to float
+            value = float(value)
+            # Convert float to string with a maximum of 4 decimal places
+            value = f"{value:.4f}"
+        except ValueError:
+            pass
+
+    return value
+
 def process_value(value, column_data):
     column_type = column_data['type']
     if column_type == 'int':
         processed_value = int(''.join(filter(str.isdigit, value)))
         min_value = column_data.get('min_value')
         max_value = column_data.get('max_value')
+        allowed_values = column_data.get('allowed_values')
+        if allowed_values and str(processed_value) not in allowed_values:
+            raise ValueError(f"Value {processed_value} is not in the list of allowed values: {allowed_values}")
         if min_value is not None and processed_value < min_value:
             raise ValueError(f"Value {processed_value} is less than the minimum allowed value {min_value}")
         if max_value is not None and processed_value > max_value:
@@ -420,6 +443,9 @@ def process_value(value, column_data):
         max_length = column_data.get('max_length')
         whitelist_substrings = column_data.get('whitelist_substrings')
         blacklist_substrings = column_data.get('blacklist_substrings')
+        allowed_values = column_data.get('allowed_values')
+        if allowed_values and str(processed_value) not in allowed_values:
+            raise ValueError(f"Value {processed_value} is not in the list of allowed values: {allowed_values}")
         if min_length is not None and len(processed_value) < min_length:
             raise ValueError(f"String '{processed_value}' is shorter than the minimum allowed length {min_length}")
         if max_length is not None and len(processed_value) > max_length:
@@ -432,15 +458,31 @@ def process_value(value, column_data):
             for substring in blacklist_substrings:
                 if substring in processed_value:
                     raise ValueError(f"String '{processed_value}' contains the blacklisted substring '{substring}'")
+        while processed_value[0] == " ":
+            del processed_value[0]
+        while processed_value[-1] == " ":
+            del processed_value[-1]
         return processed_value
     elif column_type == 'float':
-        return float(''.join(filter(lambda x: x.isdigit() or x == '.', value)))
+        processed_value = float(''.join(filter(lambda x: x.isdigit() or x == '.', value)))
+        min_value = column_data.get('min_value')
+        max_value = column_data.get('max_value')
+        allowed_values = column_data.get('allowed_values')
+        if allowed_values and str(processed_value) not in allowed_values:
+            raise ValueError(f"Value {processed_value} is not in the list of allowed values: {allowed_values}")
+        if min_value is not None and processed_value < min_value:
+            raise ValueError(f"Value {processed_value} is less than the minimum allowed value {min_value}")
+        if max_value is not None and processed_value > max_value:
+            raise ValueError(f"Value {processed_value} is greater than the maximum allowed value {max_value}")
+        return processed_value
     elif column_type == 'complex':
         return complex(''.join(filter(lambda x: x.isdigit() or x in ['+', '-', 'j', '.'], value)))
     elif column_type == 'range':
         range_parts = value.replace(' ', '').split('-')
         if len(range_parts) == 2:
-            return f"{float(range_parts[0])}-{float(range_parts[1])}"
+            minimum = float(re.sub("[^0-9]","",range_parts[0]))
+            maximum = float(re.sub("[^0-9]","",range_parts[1]))
+            return f"{minimum}-{maximum}"
         else:
             return value
     elif column_type == 'boolean':
@@ -454,40 +496,46 @@ def process_value(value, column_data):
     else:
         return value
 
-def validate_result(parsed_result, schema_data):
+def validate_result(parsed_result, schema_data, examples):
     num_columns = len(schema_data)
     validated_result = []
+    example_rows = examples.split('\n')
+
+    # Check if headers are present in the parsed result
+    headers_present = False
+    if parsed_result and len(parsed_result[0]) == num_columns:
+        header_row = parsed_result[0]
+        for i in range(num_columns):
+            if schema_data[i + 1]['name'] == header_row[i]:
+                headers_present = True
+                break
+
+    if headers_present:
+        print("Headers found in response, removing...")
+        parsed_result = parsed_result[1:]  # Remove the header row from parsed_result
 
     for row in parsed_result:
         if len(row) != num_columns:
             raise ValueError(f"Invalid number of columns in row: {row}")
 
+        # Check if the row contains example strings
+        if any(example_row == ','.join(row) for example_row in example_rows):
+            print(f"Skipping row containing example strings: {row}")
+            continue
+
         validated_row = []
         for i, value in enumerate(row):
             if value != 'null':
-                column_type = schema_data[i + 1]['type']
+                column_data = schema_data[i + 1]
                 try:
-                    processed_value = process_value(value, column_type)
+                    processed_value = process_value(value, column_data)
                     validated_row.append(processed_value)
                 except Exception as e:
-                    raise ValueError(f"Error processing value '{value}' for column {i + 1} (type: {column_type}): {type(e).__name__} - {str(e)}")
+                    raise ValueError(f"Error processing value '{value}' for column {i + 1} (type: {column_data['type']}): {type(e).__name__} - {str(e)}")
             else:
                 validated_row.append('null')
 
         validated_result.append(validated_row)
-
-    # Check if headers are present in the validated result
-    headers_present = True
-    if validated_result and len(validated_result[0]) == num_columns:
-        for i in range(num_columns):
-            if schema_data[i + 1]['name'] not in validated_result[0][i]:
-                headers_present = False
-                break
-    else:
-        headers_present = False
-
-    if headers_present:
-        validated_result.pop(0)
 
     return validated_result
 
@@ -505,3 +553,82 @@ def write_to_csv(data, headers, filename="extracted_data.csv"):
         if not file_exists:
             writer.writerow(headers)
         writer.writerows(data)
+
+
+def generate_examples(schema_data, num_examples=3):
+    examples = []
+    for _ in range(num_examples):
+        example_row = []
+        for column_number, column_data in schema_data.items():
+            column_type = column_data['type']
+            allowed_values = column_data.get('allowed_values', [])
+
+            if allowed_values:
+                example_value = random.choice(allowed_values)
+            elif column_type == 'str':
+                example_value = f'"example_string_{column_number}"'
+            elif column_type == 'int':
+                min_value = column_data.get('min_value', column_number)
+                max_value = column_data.get('max_value', column_number + 10)
+                example_value = random.randint(min_value, max_value)
+            elif column_type == 'float':
+                min_value = column_data.get('min_value', float(column_number))
+                max_value = column_data.get('max_value', float(column_number) + 1.0)
+                example_value = round(random.uniform(min_value, max_value), 2)
+            elif column_type == 'range':
+                min_value = column_data.get('min_value', column_number)
+                max_value = column_data.get('max_value', column_number + 10)
+
+                random.seed(datetime.datetime.now().timestamp())
+                rand1 = random.randint(min_value, max_value)
+
+                random.seed(datetime.datetime.now().timestamp())
+                rand2 = random.randint(min_value, max_value)
+
+                if rand1 > rand2:
+                    temp = rand1
+                    rand1 = rand2
+                    rand2 = temp
+
+                example_value = f"{rand1}-{rand2}"
+            else:
+                example_value = f"(example_{column_type}_{column_number})"
+
+            example_row.append(str(example_value))
+        examples.append(','.join(example_row))
+    return '\n'.join(examples)
+
+
+def estimate_tokens(text):
+    # Split the text into words
+    words = re.findall(r'\w+', text)
+
+    # Count the number of words
+    word_count = len(words)
+
+    # Estimate the number of tokens
+    # A common rule of thumb is that 1 token ≈ 0.75 words
+    estimated_tokens = int(word_count / 0.75)
+
+    return estimated_tokens
+
+
+def truncate_text(text, max_tokens=32000, buffer=3500):
+    estimated_total_tokens = estimate_tokens(text)
+
+    if estimated_total_tokens <= max_tokens:
+        return text
+
+    # Calculate the proportion of text to keep
+    keep_ratio = (max_tokens - buffer) / estimated_total_tokens
+
+    # Split the text into words
+    words = text.split()
+
+    # Calculate how many words to keep
+    words_to_keep = int(len(words) * keep_ratio)
+
+    # Join the words back together
+    truncated_text = ' '.join(words[:words_to_keep])
+
+    return truncated_text

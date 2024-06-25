@@ -3,8 +3,8 @@
     "def_search_terms": ["term1", "term2"],
     "maybe_search_terms": ["term3", "term4"],
     "schema_file": "schema.pkl",
-	"user_instructions": "Explain the extraction task here",
-	"model_name_version": "mistral:7b-instruct-v0.2-q8_0",
+    "user_instructions": "Explain the extraction task here",
+    "model_name_version": "mistral:7b-instruct-v0.2-q8_0",
     "auto": true
   }
 }

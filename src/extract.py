@@ -9,6 +9,13 @@ from src.document_reader import doc_to_elements
 
 
 def extract(args):
+    # Check if the ollama binary exists in the current working directory
+    if not os.path.isfile('ollama'):
+        print("ollama binary not found. Downloading the latest release...")
+        download_ollama()
+    else:
+        print("ollama binary already exists in the current directory.")
+
     subprocess.Popen(["./ollama", "serve"], stdout=subprocess.DEVNULL, stderr=subprocess.STDOUT)
     # subprocess.Popen(["./ollama", "serve"])
 

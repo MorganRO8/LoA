@@ -10,6 +10,8 @@ import builtins
 import datetime
 import random
 import xml.etree.ElementTree as ET
+import requests
+from tqdm import tqdm
 
 
 def print(text):
@@ -676,3 +678,57 @@ def get_processed_pmids(csv_file):
             no_fulltext_pmids = set(f.read().splitlines())
 
     return processed_pmids, no_fulltext_pmids
+
+
+# Function to download the latest release of ollama binary
+# Function to download the latest release of ollama binary with progress bar
+def download_ollama():
+    # GitHub API URL for the latest releases of ollama
+    url = "https://api.github.com/repos/ollama/ollama/releases/latest"
+
+    try:
+        response = requests.get(url)
+        response.raise_for_status()
+        data = response.json()
+
+        # Find the download URL for the amd64 binary
+        download_url = None
+        for asset in data['assets']:
+            if re.search(r'amd64', asset['name'], re.IGNORECASE):
+                download_url = asset['browser_download_url']
+                break
+
+        if not download_url:
+            print("No amd64 binary found in the latest release.")
+            return
+
+        # Download the binary with progress bar
+        print(f"Downloading ollama binary from {download_url}")
+        binary_response = requests.get(download_url, stream=True)
+        binary_response.raise_for_status()
+
+        total_size = int(binary_response.headers.get('content-length', 0))
+        block_size = 8192  # 8 KB
+
+        with open('ollama', 'wb') as f, tqdm(
+                total=total_size, unit='iB', unit_scale=True, desc='ollama'
+        ) as progress_bar:
+            for chunk in binary_response.iter_content(chunk_size=block_size):
+                if chunk:
+                    f.write(chunk)
+                    progress_bar.update(len(chunk))
+
+        # Make the binary executable
+        os.chmod('ollama', 0o755)
+
+        print("ollama binary downloaded and saved successfully.")
+
+    except requests.RequestException as e:
+        print(f"Failed to download the binary: {e}")
+    except KeyboardInterrupt:
+        print("You interrupted before ollama finished downloading, cleaning up file...")
+        if os.path.isfile(os.path.join(os.getcwd(), 'ollama')):
+            os.remove(os.path.join(os.getcwd(), 'ollama'))
+            print("Ollama file deleted, next time please let the download finish!")
+        else:
+            print("Ollama file not found... weird...")

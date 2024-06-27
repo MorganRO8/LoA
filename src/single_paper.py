@@ -20,6 +20,13 @@ def scrape_and_extract_concurrent(args):
     model_name_version = args.get('model_name_version')
     retmax = args.get('retmax')
 
+    # Check if the ollama binary exists in the current working directory
+    if not os.path.isfile('ollama'):
+        print("ollama binary not found. Downloading the latest release...")
+        download_ollama()
+    else:
+        print("ollama binary already exists in the current directory.")
+
     subprocess.Popen(["./ollama", "serve"], stdout=subprocess.DEVNULL, stderr=subprocess.STDOUT)
     # subprocess.Popen(["./ollama", "serve"])
 

@@ -2,6 +2,7 @@ from src.utils import *
 import os
 import sys
 
+
 def create_schema_file(fields, key_columns, filename='./dataModels/default_schema.txt'):
     """
     Generates a schema file with the specified fields and types, then writes it to a text file.
@@ -21,15 +22,15 @@ def create_schema_file(fields, key_columns, filename='./dataModels/default_schem
             schema_definition += f"{column_number} - Type: '{field_type}'\n"
             schema_definition += f"{column_number} - Name: '{field_name}'\n"
             schema_definition += f"{column_number} - Description: '{field_description}'\n\n"
-        
+
         # Write the schema definition to a file
         with open(f"{filename}.pkl", 'w') as file:
             file.write(f"Key Columns: {','.join(str(column) for column in key_columns)}\n\n")
             file.write(schema_definition)
-        
+
         print(f"Schema file has been written to {filename}")
         return True
-        
+
     except:
         return False
 
@@ -46,9 +47,9 @@ def UI_schema_creator():
 
     fields = []
     for i in range(numColumns):
-        columnName = input(f"Please enter the column name for column {i+1}: ")
+        columnName = input(f"Please enter the column name for column {i + 1}: ")
         columnType = input(f"""
-        Please choose from the following options for the data type of column {i+1}:
+        Please choose from the following options for the data type of column {i + 1}:
         1. String
         2. Integer
         3. Float (number with decimals)
@@ -57,7 +58,7 @@ def UI_schema_creator():
         6. Boolean
 
         Choice: """)
-        
+
         # Map user input to Python data types
         type_mapping = {
             "1": "str",
@@ -67,19 +68,23 @@ def UI_schema_creator():
             "5": "range",
             "6": "bool"
         }
-        
+
         columnDescription = input(f"Please enter a brief description of the data to be stored in this column: ")
 
         if columnType == "1":
             allowed_values_input = input(
                 f"Enter allowed values for column {i + 1}, separated by commas (leave blank for no restriction): ")
             allowed_values = [value.strip() for value in allowed_values_input.split(',') if value.strip()]
-            min_length = input(f"Enter the minimum length for column {i+1} (leave blank for no minimum): ")
-            max_length = input(f"Enter the maximum length for column {i+1} (leave blank for no maximum): ")
-            whitelist_substrings = input(f"Enter required substrings for column {i+1}, separated by commas (leave blank for none): ").split(',')
-            blacklist_substrings = input(f"Enter blacklisted substrings for column {i+1}, separated by commas (leave blank for none): ").split(',')
+            min_length = input(f"Enter the minimum length for column {i + 1} (leave blank for no minimum): ")
+            max_length = input(f"Enter the maximum length for column {i + 1} (leave blank for no maximum): ")
+            whitelist_substrings = input(
+                f"Enter required substrings for column {i + 1}, separated by commas (leave blank for none): ").split(
+                ',')
+            blacklist_substrings = input(
+                f"Enter blacklisted substrings for column {i + 1}, separated by commas (leave blank for none): ").split(
+                ',')
             fields.append({
-                'column_number': i+1,
+                'column_number': i + 1,
                 'type': columnType,
                 'name': columnName,
                 'description': columnDescription,
@@ -93,10 +98,10 @@ def UI_schema_creator():
             allowed_values_input = input(
                 f"Enter allowed values for column {i + 1}, separated by commas (leave blank for no restriction): ")
             allowed_values = [value.strip() for value in allowed_values_input.split(',') if value.strip()]
-            min_value = input(f"Enter the minimum value for column {i+1} (leave blank for no minimum): ")
-            max_value = input(f"Enter the maximum value for column {i+1} (leave blank for no maximum): ")
+            min_value = input(f"Enter the minimum value for column {i + 1} (leave blank for no minimum): ")
+            max_value = input(f"Enter the maximum value for column {i + 1} (leave blank for no maximum): ")
             fields.append({
-                'column_number': i+1,
+                'column_number': i + 1,
                 'type': columnType,
                 'name': columnName,
                 'description': columnDescription,
@@ -108,10 +113,10 @@ def UI_schema_creator():
             allowed_values_input = input(
                 f"Enter allowed values for column {i + 1}, separated by commas (leave blank for no restriction): ")
             allowed_values = [value.strip() for value in allowed_values_input.split(',') if value.strip()]
-            min_value = input(f"Enter the minimum value for column {i+1} (leave blank for no minimum): ")
-            max_value = input(f"Enter the maximum value for column {i+1} (leave blank for no maximum): ")
+            min_value = input(f"Enter the minimum value for column {i + 1} (leave blank for no minimum): ")
+            max_value = input(f"Enter the maximum value for column {i + 1} (leave blank for no maximum): ")
             fields.append({
-                'column_number': i+1,
+                'column_number': i + 1,
                 'type': columnType,
                 'name': columnName,
                 'description': columnDescription,
@@ -132,15 +137,16 @@ def UI_schema_creator():
             })
         else:
             fields.append({
-                'column_number': i+1,
+                'column_number': i + 1,
                 'type': columnType,
                 'name': columnName,
                 'description': columnDescription
             })
-    
+
     key_columns = []
     while True:
-        key_column_input = input("Enter the column numbers to be used as keys for checking duplicates, separated by commas (leave blank for none): ")
+        key_column_input = input(
+            "Enter the column numbers to be used as keys for checking duplicates, separated by commas (leave blank for none): ")
         if key_column_input == "":
             break
         try:
@@ -152,7 +158,6 @@ def UI_schema_creator():
                 break
         except ValueError:
             print("Invalid input. Please enter valid column numbers separated by commas.")
-    
 
     # Allow user to specify a file name
     filename = input("Please enter a name for the schema file (default 'default_schema.txt'): ") or 'default_schema.txt'

@@ -25,7 +25,8 @@ def truncate_filename(directory, filename, max_path_length=255):
     and append a short hash to ensure uniqueness.
     """
     # Calculate the remaining allowable length for the filename
-    remaining_length = max_path_length - len(directory) - len("arXiv_") - len(".pdf") - 1  # account for separators and extensions
+    remaining_length = max_path_length - len(directory) - len("arXiv_") - len(
+        ".pdf") - 1  # account for separators and extensions
 
     if len(filename) <= remaining_length:
         return filename
@@ -54,6 +55,7 @@ def select_search_info_file():
         else:
             print("Invalid choice. Please try again.")
 
+
 def select_data_model_file():
     data_models_dir = os.path.join(os.getcwd(), 'dataModels')
     data_model_files = [file for file in os.listdir(data_models_dir) if file.endswith('.pkl')]
@@ -71,43 +73,41 @@ def select_data_model_file():
 
 
 def get_out_id(def_search_terms_input, maybe_search_terms_input):
-
     if def_search_terms_input[0].lower() == "none" or def_search_terms_input[0] == '':
         print("No definite search terms selected.")
         def_search_terms = None
-        
+
     elif type(def_search_terms_input) == str:
         print("String input detected for def search terms")
         def_search_terms = [term.strip() for term in def_search_terms_input.split(",")]
         def_search_terms.sort()
-        
+
     elif type(def_search_terms_input) == list:
         print("List input detected for def search terms")
         print(f"def_search_terms_input = {def_search_terms_input}")
         def_search_terms = def_search_terms_input
         def_search_terms.sort()
         print(f"def_search_terms = {def_search_terms}")
-        
+
     else:
         print(f"def search terms should be str or list, but it is instead {type(def_search_terms_input)}")
-
 
     if maybe_search_terms_input[0].lower() == "none" or def_search_terms_input[0] == '':
         print("No maybe search terms selected, only using definite search terms.")
         maybe_search_terms = None
-        
+
     elif type(maybe_search_terms_input) == str:
         print("String input detected for maybe search terms")
         maybe_search_terms = [term.strip() for term in maybe_search_terms_input.split(",")]
         maybe_search_terms.sort()
-        
+
     elif type(maybe_search_terms_input) == list:
         print("List input detected for maybe search terms")
         print(f"maybe_search_terms_input = {maybe_search_terms_input}")
         maybe_search_terms = maybe_search_terms_input
         maybe_search_terms.sort()
         print(f"maybe_search_terms = {maybe_search_terms}")
-        
+
     else:
         print(f"maybe search terms should be str or list, but it is instead {type(maybe_search_terms_input)}")
 
@@ -146,43 +146,43 @@ def get_out_id(def_search_terms_input, maybe_search_terms_input):
         query_chunks = [def_search_terms]
 
     return output_directory_id, query_chunks
-    
-    
+
+
 def list_files_in_directory(directory):
     """List all files in the given directory."""
     return [file for file in os.listdir(directory) if os.path.isfile(os.path.join(directory, file))]
-    
-    
+
+
 def has_multiple_columns(pdf_path):
-        # Convert the first page of the PDF to an image
-        images = convert_from_path(pdf_path, dpi=200, first_page=1, last_page=1)
-        image = images[0]
+    # Convert the first page of the PDF to an image
+    images = convert_from_path(pdf_path, dpi=200, first_page=1, last_page=1)
+    image = images[0]
 
-        # Convert the image to grayscale and binarize it
-        image = image.convert('L')
-        image = image.point(lambda x: 0 if x < 128 else 255, '1')
+    # Convert the image to grayscale and binarize it
+    image = image.convert('L')
+    image = image.point(lambda x: 0 if x < 128 else 255, '1')
 
-        # Convert the image to a NumPy array for easier processing
-        image_array = np.array(image)
+    # Convert the image to a NumPy array for easier processing
+    image_array = np.array(image)
 
-        # Get the dimensions of the image
-        height, width = image_array.shape
+    # Get the dimensions of the image
+    height, width = image_array.shape
 
-        # Scan the middle of the image vertically
-        for x in range(width // 2 - 5, width // 2 + 5):
-            white_pixels = 0
-            for y in range(height):
-                if image_array[y, x] == 255:
-                    white_pixels += 1
-                    if white_pixels > 50:
-                        return True
-                else:
-                    white_pixels = 0
+    # Scan the middle of the image vertically
+    for x in range(width // 2 - 5, width // 2 + 5):
+        white_pixels = 0
+        for y in range(height):
+            if image_array[y, x] == 255:
+                white_pixels += 1
+                if white_pixels > 50:
+                    return True
+            else:
+                white_pixels = 0
 
-        # If no tall line of white pixels was found, return False
-        return False
-        
-        
+    # If no tall line of white pixels was found, return False
+    return False
+
+
 def xml_to_string(xml_string):
     formatted_output = ""
     root = ET.fromstring(xml_string)
@@ -206,7 +206,8 @@ def xml_to_string(xml_string):
             formatted_output += f"Caption: {text}\n\n"
         elif tag == "table":
             formatted_output += f"Table: {text}\n\n"
-        elif tag not in ["ref", "element-citation", "person-group", "name", "surname", "given-names", "article-title", "source", "year", "volume", "fpage", "lpage", "pub-id"]:
+        elif tag not in ["ref", "element-citation", "person-group", "name", "surname", "given-names", "article-title",
+                         "source", "year", "volume", "fpage", "lpage", "pub-id"]:
             formatted_output += f"{text}"
 
         for child in element:
@@ -214,8 +215,8 @@ def xml_to_string(xml_string):
 
     process_element(root)
     return formatted_output
-        
-        
+
+
 def elements_to_string(elements_list):
     formatted_output = ""
 
@@ -261,7 +262,7 @@ def elements_to_string(elements_list):
             formatted_output += f"Other: {text}\n\n"
 
     return formatted_output
-    
+
 
 def select_schema_file():
     schema_dir = os.path.join(os.getcwd(), 'dataModels')
@@ -277,6 +278,7 @@ def select_schema_file():
             return os.path.join(schema_dir, schema_files[int(choice) - 1])
         else:
             print("Invalid choice. Please try again.")
+
 
 def load_schema_file(schema_file):
     with open(schema_file, 'r') as f:
@@ -311,7 +313,8 @@ def load_schema_file(schema_file):
                 elif info_type == "Description":
                     schema_data[current_column]['description'] = info_value
                 elif info_type == "Allowed Values":
-                    schema_data[current_column]['allowed_values'] = [value.strip() for value in info_value.split(',') if value.strip()]
+                    schema_data[current_column]['allowed_values'] = [value.strip() for value in info_value.split(',') if
+                                                                     value.strip()]
                 elif info_type == "Min Length":
                     schema_data[current_column]['min_length'] = int(info_value) if info_value else None
                 elif info_type == "Max Length":
@@ -321,9 +324,11 @@ def load_schema_file(schema_file):
                 elif info_type == "Max Value":
                     schema_data[current_column]['max_value'] = float(info_value) if info_value else None
                 elif info_type == "Required Substrings":
-                    schema_data[current_column]['required_substrings'] = [substring.strip() for substring in info_value.split(',') if substring.strip()]
+                    schema_data[current_column]['required_substrings'] = [substring.strip() for substring in
+                                                                          info_value.split(',') if substring.strip()]
                 elif info_type == "Blacklisted Substrings":
-                    schema_data[current_column]['blacklisted_substrings'] = [substring.strip() for substring in info_value.split(',') if substring.strip()]
+                    schema_data[current_column]['blacklisted_substrings'] = [substring.strip() for substring in
+                                                                             info_value.split(',') if substring.strip()]
 
     # Fill in missing 'description' keys with empty strings
     for column_data in schema_data.values():
@@ -333,7 +338,9 @@ def load_schema_file(schema_file):
     return schema_data, key_columns
 
 
-def generate_prompt(schema_data, user_instructions, key_columns=[]):
+def generate_prompt(schema_data, user_instructions, key_columns=None):
+    if key_columns is None:
+        key_columns = []
     num_columns = len(schema_data)
     schema_info = ""
     schema_diagram = ""
@@ -362,6 +369,7 @@ Instructions:
 - For range values, use the format "min-max".
 - Do not include headers, explanations, or any additional formatting.
 - If no relevant information is found, respond with '|||'.
+- Ignore any information in references that may be included at the end of the paper.
 
 Below I shall provide a few examples to help you understand the desired output format.
 
@@ -387,6 +395,7 @@ Paper Contents:
     """
 
     return prompt
+
 
 def parse_llm_response(response, num_columns):
     lines = response.strip().split('\n')
@@ -423,6 +432,7 @@ def normalize_numeric_value(value):
 
     return value
 
+
 def process_value(value, column_data):
     column_type = column_data['type']
     if column_type == 'int':
@@ -453,7 +463,8 @@ def process_value(value, column_data):
         if whitelist_substrings:
             for substring in whitelist_substrings:
                 if substring not in processed_value:
-                    raise ValueError(f"String '{processed_value}' does not contain the required substring '{substring}'")
+                    raise ValueError(
+                        f"String '{processed_value}' does not contain the required substring '{substring}'")
         if blacklist_substrings:
             for substring in blacklist_substrings:
                 if substring in processed_value:
@@ -480,8 +491,8 @@ def process_value(value, column_data):
     elif column_type == 'range':
         range_parts = value.replace(' ', '').split('-')
         if len(range_parts) == 2:
-            minimum = float(re.sub("[^0-9]","",range_parts[0]))
-            maximum = float(re.sub("[^0-9]","",range_parts[1]))
+            minimum = float(re.sub("[^0-9]", "", range_parts[0]))
+            maximum = float(re.sub("[^0-9]", "", range_parts[1]))
             return f"{minimum}-{maximum}"
         else:
             return value
@@ -495,6 +506,7 @@ def process_value(value, column_data):
             return value
     else:
         return value
+
 
 def validate_result(parsed_result, schema_data, examples):
     num_columns = len(schema_data)
@@ -516,7 +528,8 @@ def validate_result(parsed_result, schema_data, examples):
 
     for row in parsed_result:
         if len(row) != num_columns:
-            raise ValueError(f"Invalid number of columns in row: {row}")
+            print(f"Skipping row with invalid number of columns: {row}")
+            continue
 
         # Check if the row contains example strings
         if any(example_row == ','.join(row) for example_row in example_rows):
@@ -524,6 +537,8 @@ def validate_result(parsed_result, schema_data, examples):
             continue
 
         validated_row = []
+        row_valid = True
+
         for i, value in enumerate(row):
             if value != 'null':
                 column_data = schema_data[i + 1]
@@ -531,13 +546,21 @@ def validate_result(parsed_result, schema_data, examples):
                     processed_value = process_value(value, column_data)
                     validated_row.append(processed_value)
                 except Exception as e:
-                    raise ValueError(f"Error processing value '{value}' for column {i + 1} (type: {column_data['type']}): {type(e).__name__} - {str(e)}")
+                    print(
+                        f"Error processing value '{value}' for column {i + 1} (type: {column_data['type']}): {type(e).__name__} - {str(e)}")
+                    row_valid = False
+                    break
             else:
                 validated_row.append('null')
 
-        validated_result.append(validated_row)
+        if row_valid:
+            validated_result.append(validated_row)
+
+    if not validated_result:
+        print("No valid rows found in the result.")
 
     return validated_result
+
 
 def is_float(value):
     try:
@@ -545,6 +568,7 @@ def is_float(value):
         return True
     except ValueError:
         return False
+
 
 def write_to_csv(data, headers, filename="extracted_data.csv"):
     file_exists = os.path.isfile(filename)
@@ -632,3 +656,23 @@ def truncate_text(text, max_tokens=32000, buffer=3500):
     truncated_text = ' '.join(words[:words_to_keep])
 
     return truncated_text
+
+
+def get_processed_pmids(csv_file):
+    processed_pmids = set()
+    no_fulltext_pmids = set()
+
+    if os.path.exists(csv_file):
+        with open(csv_file, 'r') as f:
+            reader = csv.reader(f)
+            next(reader)  # Skip header
+            for row in reader:
+                if row:  # Check if row is not empty
+                    processed_pmids.add(row[-1])  # Last column is the PMID
+
+    no_fulltext_file = os.path.join(os.getcwd(), 'search_info', 'no_fulltext.txt')
+    if os.path.exists(no_fulltext_file):
+        with open(no_fulltext_file, 'r') as f:
+            no_fulltext_pmids = set(f.read().splitlines())
+
+    return processed_pmids, no_fulltext_pmids

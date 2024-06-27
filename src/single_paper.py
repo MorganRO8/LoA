@@ -1,7 +1,6 @@
 import os
 import json
 from pathlib import Path
-import torch
 import requests
 import subprocess
 import time
@@ -11,6 +10,7 @@ from src.utils import *
 
 ESEARCH_URL = 'https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esearch.fcgi'
 EFETCH_URL = 'https://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch.fcgi'
+
 
 def scrape_and_extract_concurrent(args):
     search_terms = args.get('search_terms')
@@ -32,7 +32,9 @@ def scrape_and_extract_concurrent(args):
 
         # Provide extraction information
         model_name_version = input("Please enter the model name and version (e.g., 'mistral:7b-instruct-v0.2-q8_0'): ")
-        user_instructions = input("Please briefly tell the model what information it is trying to extract, in the format of a command/instructions:\n\n")
+        user_instructions = input(
+            "Please briefly tell the model what information it is trying to extract, in the format of a "
+            "command/instructions:\n\n")
     else:
         # output_directory_id, trash = get_out_id(def_search_terms, maybe_search_terms)
         # del trash
@@ -70,7 +72,9 @@ def scrape_and_extract_concurrent(args):
 
     csv_file = os.path.join(os.getcwd(), 'results', f"{os.path.splitext(schema_file)[0].split('/')[-1]}.csv")
 
-    query = " AND ".join(search_terms)
+    processed_pmids, no_fulltext_pmids = get_processed_pmids(csv_file)
+
+    query = " AND ".join(search_terms) + " AND free full text[filter]"
 
     esearch_params = {
         'db': 'pmc',
@@ -98,7 +102,8 @@ def scrape_and_extract_concurrent(args):
             return
 
         downloaded_files = os.listdir(os.path.join(os.getcwd(), 'scraped_docs'))
-        downloaded_files = [file.replace("pubmed_", "").replace(".xml", "") for file in downloaded_files if "pubmed_" in file]
+        downloaded_files = [file.replace("pubmed_", "").replace(".xml", "") for file in
+                            downloaded_files if "pubmed_" in file]
 
         # Count only the downloaded files that are part of this search
         downloaded_from_current_search = [uid for uid in uid_list if uid in downloaded_files]
@@ -107,13 +112,19 @@ def scrape_and_extract_concurrent(args):
         print(f"{num_downloaded} files already downloaded for this search.")
 
         ollama_url = "http://localhost:11434"
-        max_retries = 5
+        max_retries = 3
 
         for uid in uid_list:
+            if uid in processed_pmids:
+                print(f"UID {uid} already processed. Skipping.")
+                continue
+            if uid in no_fulltext_pmids:
+                print(f"UID {uid} previously found to have no full text. Skipping.")
+                continue
+            if num_downloaded >= retmax:
+                print("Reached maximum number of downloads for this search. Stopping.")
+                break
             if uid not in downloaded_files:
-                if num_downloaded >= retmax:
-                    print("Reached maximum number of downloads for this search. Stopping.")
-                    break
 
                 efetch_params = {
                     'db': 'pmc',
@@ -142,7 +153,10 @@ def scrape_and_extract_concurrent(args):
                     num_downloaded += 1
                 else:
                     print(f"Full text not available for UID {uid}. Skipping.")
-                    time.sleep(0.2)
+                    no_fulltext_pmids.add(uid)
+                    with open(os.path.join(os.getcwd(), 'search_info', 'no_fulltext.txt'), 'a') as f:
+                        f.write(f"{uid}\n")
+                    time.sleep(0.35)
                     continue
 
                 # Extract data from the scraped paper
@@ -163,12 +177,14 @@ def scrape_and_extract_concurrent(args):
                             "tfs_z": 1,
                             "top_p": 1,
                             "top_k": 5,
-                            "temperature": (0.1 * (retry_count+1)),
-                            "repeat_penalty": (1.1 + (0.05 * retry_count)),
+                            "temperature": (0.35 * retry_count),
+                            "repeat_penalty": (1.1 + (0.1 * retry_count)),
                             "stop": ["|||"],
                         }
 
-                        prompt_with_content = f"{prompt}\n\n{paper_content}\n\nAgain, please make sure to respond only in the specified format exactly as described, or you will cause errors.\nResponse: "
+                        prompt_with_content = (f"{prompt}\n\n{paper_content}\n\nAgain, please make sure to respond "
+                                               f"only in the specified format exactly as described, or you will cause"
+                                               f" errors.\nResponse:")
                         data = {
                             "model": model_name,
                             "prompt": prompt_with_content,
@@ -202,7 +218,8 @@ def scrape_and_extract_concurrent(args):
                         for row in parsed_result:
                             for item in row:
                                 try:
-                                    if item.lower() == 'null' or item == '' or item == ' ':
+                                    if item.lower().replace(" ",
+                                                            "") == 'null' or item == '' or item == '""' or item == "''":
                                         parsed_result[row][item] = 'null'
                                 except:
                                     pass
@@ -247,3 +264,5 @@ def scrape_and_extract_concurrent(args):
 
                 if not success:
                     print(f"Failed to extract data from {filename} after {max_retries} retries.")
+                else:
+                    processed_pmids.add(uid)

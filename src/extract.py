@@ -3,14 +3,14 @@ import subprocess
 import sys
 import requests
 import json
-import torch
 from pathlib import Path
 from src.utils import *
 from src.document_reader import doc_to_elements
 
+
 def extract(args):
     subprocess.Popen(["./ollama", "serve"], stdout=subprocess.DEVNULL, stderr=subprocess.STDOUT)
-    #subprocess.Popen(["./ollama", "serve"])
+    # subprocess.Popen(["./ollama", "serve"])
 
     def_search_terms = args.get('def_search_terms')
     maybe_search_terms = args.get('maybe_search_terms')
@@ -23,7 +23,9 @@ def extract(args):
         search_info_file = select_search_info_file()
         schema_file = select_schema_file()
         model_name_version = input("Please enter the model name and version (e.g., 'mistral:7b-instruct-v0.2-q8_0'): ")
-        user_instructions = input("Please briefly tell the model what information it is trying to extract, in the format of a command/instructions:\n\n")
+        user_instructions = input(
+            "Please briefly tell the model what information it is trying to extract, in the format of a "
+            "command/instructions:\n\n")
     else:
         output_directory_id, trash = get_out_id(def_search_terms, maybe_search_terms)
         del trash
@@ -40,7 +42,8 @@ def extract(args):
     else:
         with open(search_info_file, 'r') as f:
             files_to_process = f.read().splitlines()
-        files_to_process = [file for file in files_to_process if os.path.isfile(os.path.join(os.getcwd(), 'scraped_docs', file))]
+        files_to_process = [file for file in files_to_process if
+                            os.path.isfile(os.path.join(os.getcwd(), 'scraped_docs', file))]
 
     csv_file = os.path.join(os.getcwd(), 'results', f"{os.path.splitext(schema_file)[0].split('/')[-1]}.csv")
 
@@ -61,7 +64,8 @@ def extract(args):
     output_dir = os.path.join(os.getcwd(), 'results')
     os.makedirs(output_dir, exist_ok=True)
 
-    model_file = os.path.join(str(Path.home()), ".ollama", "models", "manifests", "registry.ollama.ai", "library", model_name, model_version)
+    model_file = os.path.join(str(Path.home()), ".ollama", "models", "manifests", "registry.ollama.ai", "library",
+                              model_name, model_version)
 
     if not os.path.exists(model_file):
         print(f"Model file {model_file} not found. Pulling the model...")
@@ -71,9 +75,9 @@ def extract(args):
             print(f"Failed to pull the model: {e}")
             return
 
-    max_retries = 5
+    max_retries = 3
     ollama_url = "http://localhost:11434"
-    
+
     schema_data, key_columns = load_schema_file(schema_file)
 
     num_columns = len(schema_data)
@@ -89,9 +93,9 @@ def extract(args):
     examples = generate_examples(schema_data)
 
     for file in files_to_process:
-        
+
         print(f"Now processing {file}")
-        
+
         file_path = os.path.join(os.getcwd(), 'scraped_docs', file)
         processed_file = os.path.splitext(file)[0] + '.txt'
         processed_file_path = os.path.join(os.getcwd(), 'processed_docs', processed_file)
@@ -105,7 +109,7 @@ def extract(args):
             except Exception as err:
                 print(f"Unable to process {file} into plaintext due to {err}")
                 continue
-            
+
         """  
         print("Paper contents:")
         print(paper_content)
@@ -126,12 +130,13 @@ def extract(args):
                     "tfs_z": 1,
                     "top_p": 1,
                     "top_k": 5,
-                    "temperature": (0.1*retry_count),
-                    "repeat_penalty": (1.1 + (0.05*retry_count)),
+                    "temperature": (0.35 * retry_count),
+                    "repeat_penalty": (1.1 + (0.1 * retry_count)),
                     "stop": ["|||"],
                 }
 
-                prompt_with_content = f"{prompt}\n\n{paper_content}\n\nAgain, please make sure to respond only in the specified format exactly as described, or you will cause errors.\nResponse: "
+                prompt_with_content = (f"{prompt}\n\n{paper_content}\n\nAgain, please make sure to respond only in the "
+                                       f"specified format exactly as described, or you will cause errors.\nResponse:")
                 data = {
                     "model": model_name,
                     "prompt": prompt_with_content,
@@ -141,15 +146,15 @@ def extract(args):
                 response = requests.post(f"{ollama_url}/api/generate", json=data)
                 response.raise_for_status()
                 result = response.json()["response"]
-                
+
                 # Was for debug
                 print("Unparsed result:")
                 print(result)
-                
+
                 if response == '|||':
                     print(f"Got signal from model that the information is not present in {file}")
                     retry_count = max_retries
-                
+
                 parsed_result = parse_llm_response(result, num_columns)
                 if not parsed_result:
                     print("Parsed Result empty, trying again")
@@ -158,10 +163,10 @@ def extract(args):
                 else:
                     print("Parsed result:")
                     print(parsed_result)
-                
+
                 row = 0
                 item = 0
-                
+
                 for row in parsed_result:
                     for item in row:
                         try:
@@ -177,7 +182,7 @@ def extract(args):
 
                     print("Validated result:")
                     print(validated_result)
-                    
+
                     paper_filename = os.path.splitext(os.path.basename(file))[0]
 
                     for key_column in key_columns:
@@ -190,10 +195,10 @@ def extract(args):
                                     key_values.add(key_value)
                                     filtered_result.append(row)
                             validated_result = filtered_result
-                    
+
                     for row in validated_result:
                         row.append(paper_filename)
-                   
+
                     write_to_csv(validated_result, headers, filename=csv_file)
 
                     success = True

@@ -12,6 +12,7 @@ import csv
 LOGGER = logging.getLogger()
 LOGGER.setLevel(logging.CRITICAL)
 
+
 def doc_to_elements(file, use_hi_res=False):
     processed_docs_dir = os.path.join(os.getcwd(), 'processed_docs')
     os.makedirs(processed_docs_dir, exist_ok=True)
@@ -25,26 +26,26 @@ def doc_to_elements(file, use_hi_res=False):
 
     print(f"Now processing {file}")
     elements = None
-    
+
     if file.endswith('.pdf'):
         if use_hi_res == False:
             try:
                 # Partition the PDF into elements
                 elements = partition_pdf(filename=file, strategy='auto')
-                
+
             except (PDFSyntaxError, TypeError) as er:
                 print(f"Failed to process {filename} due to '{er}'.")
                 return None
-    
+
         else:
             if has_multiple_columns(file):
-            
+
                 print("Multiple columns detected, running default strategy")
-                
+
                 try:
                     # Partition the PDF into elements
                     elements = partition_pdf(filename=file, strategy='auto')
-                    
+
                 except (PDFSyntaxError, TypeError) as er:
                     print(f"Failed to process {filename} due to '{er}'.")
                     return None
@@ -60,7 +61,7 @@ def doc_to_elements(file, use_hi_res=False):
                 except (PDFSyntaxError, TypeError) as er:
                     print(f"Failed to process {filename} due to '{er}'.")
                     return None
-    
+
     elif file.endswith('.xml'):
         with open(file, 'r') as f:
             xml_content = f.read()
@@ -68,16 +69,15 @@ def doc_to_elements(file, use_hi_res=False):
         with open(processed_file_path, 'w') as f:
             f.write(formatted_output)
         return formatted_output
-        
+
     else:
         f = open(file, 'rb')
-        
+
         try:
             elements = partition(file)
-            
+
         except Exception as something_stupid:
             print(f"Unstructred failed because of {something_stupid}")
-                
 
     formatted_output = elements_to_string(convert_to_dict(elements))
     with open(processed_file_path, 'w') as f:

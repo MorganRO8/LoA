@@ -21,7 +21,7 @@ from selenium.webdriver.support.ui import WebDriverWait
 from tqdm import tqdm
 from webdriver_manager.chrome import ChromeDriverManager
 from datetime import datetime
-from src.utils import get_out_id, truncate_filename 
+from src.utils import get_out_id, truncate_filename
 import xml.etree.ElementTree as ET
 
 # Constants
@@ -74,9 +74,9 @@ def scrape(args):
         arxivyn = input("Would you like to search through the arxivs?(y/n)").lower()
 
         soyn = input("Would you like to scrape ScienceOpen?(y/n):").lower()
-        
+
         upwyn = input("Would you like to scrape unpwaywall?(y/n):").lower()
-        
+
         if upwyn == 'y':
             email = input("Enter email for use with unpaywall:").lower()
 
@@ -246,7 +246,7 @@ def scrape(args):
 
         while fetched < retmax:
             current_max = min(10000, retmax - fetched)
-            
+
             if repository == 'arxiv':
                 api_url = f"https://export.arxiv.org/api/query?search_query=all:{query}&start={fetched}&max_results={current_max}"
             elif repository in ['biorxiv', 'medrxiv']:
@@ -306,17 +306,20 @@ def scrape(args):
 
                             except (requests.exceptions.ConnectionError, requests.exceptions.RequestException):
                                 retry_count += 1
-                                print(f"Connection aborted for entry {index}. Retry attempt {retry_count}/{MAX_RETRIES}. Waiting for 10 seconds...")
+                                print(
+                                    f"Connection aborted for entry {index}. Retry attempt {retry_count}/{MAX_RETRIES}. Waiting for 10 seconds...")
                                 time.sleep(10)
 
                         if not download_successful:
-                            print(f"Failed to download entry {index} after {MAX_RETRIES} attempts. Skipping this entry.")
+                            print(
+                                f"Failed to download entry {index} after {MAX_RETRIES} attempts. Skipping this entry.")
 
                     search_successful = True
 
                 except (requests.exceptions.ConnectionError, requests.exceptions.RequestException) as e:
                     search_retry_count += 1
-                    print(f"Failed to fetch search results. Retry attempt {search_retry_count}/{SEARCH_MAX_RETRIES}. Error: {e}")
+                    print(
+                        f"Failed to fetch search results. Retry attempt {search_retry_count}/{SEARCH_MAX_RETRIES}. Error: {e}")
                     time.sleep(10)
 
             if not search_successful or not entries:
@@ -326,14 +329,14 @@ def scrape(args):
 
     def pubmed_search(search_terms, retmax):
         query = " AND ".join(search_terms)
-        
+
         esearch_params = {
             'db': 'pmc',
             'term': query,
             'retmode': 'json',
             'retmax': retmax
         }
-        
+
         print("Now performing esearch...")
         try:
             esearch_response = requests.get(ESEARCH_URL, params=esearch_params)
@@ -346,20 +349,21 @@ def scrape(args):
 
         if 'esearchresult' in esearch_data:
             uid_list = esearch_data['esearchresult']['idlist']
-            
+
             if not uid_list:
                 print("No search results found.")
                 return []
 
             downloaded_files = os.listdir(os.path.join(os.getcwd(), 'scraped_docs'))
-            downloaded_files = [file.replace("pubmed_", "").replace(".xml", "") for file in downloaded_files if "pubmed_" in file]
-            
+            downloaded_files = [file.replace("pubmed_", "").replace(".xml", "") for file in downloaded_files if
+                                "pubmed_" in file]
+
             # Count only the downloaded files that are part of this search
             downloaded_from_current_search = [uid for uid in uid_list if uid in downloaded_files]
             num_downloaded = len(downloaded_from_current_search)
-            
+
             print(f"{num_downloaded} files already downloaded for this search.")
-            
+
             scraped_files = []
 
             for uid in uid_list:
@@ -367,14 +371,14 @@ def scrape(args):
                     if num_downloaded >= retmax:
                         print("Reached maximum number of downloads for this search. Stopping.")
                         return scraped_files
-                    
+
                     efetch_params = {
                         'db': 'pmc',
                         'id': uid,
                         'retmode': 'xml',
                         'rettype': 'full'
                     }
-                    
+
                     print(f"Now performing efetch for UID {uid}...")
                     try:
                         efetch_response = requests.get(EFETCH_URL, params=efetch_params)
@@ -395,7 +399,7 @@ def scrape(args):
                         scraped_files.append(filename)
                     else:
                         print(f"Full text not available for UID {uid}. Skipping.")
-                    
+
                     time.sleep(1 / 2)
 
             return scraped_files
@@ -442,25 +446,25 @@ def scrape(args):
         last_date, api_count = read_api_count()
         today = datetime.now().strftime("%Y-%m-%d")
         os.makedirs(os.path.join(os.getcwd(), 'search_info', 'unpaywall'), exist_ok=True)
-        
+
         if last_date != today:
             api_count = 0
-        
+
         if api_count >= 100000:
             print("Reached daily API call limit. Try again tomorrow.")
             return []
-        
+
         last_chunk, last_page = read_last_state()
-        
+
         resume = False if last_chunk is None else True
         scraped_files = []
-        
+
         for chunk in query_chunks:
             if resume and chunk != last_chunk:
                 continue
             query = " AND ".join(chunk)
             page = last_page if resume and chunk == last_chunk else 1
-            
+
             while api_count < retmax:
                 unpaywall_params = {
                     'query': query,
@@ -468,39 +472,39 @@ def scrape(args):
                     'email': email,
                     'page': page
                 }
-                
+
                 print(f"Now scraping Unpaywall for {chunk}, page {page}")
-                
+
                 try:
                     unpaywall_response = requests.get("https://api.unpaywall.org/v2/search", params=unpaywall_params)
                     unpaywall_response.raise_for_status()
                 except requests.exceptions.RequestException as e:
                     print(f"Request failed: {e}")
                     return scraped_files
-                
+
                 api_count += 1
                 if api_count >= 100000:
                     print("Reached daily API call limit. Exiting.")
                     write_api_count(today, api_count)
                     write_last_state(chunk, page)
                     return scraped_files
-                
+
                 write_api_count(today, api_count)
-                
+
                 unpaywall_data = json.loads(unpaywall_response.text)
-                
+
                 if 'results' not in unpaywall_data:
                     print("No results found in the Unpaywall API response.")
                     break
-                
+
                 doi_list = [result['doi'] for result in unpaywall_data['results'] if 'doi' in result]
-                
+
                 if not doi_list:
                     print("No DOIs found in the Unpaywall API response.")
                     break
-                
+
                 downloaded_files = os.listdir(os.path.join(os.getcwd(), 'scraped_docs'))
-                
+
                 for doi in doi_list:
                     if doi not in downloaded_files:
                         print(f"Now fetching data for DOI {doi}...")
@@ -510,37 +514,37 @@ def scrape(args):
                         except requests.exceptions.RequestException as e:
                             print(f"Request failed: {e}")
                             continue
-                        
+
                         api_count += 1
                         if api_count >= 100000:
                             print("Reached daily API call limit. Exiting.")
                             write_api_count(today, api_count)
                             write_last_state(chunk, page)
                             return scraped_files
-                        
+
                         write_api_count(today, api_count)
-                        
+
                         doi_data = doi_response.json()
-                        
+
                         if doi_data.get('is_oa'):
                             pdf_url = doi_data['best_oa_location']['url']
                             pdf_filename = download_pdf(pdf_url, doi)
                             if pdf_filename:
                                 scraped_files.append(pdf_filename)
-                        
+
                         doi_data_str = json.dumps(doi_data, indent=4)
                         json_filename = f"unpaywall_{doi}.json"
                         with open(os.path.join(os.getcwd(), 'scraped_docs', json_filename), 'w') as f:
                             f.write(doi_data_str)
                         scraped_files.append(json_filename)
-                        
+
                         time.sleep(1 / 10)
-                
+
                 page += 1
                 write_last_state(chunk, page)
-                    
+
         return scraped_files
-                   
+
     def remove_lines_after(line_number, file_path):
         lines = []
         with open(file_path, 'r') as file:
@@ -584,7 +588,6 @@ def scrape(args):
         with open(search_info_file, 'a') as f:
             f.write('\n'.join(scraped_files) + '\n')
 
-            
     if customdb == "y":
         # Create a connection to the SQLite database
         conn = sqlite3.connect(str(os.getcwd()) + '/customdb/metadata.db')
@@ -663,7 +666,7 @@ def scrape(args):
                             # Write the PDF to a file
                             with open(pdf_path, 'wb') as f:
                                 f.write(pdf)
-                            
+
                             scraped_files.append(pdf_filename)
                         else:
                             print(f"Failed to download PDF. Status code: {pdf_response.status_code}")

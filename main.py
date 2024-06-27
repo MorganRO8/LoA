@@ -12,6 +12,7 @@ os.makedirs(os.path.join(os.getcwd(), 'logs'), exist_ok=True)
 builtins.a = os.path.join(os.getcwd(), "logs", f"{str(datetime.datetime.now()).replace(' ', '_')}.txt")
 from src.utils import print
 
+
 def main():
     print("""
     
@@ -38,7 +39,7 @@ def main():
             \::/    /         ~~                      \::/    /        
              \/____/                                   \/____/         
     """)
-    
+
     # initialize variables
     task = 0
 
@@ -75,7 +76,7 @@ def main():
                 else:
                     print(f"Unknown task type: {task_name}")
                     sys.exit(1)
-                    
+
     else:
         while task != 1 and task != 2 and task != 3 and task != 4:
             # prompt the user to select a task
@@ -95,7 +96,7 @@ def main():
                 scrape({})
 
             elif task == "2":
-                from src.meta_model import UI_schema_creator      
+                from src.meta_model import UI_schema_creator
                 UI_schema_creator()
 
             elif task == "3":
@@ -107,6 +108,7 @@ def main():
                 scrape_and_extract_concurrent({})
             else:
                 print("Invalid task number. Please enter 1 to 3")
+
 
 if __name__ == '__main__':
     main()

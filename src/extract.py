@@ -1,14 +1,18 @@
-import os
 import subprocess
 import sys
-import requests
-import json
 from pathlib import Path
 from src.utils import *
 from src.document_reader import doc_to_elements
 
 
-def extract(args):
+def batch_extract(args):
+    '''
+    My original extract function, now re-named to make more sense! This is the version of the extract function used in
+    the UI mode and automatic mode. It is designed to work in tandem with the scraping system and filestructure. It has
+    an advantage in that it saves us from having to load the model for each paper, which is nice. However, it needs to
+    run a batch process, so you'll have to have downloaded papers already, and have a list of them in the format and
+    location the code is expecting. This will all be there if you used the scraping function.
+    '''
     # Check if the ollama binary exists in the current working directory
     if not os.path.isfile('ollama'):
         print("ollama binary not found. Downloading the latest release...")
@@ -93,7 +97,7 @@ def extract(args):
 
     prompt = generate_prompt(schema_data, user_instructions, key_columns)
 
-    print(f"Prompt before adding individual paper info:\n{prompt}")
+    # print(f"Prompt before adding individual paper info:\n{prompt}")
 
     print(f"Found {len(files_to_process)} files to process, starting!")
 
@@ -230,3 +234,105 @@ def extract(args):
     if auto is None:
         python = sys.executable
         os.execl(python, python, *sys.argv)
+
+
+def extract(file_path, schema_file, model_name_version, user_instructions):
+    '''
+    This extract function is designed to take a file path as one of its arguments, instead of the original method.
+    I think this will help greatly in setting up parallelization. One issue with this method is that it needs to load
+    the model into memory every time it processes a file, but this actually happens very fast, and isn't too much of a
+    slowdown when compared to the speed we'll gain (I think!)
+    '''
+
+    # Load schema file
+    schema_data, key_columns = load_schema_file(schema_file)
+    num_columns = len(schema_data)
+    headers = [schema_data[column_number]['name'] for column_number in range(1, num_columns + 1)] + ['paper']
+
+    # Generate prompt
+    prompt = generate_prompt(schema_data, user_instructions, key_columns)
+    examples = generate_examples(schema_data)
+
+    # Process file
+    try:
+        paper_content = truncate_text(doc_to_elements(file_path))
+    except Exception as err:
+        print(f"Unable to process {file_path} into plaintext due to {err}")
+        return None
+
+    # Extract data
+    max_retries = 3
+    retry_count = 0
+    success = False
+    ollama_url = "http://localhost:11434"
+
+    while retry_count < max_retries and not success:
+        try:
+            model_options = {
+                "num_ctx": 32768,
+                "num_predict": 2048,
+                "mirostat": 0,
+                "mirostat_tau": 0.5,
+                "mirostat_eta": 1,
+                "tfs_z": 1,
+                "top_p": 1,
+                "top_k": 5,
+                "temperature": (0.35 * retry_count),
+                "repeat_penalty": (1.1 + (0.1 * retry_count)),
+                "stop": ["|||"],
+            }
+
+            prompt_with_content = f"{prompt}\n\n{paper_content}\n\nAgain, please make sure to respond only in the specified format exactly as described, or you will cause errors.\nResponse:"
+            data = {
+                "model": model_name_version,
+                "prompt": prompt_with_content,
+                "stream": False,
+                "options": model_options
+            }
+            response = requests.post(f"{ollama_url}/api/generate", json=data)
+            response.raise_for_status()
+            result = response.json()["response"]
+
+            if result == '|||':
+                print(f"Got signal from model that the information is not present in {file_path}")
+                return None
+
+            parsed_result = parse_llm_response(result, num_columns)
+            if not parsed_result:
+                print("Parsed Result empty, trying again")
+                retry_count += 1
+                continue
+
+            validated_result = validate_result(parsed_result, schema_data, examples)
+
+            if validated_result:
+                paper_filename = os.path.splitext(os.path.basename(file_path))[0]
+
+                for key_column in key_columns:
+                    if key_column is not None:
+                        key_values = set()
+                        filtered_result = []
+                        for row in validated_result:
+                            key_value = row[key_column - 1]
+                            if key_value not in key_values:
+                                key_values.add(key_value)
+                                filtered_result.append(row)
+                        validated_result = filtered_result
+
+                for row in validated_result:
+                    row.append(paper_filename)
+
+                success = True
+                return validated_result
+            else:
+                print("Result failed to validate, trying again.")
+                retry_count += 1
+
+        except Exception as e:
+            print(f"Error processing {file_path}: {type(e).__name__} - {str(e)}")
+            retry_count += 1
+            print(f"Retrying ({retry_count}/{max_retries})...")
+
+    if not success:
+        print(f"Failed to extract data from {file_path} after {max_retries} retries.")
+        return None

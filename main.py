@@ -4,18 +4,21 @@ import json
 import datetime
 import builtins
 
-# Check for and create the folders used by the program if necessary
+# Create necessary directories if they don't exist
 os.makedirs(os.path.join(os.getcwd(), 'scraped_docs'), exist_ok=True)
 os.makedirs(os.path.join(os.getcwd(), 'dataModels'), exist_ok=True)
 os.makedirs(os.path.join(os.getcwd(), 'logs'), exist_ok=True)
 
+# Set up custom logging
+# This creates a log file with the current timestamp in the filename
 builtins.a = os.path.join(os.getcwd(), "logs", f"{str(datetime.datetime.now()).replace(' ', '_')}.txt")
-from src.utils import print
+from src.utils import print  # Custom print function for logging
 
 
 def main():
+    # Print ASCII art banner
     print("""
-    
+
               _____           _______                   _____          
              /\    \         /::\    \                 /\    \         
             /::\____\       /::::\    \               /::\    \        
@@ -27,7 +30,7 @@ def main():
       /:::/    /      /:::/____/   \:::\____\   /::::::\   \:::\    \  
      /:::/    /      |:::|    |     |:::|    | /:::/\:::\   \:::\    \ 
     /:::/____/       |:::|____|     |:::|    |/:::/  \:::\   \:::\____\
-    
+
     \:::\    \        \:::\    \   /:::/    / \::/    \:::\  /:::/    /
      \:::\    \        \:::\    \ /:::/    /   \/____/ \:::\/:::/    / 
       \:::\    \        \:::\    /:::/    /             \::::::/    /  
@@ -40,9 +43,10 @@ def main():
              \/____/                                   \/____/         
     """)
 
-    # initialize variables
+    # Initialize task variable
     task = 0
 
+    # Check if the script is run in automatic mode
     if "-auto" in sys.argv:
         # Get the index of the -auto argument
         auto_index = sys.argv.index("-auto")
@@ -54,9 +58,8 @@ def main():
             # If there is no argument after -auto, default to automatic.json
             json_file = "automatic.json"
 
-        # Open the file in read mode
+        # Open the JSON file and parse its contents
         with open(os.path.join(os.getcwd(), json_file), "r") as auto:
-            # Parse the JSON file
             tasks = json.load(auto)
 
             # Loop over each task in the file
@@ -66,8 +69,8 @@ def main():
                     scrape(task_params)
 
                 elif task_name.lower() == "extract":
-                    from src.extract import extract
-                    extract(task_params)
+                    from src.extract import batch_extract
+                    batch_extract(task_params)
 
                 elif task_name.lower() == 'concurrent':
                     from src.single_paper import scrape_and_extract_concurrent
@@ -78,19 +81,19 @@ def main():
                     sys.exit(1)
 
     else:
-        while task != 1 and task != 2 and task != 3 and task != 4:
-            # prompt the user to select a task
+        # Interactive mode
+        while task not in [1, 2, 3, 4]:
+            # Prompt the user to select a task
             print("Please select a task:")
             print("1. Scrape Papers")
             print("2. Define a CSV Structure")
             print("3. Extract Data from Papers into Defined CSV Structure")
             print("4. Scrape and Extract Concurrently")
 
-            # get user input
+            # Get user input
             task = input("Enter the task number (1, 2, 3, or 4): ")
 
-            # check user input and perform the selected task
-
+            # Execute the selected task based on user input
             if task == "1":
                 from src.scrape import scrape
                 scrape({})
@@ -101,13 +104,15 @@ def main():
 
             elif task == "3":
                 print("Loading models, please wait...")
-                from src.extract import extract
-                extract({})
+                from src.extract import batch_extract
+                batch_extract({})
+
             elif task == "4":
                 from src.single_paper import scrape_and_extract_concurrent
                 scrape_and_extract_concurrent({})
+
             else:
-                print("Invalid task number. Please enter 1 to 3")
+                print("Invalid task number. Please enter 1 to 4")
 
 
 if __name__ == '__main__':

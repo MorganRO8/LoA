@@ -9,9 +9,32 @@ from pdf2image import convert_from_path
 import builtins
 import datetime
 import random
-import xml.etree.ElementTree as ET
-import requests
+from selenium import webdriver
+from selenium.common.exceptions import WebDriverException
+import zipfile
+import io
+from selenium.webdriver.chrome.service import Service
+from selenium.common import TimeoutException
+from selenium.common.exceptions import StaleElementReferenceException, NoSuchElementException
+from selenium.webdriver.chrome.options import Options
+from selenium.webdriver.common.by import By
+from selenium.webdriver.support import expected_conditions as EC
+from selenium.webdriver.support.ui import WebDriverWait
 from tqdm import tqdm
+from datetime import datetime
+import xml.etree.ElementTree as ET
+import time
+import json
+import logging
+from urllib.parse import quote
+from bs4 import BeautifulSoup
+import requests
+
+
+CONVERT_URL = "https://www.ncbi.nlm.nih.gov/pmc/utils/idconv/v1.0/?ids={}&format=json"
+EUTILS_URL = "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch.fcgi?db=pmc&id={}"
+ESEARCH_URL = 'https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esearch.fcgi'
+EFETCH_URL = 'https://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch.fcgi'
 
 
 def print(text):
@@ -94,7 +117,7 @@ def get_out_id(def_search_terms_input, maybe_search_terms_input):
     else:
         print(f"def search terms should be str or list, but it is instead {type(def_search_terms_input)}")
 
-    if maybe_search_terms_input[0].lower() == "none" or def_search_terms_input[0] == '':
+    if maybe_search_terms_input[0].lower() == "none" or maybe_search_terms_input[0] == '':
         print("No maybe search terms selected, only using definite search terms.")
         maybe_search_terms = None
 
@@ -148,6 +171,42 @@ def get_out_id(def_search_terms_input, maybe_search_terms_input):
         query_chunks = [def_search_terms]
 
     return output_directory_id, query_chunks
+
+
+def doi_to_filename(doi: str) -> str:
+    # Define replacements for invalid filename characters
+    replacements = {
+        '/': '_SLASH_',
+        ':': '_COLON_'
+    }
+
+    # Replace each invalid character with its replacement
+    filename = doi
+    for char, replacement in replacements.items():
+        filename = filename.replace(char, replacement)
+
+    # Optionally replace any other invalid characters (e.g., non-alphanumeric)
+    filename = re.sub(r'[^\w\-\.]', '_OTHER_', filename)
+
+    return filename
+
+
+def filename_to_doi(filename: str) -> str:
+    # Define replacements for invalid filename characters
+    replacements = {
+        '_SLASH_': '/',
+        '_COLON_': ':'
+    }
+
+    # Replace each replacement with its original character
+    doi = filename
+    for replacement, char in replacements.items():
+        doi = doi.replace(replacement, char)
+
+    # Optionally replace any other placeholder (assuming you have a rule for those)
+    doi = re.sub(r'_OTHER_', '', doi)
+
+    return doi
 
 
 def list_files_in_directory(directory):
@@ -732,3 +791,604 @@ def download_ollama():
             print("Ollama file deleted, next time please let the download finish!")
         else:
             print("Ollama file not found... weird...")
+
+
+def get_chrome_driver():
+    chrome_version = get_chrome_version()
+    print(f"Chrome Version: {chrome_version}")
+    driver_path = get_or_download_chromedriver(chrome_version)
+
+    service = Service(driver_path)
+    options = webdriver.ChromeOptions()
+    options.add_argument('--headless')
+    options.add_argument('--no-sandbox')
+    options.add_argument('--disable-dev-shm-usage')
+
+    try:
+        driver = webdriver.Chrome(service=service, options=options)
+        return driver
+    except WebDriverException as e:
+        if 'executable may have wrong permissions' in str(e):
+            print(f"Changing permissions for {driver_path}")
+            os.chmod(driver_path, 0o755)  # Add execute permissions
+            driver = webdriver.Chrome(service=service, options=options)
+            return driver
+        else:
+            raise
+
+
+def get_chrome_version():
+    # This is specifically for linux
+    return os.popen('google-chrome --version').read().strip().split()[-1]
+
+
+def get_or_download_chromedriver(version):
+    driver_path = os.path.join(os.getcwd(), 'chromedriver-linux64', 'chromedriver')
+
+    # Check if chromedriver already exists
+    if os.path.exists(driver_path):
+        print("ChromeDriver already exists. Skipping download.")
+        return driver_path
+
+    version_base = '.'.join(version.split('.')[:3])
+
+    # Use the JSON API to get the latest version information
+    json_url = f"https://googlechromelabs.github.io/chrome-for-testing/latest-versions-per-milestone.json"
+    response = requests.get(json_url)
+
+    if response.status_code != 200:
+        raise Exception(f"Failed to fetch version information. Status code: {response.status_code}")
+
+    version_data = response.json()
+    milestone = version_base.split('.')[0]
+
+    if milestone not in version_data['milestones']:
+        raise Exception(f"No ChromeDriver version found for Chrome {version_base}")
+
+    driver_version = version_data['milestones'][milestone]['version']
+    print(f"Latest compatible ChromeDriver version: {driver_version}")
+
+    download_url = f"https://storage.googleapis.com/chrome-for-testing-public/{driver_version}/linux64/chromedriver-linux64.zip"
+
+    print(f"Downloading ChromeDriver from: {download_url}")
+    response = requests.get(download_url)
+
+    if response.status_code != 200:
+        raise Exception(f"Failed to download ChromeDriver. Status code: {response.status_code}")
+
+    try:
+        zip_file = zipfile.ZipFile(io.BytesIO(response.content))
+    except zipfile.BadZipFile:
+        raise Exception("Downloaded file is not a valid zip file. The ChromeDriver download might have failed.")
+
+    zip_file.extract('chromedriver-linux64/chromedriver', path=os.getcwd())
+    os.rename(os.path.join(os.getcwd(), 'chromedriver-linux64', 'chromedriver'), driver_path)
+
+    os.chmod(driver_path, 0o755)
+    print(f"ChromeDriver downloaded and saved to: {driver_path}")
+    return driver_path
+
+
+def scrape_scienceopen(search_terms, retmax):
+    LOGGER = logging.getLogger()
+    LOGGER.setLevel(logging.WARNING)
+
+    chrome_options = Options()
+    chrome_options.add_argument("--headless")
+    chrome_options.add_argument("--no-sandbox")
+    chrome_options.add_argument("--disable-dev-shm-usage")
+    chrome_options.add_argument("--disable-crash-reporter")
+    chrome_options.add_argument("--disable-extensions")
+    chrome_options.add_argument("--disable-in-process-stack-traces")
+    chrome_options.add_argument("--disable-logging")
+    chrome_options.add_argument("--disable-dev-shm-usage")
+    chrome_options.add_argument("--log-level=3")
+    chrome_options.add_argument("--output=/dev/null")
+    chrome_options.add_experimental_option("excludeSwitches", ["enable-logging"])
+
+    try:
+        driver = get_chrome_driver()
+        driver.set_page_load_timeout(60)  # Set timeout to 60 seconds
+        wait = WebDriverWait(driver, 10)
+
+        url = (
+            f"https://www.scienceopen.com/search#('v'~4_'id'~''_'queryType'~1_'context'~null_'kind'~77_'order'~0_"
+            f"'orderLowestFirst'~false_'query'~'{' '.join(search_terms)}'_'filters'~!("
+            f"'kind'~84_'openAccess'~true)*_'hideOthers'~false)")
+
+        print("Attempting to load ScienceOpen URL...")
+        driver.get(url)
+        print("ScienceOpen URL loaded successfully")
+
+        scraped_links_dir = os.path.join(os.getcwd(), 'search_info', 'SO_searches')
+        os.makedirs(scraped_links_dir, exist_ok=True)
+
+        scraped_links_file_path = os.path.join(scraped_links_dir, f"{'_'.join(search_terms)}.txt")
+
+        if os.path.exists(scraped_links_file_path):
+            with open(scraped_links_file_path, 'r') as file:
+                scraped_links = file.read().splitlines()
+        else:
+            scraped_links = []
+
+        article_links = []
+        while len(article_links) < retmax:
+            new_links = driver.find_elements(By.CSS_SELECTOR, 'div.so-article-list-item > div > h3 > a')
+            new_links = [link.get_attribute('href') for link in new_links if
+                         link.get_attribute('href') not in scraped_links]
+
+            article_links.extend(new_links)
+
+            try:
+                load_more_button = WebDriverWait(driver, 10).until(
+                    EC.presence_of_element_located((By.CSS_SELECTOR, '.so--tall'))
+                )
+                driver.execute_script("arguments[0].click();", load_more_button)
+                time.sleep(2)
+            except TimeoutException:
+                print("No more results to load or couldn't find 'Load More' button.")
+                break
+            except StaleElementReferenceException:
+                print("No more results to load.")
+                break
+            except Exception as other:
+                print(f"An unknown exception occurred, please let the dev know: {other}")
+                break
+
+        start_time = time.time()
+        pbar = tqdm(total=retmax, dynamic_ncols=True)
+        count = 0
+        scraped_files = []
+        failed_articles = []
+
+        for link in article_links:
+            if count >= retmax:
+                break
+
+            driver.execute_script("window.open('');")
+            driver.switch_to.window(driver.window_handles[-1])
+
+            try:
+                driver.get(link)
+
+                try:
+                    pdf_link_element = wait.until(
+                        EC.presence_of_element_located(
+                            (By.CSS_SELECTOR, '#id2e > li:nth-child(1) > a:nth-child(1)')))
+                    pdf_link = pdf_link_element.get_attribute('href')
+                except (TimeoutException, NoSuchElementException):
+                    print(f"PDF link not found for article: {link}")
+                    failed_articles.append(link)
+                    continue
+
+                try:
+                    soup = BeautifulSoup(driver.page_source, 'html.parser')
+                    doi_element = soup.find('meta', attrs={'name': 'citation_doi'})
+                    if doi_element is not None:
+                        doi = doi_element.get('content')
+                        encoded_doi = quote(doi, safe='')
+                    else:
+                        print(f"DOI not found for article: {link}")
+                        failed_articles.append(link)
+                        continue
+                except Exception as e:
+                    print(f"Error occurred while extracting DOI for article: {link}")
+                    print(f"Error: {e}")
+                    failed_articles.append(link)
+                    continue
+
+                try:
+                    pdf_response = requests.get(pdf_link)
+                    filename = f"SO_{encoded_doi}.pdf"
+                    with open(os.path.join(os.getcwd(), 'scraped_docs', filename), 'wb') as f:
+                        f.write(pdf_response.content)
+
+                    count += 1
+                    elapsed_time = time.time() - start_time
+                    avg_time_per_pdf = elapsed_time / count
+                    est_time_remaining = avg_time_per_pdf * (retmax - count)
+                    pbar.set_description(
+                        f"DOI: {doi}, Count: {count}/{retmax}, Avg time per PDF: {avg_time_per_pdf:.2f}s, Est. time remaining: {est_time_remaining:.2f}s")
+                    pbar.update(1)
+
+                    scraped_files.append(filename)
+
+                    with open(scraped_links_file_path, 'a') as file:
+                        file.write(f"{link}\n")
+                except Exception as e:
+                    print(f"Error occurred while downloading PDF for article: {link}")
+                    print(f"Error: {e}")
+                    failed_articles.append(link)
+            except Exception as e:
+                print(f"Error occurred while processing article: {link}")
+                print(f"Error: {e}")
+                failed_articles.append(link)
+            finally:
+                driver.close()
+                driver.switch_to.window(driver.window_handles[0])
+
+        driver.quit()
+        pbar.close()
+
+        print(f"Scraping completed. Successfully scraped {count} articles.")
+        print(f"Failed to scrape {len(failed_articles)} articles.")
+        print("Failed articles:")
+        for article in failed_articles:
+            print(article)
+
+        return scraped_files
+
+    except TimeoutException:
+        print(
+            "Timeout occurred while loading ScienceOpen. This could be due to slow internet connection or the website being down.")
+        print("Skipping ScienceOpen scraping for this search term.")
+        if driver:
+            driver.quit()
+        return []
+    except Exception as e:
+        print(f"An unexpected error occurred while scraping ScienceOpen: {e}")
+        print("Skipping ScienceOpen scraping for this search term.")
+        if driver:
+            driver.quit()
+        return []
+
+def arxiv_search(search_terms, retmax, repository):
+    print(f"Starting {repository} search with terms: {search_terms}")
+    query = "+AND+".join(search_terms).replace(' ', '%20')
+    print(f"Constructed query: {query}")
+
+    tracking_filename = os.path.join(os.getcwd(), 'search_info', 'arXiv',
+                                     f"{repository}_{'_'.join(search_terms)}_count.txt")
+    fetched = 0
+    if os.path.exists(tracking_filename):
+        with open(tracking_filename, 'r') as f:
+            fetched = int(f.read().strip())
+    else:
+        fetched = 0
+        os.makedirs(os.path.join(os.getcwd(), 'search_info', 'arXiv'), exist_ok=True)
+
+    print(f"Starting fetch from count: {fetched}")
+
+    MAX_RETRIES = 3
+    SEARCH_MAX_RETRIES = 10
+    scraped_files = []
+
+    while fetched < retmax:
+        current_max = min(100, retmax - fetched)
+
+        if repository == 'arxiv':
+            api_url = f"https://export.arxiv.org/api/query?search_query=all:{query}&start={fetched}&max_results={current_max}"
+        elif repository == 'chemrxiv':
+            api_url = f"https://chemrxiv.org/engage/chemrxiv/public-api/v1/items?term={query}&skip={fetched}&limit={current_max}"
+        else:
+            print(f"Unsupported repository: {repository}")
+            return []
+
+        print(f"Fetching results from: {api_url}")
+
+        search_retry_count = 0
+        search_successful = False
+
+        while search_retry_count < SEARCH_MAX_RETRIES and not search_successful:
+            try:
+                print(f"Sending request to API... (Retry: {search_retry_count})")
+                response = requests.get(api_url)
+                print(f"API response status code: {response.status_code}")
+                response.raise_for_status()
+
+                # print(f"Raw API response for {repository}:")
+                # print(response.text[:1000])  # Print first 1000 characters of the response
+
+                if repository == 'arxiv':
+                    xml_data = response.text
+                    soup = BeautifulSoup(xml_data, "xml")
+                    entries = soup.find_all("entry")
+                elif repository == 'chemrxiv':
+                    json_data = response.json()
+                    entries = json_data.get('itemHits', [])
+
+                print(f"Number of entries found: {len(entries)}")
+
+                if not entries:
+                    print("No more results found. Exiting.")
+                    break
+
+                for index, entry in enumerate(entries, start=1):
+                    print(f"Processing entry {index} out of {len(entries)}...")
+                    retry_count = 0
+                    download_successful = False
+
+                    while retry_count < MAX_RETRIES and not download_successful:
+                        try:
+                            if repository == 'arxiv':
+                                pdf_link = entry.find('link', {'title': 'pdf'})['href']
+                                arxiv_id = entry.find('id').text.split('/')[-1]
+                                doi = f"{arxiv_id}"
+                            elif repository == 'chemrxiv':
+                                pdf_link = entry['item']['asset']['original']['url']
+                                doi = entry['item'].get('doi', '')
+
+                            print(f"PDF link found: {pdf_link}")
+
+                            if pdf_link:
+                                pdf_response = requests.get(pdf_link)
+                                pdf_response.raise_for_status()
+                                pdf_content = pdf_response.content
+
+                                filename = f"{repository}_{doi_to_filename(doi)}.pdf"
+
+                                with open(os.path.join(os.getcwd(), 'scraped_docs', filename), 'wb') as f:
+                                    f.write(pdf_content)
+
+                                scraped_files.append(filename)
+                                fetched += 1
+                                download_successful = True
+
+                                with open(tracking_filename, 'w') as f:
+                                    f.write(str(fetched))
+
+                                print(f"Successfully downloaded PDF for entry {index}.")
+                            else:
+                                print(f"No PDF link found for entry {index}. Skipping.")
+                                download_successful = True  # Mark as successful to move to next entry
+
+                        except (requests.exceptions.ConnectionError, requests.exceptions.RequestException) as e:
+                            retry_count += 1
+                            print(
+                                f"Error downloading PDF for entry {index}. Retry attempt {retry_count}/{MAX_RETRIES}. Error: {e}")
+                            time.sleep(10)
+
+                    if not download_successful:
+                        print(
+                            f"Failed to download entry {index} after {MAX_RETRIES} attempts. Skipping this entry.")
+
+                    if fetched >= retmax:
+                        print(f"Reached retmax of {retmax}. Stopping search.")
+                        break
+
+                if fetched == 0:
+                    print("No new entries fetched. Breaking loop.")
+                    break
+
+                search_successful = True
+
+            except (requests.exceptions.ConnectionError, requests.exceptions.RequestException) as e:
+                search_retry_count += 1
+                print(
+                    f"Failed to fetch search results. Retry attempt {search_retry_count}/{SEARCH_MAX_RETRIES}. Error: {e}")
+                time.sleep(10)
+
+        if not search_successful or not entries or fetched >= retmax:
+            break
+
+    print(f"{repository} search completed. Total files scraped: {len(scraped_files)}")
+    return scraped_files
+
+def pubmed_search(search_terms, retmax):
+    query = " AND ".join(search_terms)
+
+    esearch_params = {
+        'db': 'pmc',
+        'term': query,
+        'retmode': 'json',
+        'retmax': retmax
+    }
+
+    print("Now performing esearch...")
+    try:
+        esearch_response = requests.get(ESEARCH_URL, params=esearch_params)
+        esearch_response.raise_for_status()
+    except requests.exceptions.RequestException as e:
+        print(f"Request failed: {e}")
+        return []
+
+    esearch_data = esearch_response.json()
+
+    if 'esearchresult' in esearch_data:
+        uid_list = esearch_data['esearchresult']['idlist']
+
+        if not uid_list:
+            print("No search results found.")
+            return []
+
+        downloaded_files = os.listdir(os.path.join(os.getcwd(), 'scraped_docs'))
+        downloaded_files = [file.replace("pubmed_", "").replace(".xml", "") for file in downloaded_files if
+                            "pubmed_" in file]
+
+        # Count only the downloaded files that are part of this search
+        downloaded_from_current_search = [uid for uid in uid_list if uid in downloaded_files]
+        num_downloaded = len(downloaded_from_current_search)
+
+        print(f"{num_downloaded} files already downloaded for this search.")
+
+        scraped_files = []
+
+        for uid in uid_list:
+            if uid not in downloaded_files:
+                if num_downloaded >= retmax:
+                    print("Reached maximum number of downloads for this search. Stopping.")
+                    return scraped_files
+
+                efetch_params = {
+                    'db': 'pmc',
+                    'id': uid,
+                    'retmode': 'xml',
+                    'rettype': 'full'
+                }
+
+                print(f"Now performing efetch for UID {uid}...")
+                try:
+                    efetch_response = requests.get(EFETCH_URL, params=efetch_params)
+                    efetch_response.raise_for_status()
+                except requests.exceptions.RequestException as e:
+                    print(f"Request failed: {e}")
+                    continue
+
+                xml_data = efetch_response.text
+                root = ET.fromstring(xml_data)
+
+                # Check if full-text is available
+                if root.find(".//body"):
+                    filename = f"pubmed_{uid}.xml"
+                    with open(os.path.join(os.getcwd(), 'scraped_docs', filename), 'w') as f:
+                        f.write(xml_data)
+                    num_downloaded += 1
+                    scraped_files.append(filename)
+                else:
+                    print(f"Full text not available for UID {uid}. Skipping.")
+
+                time.sleep(1 / 2)
+
+        return scraped_files
+
+def read_api_count():
+    try:
+        with open(os.path.join(os.getcwd(), 'search_info', 'unpaywall', 'api_call_count.txt'), "r") as f:
+            data = f.read().split("\n")
+            date = data[0]
+            count = int(data[1])
+        return date, count
+    except FileNotFoundError:
+        return None, 0
+
+def write_api_count(date, count):
+    with open(os.path.join(os.getcwd(), 'search_info', 'unpaywall', 'api_call_count.txt'), "w") as f:
+        f.write(f"{date}\n{count}")
+
+def read_last_state():
+    try:
+        with open(os.path.join(os.getcwd(), 'search_info', 'unpaywall', 'last_state.txt'), "r") as f:
+            data = json.load(f)
+        return data['last_chunk'], data['last_page']
+    except FileNotFoundError:
+        return None, 1
+
+def write_last_state(last_chunk, last_page):
+    with open(os.path.join(os.getcwd(), 'search_info', 'unpaywall', 'last_state.txt'), "w") as f:
+        json.dump({'last_chunk': last_chunk, 'last_page': last_page}, f)
+
+def download_pdf(url, doi):
+    try:
+        pdf_response = requests.get(url)
+        pdf_response.raise_for_status()
+        filename = f"unpaywall_{doi_to_filename(doi)}.pdf"
+        with open(os.path.join(os.getcwd(), 'scraped_docs', filename), 'wb') as f:
+            f.write(pdf_response.content)
+        return filename
+    except requests.exceptions.RequestException as e:
+        print(f"PDF download failed: {e}")
+        return None
+
+def unpaywall_search(query_chunks, retmax, email):
+    last_date, api_count = read_api_count()
+    today = datetime.now().strftime("%Y-%m-%d")
+    os.makedirs(os.path.join(os.getcwd(), 'search_info', 'unpaywall'), exist_ok=True)
+
+    if last_date != today:
+        api_count = 0
+
+    if api_count >= 100000:
+        print("Reached daily API call limit. Try again tomorrow.")
+        return []
+
+    last_chunk, last_page = read_last_state()
+
+    resume = False if last_chunk is None else True
+    scraped_files = []
+    total_downloaded = 0
+
+    for chunk in query_chunks:
+        if resume and chunk != last_chunk:
+            continue
+        query = " AND ".join(chunk)
+        page = last_page if resume and chunk == last_chunk else 1
+
+        while total_downloaded <= retmax and api_count < 100000:
+            unpaywall_params = {
+                'query': query,
+                'is_oa': 'true',
+                'email': email,
+                'page': page
+            }
+
+            print(f"Now scraping Unpaywall for {chunk}, page {page}")
+
+            try:
+                unpaywall_response = requests.get("https://api.unpaywall.org/v2/search", params=unpaywall_params)
+                unpaywall_response.raise_for_status()
+            except requests.exceptions.RequestException as e:
+                print(f"Request failed: {e}")
+                return scraped_files
+
+            api_count += 1
+            if api_count >= 100000:
+                print("Reached daily API call limit. Exiting.")
+                write_api_count(today, api_count)
+                write_last_state(chunk, page)
+                return scraped_files
+
+            write_api_count(today, api_count)
+
+            unpaywall_data = json.loads(unpaywall_response.text)
+
+            if 'results' not in unpaywall_data:
+                print("No results found in the Unpaywall API response.")
+                break
+
+            doi_list = [result['response']['doi'] for result in unpaywall_data['results'] if
+                        'response' in result and 'doi' in result['response']]
+
+            if not doi_list:
+                print("No DOIs found in the Unpaywall API response.")
+                break
+
+            downloaded_files = os.listdir(os.path.join(os.getcwd(), 'scraped_docs'))
+
+            for doi in doi_list:
+                if total_downloaded >= retmax:
+                    print(f"Reached retmax of {retmax}. Stopping search.")
+                    return scraped_files
+
+                if doi not in downloaded_files:
+                    print(f"Now fetching data for DOI {doi}...")
+                    try:
+                        doi_response = requests.get(f"https://api.unpaywall.org/v2/{doi}?email={email}")
+                        doi_response.raise_for_status()
+                    except requests.exceptions.RequestException as e:
+                        print(f"Request failed: {e}")
+                        continue
+
+                    api_count += 1
+                    if api_count >= 100000:
+                        print("Reached daily API call limit. Exiting.")
+                        write_api_count(today, api_count)
+                        write_last_state(chunk, page)
+                        return scraped_files
+
+                    write_api_count(today, api_count)
+
+                    doi_data = doi_response.json()
+
+                    if doi_data.get('is_oa'):
+                        pdf_url = doi_data['best_oa_location']['url_for_pdf']
+                        if pdf_url:
+                            pdf_filename = download_pdf(pdf_url, doi)
+                            if pdf_filename:
+                                scraped_files.append(pdf_filename)
+                                total_downloaded += 1
+                        else:
+                            print(f"No PDF URL found for DOI {doi}")
+
+                    doi_data_str = json.dumps(doi_data, indent=4)
+                    json_filename = f"unpaywall_{doi_to_filename(doi)}.json"
+                    with open(os.path.join(os.getcwd(), 'scraped_docs', json_filename), 'w') as f:
+                        f.write(doi_data_str)
+                    scraped_files.append(json_filename)
+                    total_downloaded += 1
+
+                    time.sleep(1 / 10)
+
+            page += 1
+            write_last_state(chunk, page)
+
+    return scraped_files

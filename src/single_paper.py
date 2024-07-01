@@ -1,10 +1,5 @@
-import os
-import json
 from pathlib import Path
-import requests
 import subprocess
-import time
-import xml.etree.ElementTree as ET
 from src.document_reader import doc_to_elements
 from src.utils import *
 

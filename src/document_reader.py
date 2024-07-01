@@ -1,12 +1,9 @@
-import os
 from unstructured.staging.base import convert_to_dict
 from unstructured.partition.auto import partition
 from unstructured.partition.pdf import partition_pdf
 from pdf2image.exceptions import PDFSyntaxError
 from src.utils import *
-
 import logging
-import csv
 
 # Turn off the ridiculous amount of logging unstructured does
 LOGGER = logging.getLogger()

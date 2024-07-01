@@ -40,7 +40,7 @@ EFETCH_URL = 'https://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch.fcgi'
 def print(text):
     """Prints the given text to the console and to a log file, with a timestamp."""
     with open(builtins.a, 'a+') as file:
-        builtins.print(f"{datetime.datetime.now()}: {text}", file=file)
+        builtins.print(f"{datetime.now()}: {text}", file=file)
     builtins.print(text)
 
 

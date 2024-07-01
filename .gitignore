@@ -7,6 +7,8 @@ scraped_docs/
 search_info/
 .idea/
 chromedriver-linux64/
+chromedriver
+ollama
 directory_structure.txt
 print_all.py
 run_auto.sh

@@ -63,32 +63,54 @@ def truncate_filename(directory, filename, max_path_length=255):
 
 
 def select_search_info_file():
+    """
+    Allows the user to select a search info file from the 'search_info' directory.
+
+    Returns:
+    str: Path to the selected search info file or 'All' if all files should be used.
+    """
+    # Get the path to the search_info directory
     search_info_dir = os.path.join(os.getcwd(), 'search_info')
+    # List all .txt files in the directory
     search_info_files = [file for file in os.listdir(search_info_dir) if file.endswith('.txt')]
+    # Add 'All' option at the beginning of the list
     search_info_files.insert(0, 'All')
 
+    # Display available files to the user
     print("Available search info files:")
     for i, file in enumerate(search_info_files):
         print(f"{i + 1}. {file}")
 
+    # Get user's choice
     while True:
         choice = input("Enter the number of the search info file you want to use: ")
         if int(choice) == 1:
-            return 'All'
+            return 'All'  # User chose to use all files
         if choice.isdigit() and 2 <= int(choice) <= len(search_info_files):
+            # Return the full path of the selected file
             return os.path.join(search_info_dir, search_info_files[int(choice) - 1])
         else:
             print("Invalid choice. Please try again.")
 
 
 def select_data_model_file():
+    """
+    Allows the user to select a data model file from the 'dataModels' directory.
+
+    Returns:
+    str: Name of the selected data model file.
+    """
+    # Get the path to the dataModels directory
     data_models_dir = os.path.join(os.getcwd(), 'dataModels')
+    # List all .pkl files in the directory
     data_model_files = [file for file in os.listdir(data_models_dir) if file.endswith('.pkl')]
 
+    # Display available files to the user
     print("Available data model files:")
     for i, file in enumerate(data_model_files):
         print(f"{i + 1}. {file}")
 
+    # Get user's choice
     while True:
         choice = input("Enter the number of the data model file you want to use: ")
         if choice.isdigit() and 1 <= int(choice) <= len(data_model_files):
@@ -98,61 +120,72 @@ def select_data_model_file():
 
 
 def get_out_id(def_search_terms_input, maybe_search_terms_input):
+    """
+    Processes definite and maybe search terms to generate an output directory ID and query chunks.
+    The output directory ID is used in a lot of places, and generally links scrape results to extraction results.
+    The query chunks are a list of combinations of search terms to iterate over.
+
+    Args:
+    def_search_terms_input (str or list): Definite search terms.
+    maybe_search_terms_input (str or list): Maybe search terms.
+
+    Returns:
+    tuple: (output_directory_id, query_chunks)
+    """
+    # Process definite search terms
     if def_search_terms_input[0].lower() == "none" or def_search_terms_input[0] == '':
         print("No definite search terms selected.")
         def_search_terms = None
-
-    elif type(def_search_terms_input) == str:
+    elif isinstance(def_search_terms_input, str):
         print("String input detected for def search terms")
         def_search_terms = [term.strip() for term in def_search_terms_input.split(",")]
         def_search_terms.sort()
-
-    elif type(def_search_terms_input) == list:
+    elif isinstance(def_search_terms_input, list):
         print("List input detected for def search terms")
         print(f"def_search_terms_input = {def_search_terms_input}")
         def_search_terms = def_search_terms_input
         def_search_terms.sort()
         print(f"def_search_terms = {def_search_terms}")
-
     else:
         print(f"def search terms should be str or list, but it is instead {type(def_search_terms_input)}")
 
+    # Process maybe search terms
     if maybe_search_terms_input[0].lower() == "none" or maybe_search_terms_input[0] == '':
         print("No maybe search terms selected, only using definite search terms.")
         maybe_search_terms = None
-
-    elif type(maybe_search_terms_input) == str:
+    elif isinstance(maybe_search_terms_input, str):
         print("String input detected for maybe search terms")
         maybe_search_terms = [term.strip() for term in maybe_search_terms_input.split(",")]
         maybe_search_terms.sort()
-
-    elif type(maybe_search_terms_input) == list:
+    elif isinstance(maybe_search_terms_input, list):
         print("List input detected for maybe search terms")
         print(f"maybe_search_terms_input = {maybe_search_terms_input}")
         maybe_search_terms = maybe_search_terms_input
         maybe_search_terms.sort()
         print(f"maybe_search_terms = {maybe_search_terms}")
-
     else:
         print(f"maybe search terms should be str or list, but it is instead {type(maybe_search_terms_input)}")
 
-    # Check that at least one of def_search_terms or maybe_search_terms is not None
+    # Ensure at least one type of search term is provided
     if def_search_terms is None and maybe_search_terms is None:
         print("Error: Both definite and maybe search terms cannot be None.")
         return
 
+    # Generate output directory ID and query chunks
     if maybe_search_terms is not None:
         if def_search_terms is not None:
+            # Combine definite and maybe search terms
             output_directory_id = f"{'_'.join(['def'] + def_search_terms + ['maybe'] + maybe_search_terms).replace(' ', '')}"
 
-            # define queries as all the combinations of 'maybe contains' search terms
+            # Generate all combinations of maybe search terms
             combinations = list(itertools.chain.from_iterable(
                 itertools.combinations(maybe_search_terms, r) for r in range(0, len(maybe_search_terms) + 1)))
             queries = [def_search_terms + list(comb) for comb in combinations]
         else:
+            # Use only maybe search terms
             output_directory_id = f"{'_'.join(['maybe'] + maybe_search_terms).replace(' ', '')}"
 
-            # define queries as all the combinations of 'maybe contains' search terms
+            # Generate combinations of maybe search terms (excluding single-term combinations)
             combinations = list(itertools.chain.from_iterable(
                 itertools.combinations(maybe_search_terms, r) for r in range(1, len(maybe_search_terms) + 1)))
             queries = [list(comb) for comb in combinations]
@@ -166,14 +199,23 @@ def get_out_id(def_search_terms_input, maybe_search_terms_input):
         query_chunks = queries
 
     else:
+        # Use only definite search terms
         output_directory_id = f"{'_'.join(['def'] + def_search_terms).replace(' ', '')}"
-
         query_chunks = [def_search_terms]
 
     return output_directory_id, query_chunks
 
 
 def doi_to_filename(doi: str) -> str:
+    """
+    Convert a DOI to a valid filename by replacing invalid characters.
+
+    Args:
+    doi (str): The DOI to be converted.
+
+    Returns:
+    str: A filename-safe version of the DOI.
+    """
     # Define replacements for invalid filename characters
     replacements = {
         '/': '_SLASH_',
@@ -185,13 +227,22 @@ def doi_to_filename(doi: str) -> str:
     for char, replacement in replacements.items():
         filename = filename.replace(char, replacement)
 
-    # Optionally replace any other invalid characters (e.g., non-alphanumeric)
+    # Replace any other invalid characters (e.g., non-alphanumeric) with '_OTHER_'
     filename = re.sub(r'[^\w\-\.]', '_OTHER_', filename)
 
     return filename
 
 
 def filename_to_doi(filename: str) -> str:
+    """
+    Convert a filename back to a DOI by replacing the placeholders with original characters.
+
+    Args:
+    filename (str): The filename to be converted back to a DOI.
+
+    Returns:
+    str: The original DOI.
+    """
     # Define replacements for invalid filename characters
     replacements = {
         '_SLASH_': '/',
@@ -203,18 +254,35 @@ def filename_to_doi(filename: str) -> str:
     for replacement, char in replacements.items():
         doi = doi.replace(replacement, char)
 
-    # Optionally replace any other placeholder (assuming you have a rule for those)
+    # Remove any '_OTHER_' placeholders
     doi = re.sub(r'_OTHER_', '', doi)
 
     return doi
 
 
 def list_files_in_directory(directory):
-    """List all files in the given directory."""
+    """
+    List all files in the given directory.
+
+    Args:
+    directory (str): Path to the directory.
+
+    Returns:
+    list: A list of filenames in the directory.
+    """
     return [file for file in os.listdir(directory) if os.path.isfile(os.path.join(directory, file))]
 
 
 def has_multiple_columns(pdf_path):
+    """
+    Check if a PDF has multiple columns by analyzing its first page.
+
+    Args:
+    pdf_path (str): Path to the PDF file.
+
+    Returns:
+    bool: True if the PDF likely has multiple columns, False otherwise.
+    """
     # Convert the first page of the PDF to an image
     images = convert_from_path(pdf_path, dpi=200, first_page=1, last_page=1)
     image = images[0]
@@ -245,6 +313,16 @@ def has_multiple_columns(pdf_path):
 
 
 def xml_to_string(xml_string):
+    """
+    Convert an XML string to a formatted string representation. This is what we use to get the XML documents into a
+    format the LLM will be able to interpret better, with less artifacts.
+
+    Args:
+    xml_string (str): The XML content as a string.
+
+    Returns:
+    str: A formatted string representation of the XML content.
+    """
     formatted_output = ""
     root = ET.fromstring(xml_string)
 
@@ -253,6 +331,7 @@ def xml_to_string(xml_string):
         tag = element.tag.split('}')[-1]  # Remove namespace prefix
         text = element.text.strip() if element.text else ""
 
+        # Format different types of elements
         if tag == "article-title":
             formatted_output += text + "\n" + "=" * len(text) + "\n\n"
         elif tag in ["p", "sec"]:
@@ -271,6 +350,7 @@ def xml_to_string(xml_string):
                          "source", "year", "volume", "fpage", "lpage", "pub-id"]:
             formatted_output += f"{text}"
 
+        # Process child elements
         for child in element:
             process_element(child, level + 1)
 
@@ -279,12 +359,24 @@ def xml_to_string(xml_string):
 
 
 def elements_to_string(elements_list):
+    """
+    Convert a list of document elements to a formatted string representation. Document elements are what we get when we
+    process a document using unstructured (pdfs), this function converts this into formatted plaintext so the LLM can
+    interpret it better.
+
+    Args:
+    elements_list (list): A list of document elements.
+
+    Returns:
+    str: A formatted string representation of the document elements.
+    """
     formatted_output = ""
 
     for element in elements_list:
         element_type = element.get("type")
         text = element.get("text", "")
 
+        # Format different types of elements
         if element_type == "Title":
             formatted_output += text + "\n" + "=" * len(text) + "\n\n"
         elif element_type in ["Text", "NarrativeText", "UncategorizedText"]:
@@ -325,7 +417,16 @@ def elements_to_string(elements_list):
     return formatted_output
 
 
+import os
+
+
 def select_schema_file():
+    """
+    Allows the user to select a schema file from the 'dataModels' directory.
+
+    Returns:
+    str: Full path to the selected schema file.
+    """
     schema_dir = os.path.join(os.getcwd(), 'dataModels')
     schema_files = [file for file in os.listdir(schema_dir) if file.endswith('.pkl')]
 
@@ -342,6 +443,16 @@ def select_schema_file():
 
 
 def load_schema_file(schema_file):
+    """
+    Loads and parses a schema file.
+
+    Args:
+    schema_file (str): Path to the schema file.
+
+    Returns:
+    tuple: (schema_data, key_columns) where schema_data is a dictionary containing the schema information
+           and key_columns is a list of column numbers used as keys.
+    """
     with open(schema_file, 'r') as f:
         lines = f.readlines()
 
@@ -400,21 +511,36 @@ def load_schema_file(schema_file):
 
 
 def generate_prompt(schema_data, user_instructions, key_columns=None):
+    """
+    Generates a prompt for the AI model based on the schema data and user instructions. Uses a few other helper
+    functions to generate text describing the schema, examples of good responses, and key column info.
+
+    Args:
+    schema_data (dict): Dictionary containing the schema information.
+    user_instructions (str): Additional instructions provided by the user.
+    key_columns (list): List of column numbers used as keys for checking duplicates.
+
+    Returns:
+    str: A formatted prompt for the AI model.
+    """
     if key_columns is None:
         key_columns = []
     num_columns = len(schema_data)
     schema_info = ""
     schema_diagram = ""
 
+    # Generate schema information and diagram
     for column_number, column_data in schema_data.items():
         schema_info += f"Column {column_number}: {column_data['name']} ({column_data['type']})\n"
         schema_info += f"Description: {column_data['description']}\n\n"
         schema_diagram += f"{column_data['name']}, "
     schema_diagram = schema_diagram[:-2]
 
+    # Generate key column information
     key_column_names = [schema_data[int(column)]['name'] for column in key_columns]
     key_column_info = f"The column(s) {', '.join(key_column_names)} will be used as a key to check for duplicates within each paper. Ensure that the values in these columns are unique for each row extracted."
 
+    # Construct the prompt
     prompt = f"""
 Please extract information from the provided research paper that fits into the following CSV schema:
 
@@ -458,17 +584,37 @@ Paper Contents:
     return prompt
 
 
+import csv
+import re
+
+
 def parse_llm_response(response, num_columns):
+    """
+    Parse the response from a language model into structured data.
+
+    This function takes the raw text response from a language model and converts it
+    into a list of rows, where each row represents a set of extracted information.
+
+    Args:
+    response (str): The raw text response from the language model.
+    num_columns (int): The expected number of columns in each row.
+
+    Returns:
+    list: A list of unique rows, where each row is a list of column values.
+    """
+    # Split the response into lines and remove any lines containing example strings
     lines = response.strip().split('\n')
     lines = [line for line in lines if 'example_string' not in line]
     parsed_data = []
 
+    # Use csv reader to properly handle quoted values and commas within fields
     reader = csv.reader(lines, quotechar='"', skipinitialspace=True)
     for row in reader:
+        # Only include rows that have the correct number of columns
         if len(row) == num_columns:
             parsed_data.append(row)
 
-    # Remove duplicate entries
+    # Remove duplicate entries to ensure uniqueness
     unique_data = []
     for row in parsed_data:
         if row not in unique_data:
@@ -478,10 +624,22 @@ def parse_llm_response(response, num_columns):
 
 
 def normalize_numeric_value(value):
-    # Remove any special characters and spaces
+    """
+    Normalize a numeric value, handling scientific notation.
+
+    This function removes non-numeric characters (except those used in scientific notation)
+    and converts scientific notation to a standard decimal format with up to 4 decimal places.
+
+    Args:
+    value (str): The numeric value to normalize.
+
+    Returns:
+    str: The normalized numeric value as a string.
+    """
+    # Remove any special characters and spaces, keeping only digits, decimal point, and scientific notation characters
     value = re.sub(r'[^\d.eE+-]', '', value)
 
-    # Check if the value is in scientific notation
+    # Handle scientific notation
     if 'e' in value.lower():
         try:
             # Convert scientific notation to float
@@ -489,32 +647,59 @@ def normalize_numeric_value(value):
             # Convert float to string with a maximum of 4 decimal places
             value = f"{value:.4f}"
         except ValueError:
+            # If conversion fails, return the original cleaned string
             pass
 
     return value
 
 
 def process_value(value, column_data):
+    """
+    Process and validate a value based on its column type and constraints.
+
+    This function takes a raw value and processes it according to the column type
+    (e.g., int, str, float, complex, range, boolean). It also applies any constraints
+    specified in the column_data (e.g., min/max values, allowed values, substrings).
+
+    Args:
+    value (str): The raw value to process.
+    column_data (dict): A dictionary containing the column's type and constraints.
+
+    Returns:
+    The processed and validated value, type-casted according to the column type.
+
+    Raises:
+    ValueError: If the value doesn't meet the specified constraints.
+    """
     column_type = column_data['type']
+
     if column_type == 'int':
+        # Process integer values
         processed_value = int(''.join(filter(str.isdigit, value)))
         min_value = column_data.get('min_value')
         max_value = column_data.get('max_value')
         allowed_values = column_data.get('allowed_values')
+
+        # Validate against constraints
         if allowed_values and str(processed_value) not in allowed_values:
             raise ValueError(f"Value {processed_value} is not in the list of allowed values: {allowed_values}")
         if min_value is not None and processed_value < min_value:
             raise ValueError(f"Value {processed_value} is less than the minimum allowed value {min_value}")
         if max_value is not None and processed_value > max_value:
             raise ValueError(f"Value {processed_value} is greater than the maximum allowed value {max_value}")
+
         return processed_value
+
     elif column_type == 'str':
+        # Process string values
         processed_value = value.strip()
         min_length = column_data.get('min_length')
         max_length = column_data.get('max_length')
         whitelist_substrings = column_data.get('whitelist_substrings')
         blacklist_substrings = column_data.get('blacklist_substrings')
         allowed_values = column_data.get('allowed_values')
+
+        # Validate against constraints
         if allowed_values and str(processed_value) not in allowed_values:
             raise ValueError(f"Value {processed_value} is not in the list of allowed values: {allowed_values}")
         if min_length is not None and len(processed_value) < min_length:
@@ -530,26 +715,38 @@ def process_value(value, column_data):
             for substring in blacklist_substrings:
                 if substring in processed_value:
                     raise ValueError(f"String '{processed_value}' contains the blacklisted substring '{substring}'")
-        while processed_value[0] == " ":
-            del processed_value[0]
-        while processed_value[-1] == " ":
-            del processed_value[-1]
+
+        # Remove leading and trailing spaces
+        while processed_value and processed_value[0] == " ":
+            processed_value = processed_value[1:]
+        while processed_value and processed_value[-1] == " ":
+            processed_value = processed_value[:-1]
+
         return processed_value
+
     elif column_type == 'float':
+        # Process float values
         processed_value = float(''.join(filter(lambda x: x.isdigit() or x == '.', value)))
         min_value = column_data.get('min_value')
         max_value = column_data.get('max_value')
         allowed_values = column_data.get('allowed_values')
+
+        # Validate against constraints
         if allowed_values and str(processed_value) not in allowed_values:
             raise ValueError(f"Value {processed_value} is not in the list of allowed values: {allowed_values}")
         if min_value is not None and processed_value < min_value:
             raise ValueError(f"Value {processed_value} is less than the minimum allowed value {min_value}")
         if max_value is not None and processed_value > max_value:
             raise ValueError(f"Value {processed_value} is greater than the maximum allowed value {max_value}")
+
         return processed_value
+
     elif column_type == 'complex':
+        # Process complex numbers
         return complex(''.join(filter(lambda x: x.isdigit() or x in ['+', '-', 'j', '.'], value)))
+
     elif column_type == 'range':
+        # Process range values (e.g., "10-20")
         range_parts = value.replace(' ', '').split('-')
         if len(range_parts) == 2:
             minimum = float(re.sub("[^0-9]", "", range_parts[0]))
@@ -557,7 +754,9 @@ def process_value(value, column_data):
             return f"{minimum}-{maximum}"
         else:
             return value
+
     elif column_type == 'boolean':
+        # Process boolean values
         lower_value = value.lower().strip()
         if 'true' in lower_value:
             return True
@@ -565,11 +764,27 @@ def process_value(value, column_data):
             return False
         else:
             return value
+
     else:
+        # For unrecognized types, return the value as-is
         return value
 
 
 def validate_result(parsed_result, schema_data, examples):
+    """
+    Validate the parsed result against the schema and remove any invalid or example rows.
+
+    This function processes each row in the parsed result, validating it against the schema
+    and removing any rows that don't meet the criteria or match example data.
+
+    Args:
+    parsed_result (list): The parsed data from the language model response.
+    schema_data (dict): The schema defining the structure and constraints of the data.
+    examples (str): A string containing example rows to be excluded from the result.
+
+    Returns:
+    list: A list of validated rows that meet all the schema requirements.
+    """
     num_columns = len(schema_data)
     validated_result = []
     example_rows = examples.split('\n')
@@ -588,11 +803,12 @@ def validate_result(parsed_result, schema_data, examples):
         parsed_result = parsed_result[1:]  # Remove the header row from parsed_result
 
     for row in parsed_result:
+        # Skip rows with incorrect number of columns
         if len(row) != num_columns:
             print(f"Skipping row with invalid number of columns: {row}")
             continue
 
-        # Check if the row contains example strings
+        # Skip rows that match example data
         if any(example_row == ','.join(row) for example_row in example_rows):
             print(f"Skipping row containing example strings: {row}")
             continue
@@ -600,6 +816,7 @@ def validate_result(parsed_result, schema_data, examples):
         validated_row = []
         row_valid = True
 
+        # Process and validate each value in the row
         for i, value in enumerate(row):
             if value != 'null':
                 column_data = schema_data[i + 1]
@@ -624,6 +841,15 @@ def validate_result(parsed_result, schema_data, examples):
 
 
 def is_float(value):
+    """
+    Check if a given value can be converted to a float.
+
+    Args:
+    value: The value to check.
+
+    Returns:
+    bool: True if the value can be converted to a float, False otherwise.
+    """
     try:
         float(value)
         return True
@@ -632,6 +858,15 @@ def is_float(value):
 
 
 def write_to_csv(data, headers, filename="extracted_data.csv"):
+    """
+    Write data to a CSV file, appending if the file exists,
+    and adding headers then appending if it does not.
+
+    Args:
+    data (list): A list of rows to write to the CSV.
+    headers (list): The column headers for the CSV.
+    filename (str): The name of the CSV file to write to.
+    """
     file_exists = os.path.isfile(filename)
     with open(filename, mode='a', newline='') as csv_file:
         writer = csv.writer(csv_file)
@@ -641,6 +876,19 @@ def write_to_csv(data, headers, filename="extracted_data.csv"):
 
 
 def generate_examples(schema_data, num_examples=3):
+    """
+    Generate example data based on the provided schema.
+
+    This function creates random example data that conforms to the schema,
+    which can be used to illustrate the expected format of the data.
+
+    Args:
+    schema_data (dict): The schema defining the structure and constraints of the data.
+    num_examples (int): The number of example rows to generate.
+
+    Returns:
+    str: A string containing the generated examples, with each row separated by a newline.
+    """
     examples = []
     for _ in range(num_examples):
         example_row = []
@@ -664,16 +912,15 @@ def generate_examples(schema_data, num_examples=3):
                 min_value = column_data.get('min_value', column_number)
                 max_value = column_data.get('max_value', column_number + 10)
 
+                # Generate two random integers for the range
                 random.seed(datetime.datetime.now().timestamp())
                 rand1 = random.randint(min_value, max_value)
-
                 random.seed(datetime.datetime.now().timestamp())
                 rand2 = random.randint(min_value, max_value)
 
+                # Ensure the first number is smaller
                 if rand1 > rand2:
-                    temp = rand1
-                    rand1 = rand2
-                    rand2 = temp
+                    rand1, rand2 = rand2, rand1
 
                 example_value = f"{rand1}-{rand2}"
             else:
@@ -685,6 +932,18 @@ def generate_examples(schema_data, num_examples=3):
 
 
 def estimate_tokens(text):
+    """
+    Estimate the number of tokens in a given text.
+
+    This function uses a simple heuristic to estimate the number of tokens,
+    based on the assumption that 1 token is approximately 0.75 words.
+
+    Args:
+    text (str): The input text to estimate tokens for.
+
+    Returns:
+    int: The estimated number of tokens in the text.
+    """
     # Split the text into words
     words = re.findall(r'\w+', text)
 
@@ -699,6 +958,23 @@ def estimate_tokens(text):
 
 
 def truncate_text(text, max_tokens=32000, buffer=3500):
+    """
+    Truncate text to fit within a specified token limit.
+
+    This function estimates the number of tokens in the text and truncates it
+    if it exceeds the specified maximum, leaving a buffer for additional content.
+    This is necessary as often times the references at the end of a peper are so long
+    that they push the prompt outside the context. This function will remove from the
+    end of the text to make sure this does not happen.
+
+    Args:
+    text (str): The input text to truncate.
+    max_tokens (int): The maximum number of tokens allowed.
+    buffer (int): A buffer of tokens to reserve for additional content.
+
+    Returns:
+    str: The truncated text if it exceeded the limit, or the original text if not.
+    """
     estimated_total_tokens = estimate_tokens(text)
 
     if estimated_total_tokens <= max_tokens:
@@ -720,6 +996,20 @@ def truncate_text(text, max_tokens=32000, buffer=3500):
 
 
 def get_processed_pmids(csv_file):
+    """
+    Retrieve sets of processed PMIDs and PMIDs with no full text from files.
+
+    This function reads a CSV file to get processed PMIDs and a separate file
+    for PMIDs that have no full text available.
+
+    Used for the concurrent scraping with pubmed specifically.
+
+    Args:
+    csv_file (str): Path to the CSV file containing processed PMIDs.
+
+    Returns:
+    tuple: Two sets - processed PMIDs and PMIDs with no full text.
+    """
     processed_pmids = set()
     no_fulltext_pmids = set()
 
@@ -739,9 +1029,14 @@ def get_processed_pmids(csv_file):
     return processed_pmids, no_fulltext_pmids
 
 
-# Function to download the latest release of ollama binary
-# Function to download the latest release of ollama binary with progress bar
 def download_ollama():
+    """
+    Download the latest release of the Ollama binary for AMD64 architecture.
+
+    This function fetches the latest release information from GitHub,
+    downloads the AMD64 binary, and saves it with execute permissions.
+    It provides a progress bar during download and handles interruptions.
+    """
     # GitHub API URL for the latest releases of ollama
     url = "https://api.github.com/repos/ollama/ollama/releases/latest"
 
@@ -794,6 +1089,18 @@ def download_ollama():
 
 
 def get_chrome_driver():
+    """
+    Set up and return a Chrome WebDriver instance.
+
+    This function gets the Chrome version, downloads the appropriate ChromeDriver if necessary,
+    and sets up a Chrome WebDriver with specific options for headless browsing.
+
+    Returns:
+    webdriver.Chrome: A configured Chrome WebDriver instance.
+
+    Raises:
+    WebDriverException: If there's an issue with the WebDriver executable permissions.
+    """
     chrome_version = get_chrome_version()
     print(f"Chrome Version: {chrome_version}")
     driver_path = get_or_download_chromedriver(chrome_version)
@@ -818,11 +1125,32 @@ def get_chrome_driver():
 
 
 def get_chrome_version():
+    """
+    Get the installed Chrome version on a Linux system.
+
+    Returns:
+    str: The version number of the installed Chrome browser.
+    """
     # This is specifically for linux
     return os.popen('google-chrome --version').read().strip().split()[-1]
 
 
 def get_or_download_chromedriver(version):
+    """
+    Get the path to ChromeDriver, downloading it if necessary.
+
+    This function checks if ChromeDriver is already available, and if not,
+    downloads the appropriate version based on the installed Chrome version.
+
+    Args:
+    version (str): The version of Chrome installed on the system.
+
+    Returns:
+    str: The path to the ChromeDriver executable.
+
+    Raises:
+    Exception: If unable to fetch version information or download ChromeDriver.
+    """
     driver_path = os.path.join(os.getcwd(), 'chromedriver-linux64', 'chromedriver')
 
     # Check if chromedriver already exists
@@ -833,7 +1161,7 @@ def get_or_download_chromedriver(version):
     version_base = '.'.join(version.split('.')[:3])
 
     # Use the JSON API to get the latest version information
-    json_url = f"https://googlechromelabs.github.io/chrome-for-testing/latest-versions-per-milestone.json"
+    json_url = "https://googlechromelabs.github.io/chrome-for-testing/latest-versions-per-milestone.json"
     response = requests.get(json_url)
 
     if response.status_code != 200:
@@ -870,6 +1198,23 @@ def get_or_download_chromedriver(version):
 
 
 def scrape_scienceopen(search_terms, retmax):
+    """
+    Scrape articles from ScienceOpen based on search terms.
+
+    This function uses Selenium to automate the process of searching for articles on ScienceOpen,
+    extracting their DOIs, and downloading the associated PDFs.
+
+    Args:
+    search_terms (list): A list of search terms to use on ScienceOpen.
+    retmax (int): The maximum number of articles to scrape.
+
+    Returns:
+    list: A list of filenames of the scraped PDFs.
+
+    Note:
+    This function involves complex web scraping logic and error handling to deal with
+    various scenarios that may occur during the scraping process.
+    """
     LOGGER = logging.getLogger()
     LOGGER.setLevel(logging.WARNING)
 
@@ -881,7 +1226,6 @@ def scrape_scienceopen(search_terms, retmax):
     chrome_options.add_argument("--disable-extensions")
     chrome_options.add_argument("--disable-in-process-stack-traces")
     chrome_options.add_argument("--disable-logging")
-    chrome_options.add_argument("--disable-dev-shm-usage")
     chrome_options.add_argument("--log-level=3")
     chrome_options.add_argument("--output=/dev/null")
     chrome_options.add_experimental_option("excludeSwitches", ["enable-logging"])
@@ -891,6 +1235,7 @@ def scrape_scienceopen(search_terms, retmax):
         driver.set_page_load_timeout(60)  # Set timeout to 60 seconds
         wait = WebDriverWait(driver, 10)
 
+        # Construct the ScienceOpen search URL
         url = (
             f"https://www.scienceopen.com/search#('v'~4_'id'~''_'queryType'~1_'context'~null_'kind'~77_'order'~0_"
             f"'orderLowestFirst'~false_'query'~'{' '.join(search_terms)}'_'filters'~!("
@@ -900,23 +1245,24 @@ def scrape_scienceopen(search_terms, retmax):
         driver.get(url)
         print("ScienceOpen URL loaded successfully")
 
+        # Set up directory for storing scraped links
         scraped_links_dir = os.path.join(os.getcwd(), 'search_info', 'SO_searches')
         os.makedirs(scraped_links_dir, exist_ok=True)
-
         scraped_links_file_path = os.path.join(scraped_links_dir, f"{'_'.join(search_terms)}.txt")
 
+        # Load previously scraped links if file exists
         if os.path.exists(scraped_links_file_path):
             with open(scraped_links_file_path, 'r') as file:
                 scraped_links = file.read().splitlines()
         else:
             scraped_links = []
 
+        # Collect article links
         article_links = []
         while len(article_links) < retmax:
             new_links = driver.find_elements(By.CSS_SELECTOR, 'div.so-article-list-item > div > h3 > a')
             new_links = [link.get_attribute('href') for link in new_links if
                          link.get_attribute('href') not in scraped_links]
-
             article_links.extend(new_links)
 
             try:
@@ -935,12 +1281,14 @@ def scrape_scienceopen(search_terms, retmax):
                 print(f"An unknown exception occurred, please let the dev know: {other}")
                 break
 
+        # Initialize variables for scraping process
         start_time = time.time()
         pbar = tqdm(total=retmax, dynamic_ncols=True)
         count = 0
         scraped_files = []
         failed_articles = []
 
+        # Process each article link
         for link in article_links:
             if count >= retmax:
                 break
@@ -951,6 +1299,7 @@ def scrape_scienceopen(search_terms, retmax):
             try:
                 driver.get(link)
 
+                # Extract PDF link
                 try:
                     pdf_link_element = wait.until(
                         EC.presence_of_element_located(
@@ -961,6 +1310,7 @@ def scrape_scienceopen(search_terms, retmax):
                     failed_articles.append(link)
                     continue
 
+                # Extract DOI
                 try:
                     soup = BeautifulSoup(driver.page_source, 'html.parser')
                     doi_element = soup.find('meta', attrs={'name': 'citation_doi'})
@@ -977,6 +1327,7 @@ def scrape_scienceopen(search_terms, retmax):
                     failed_articles.append(link)
                     continue
 
+                # Download PDF
                 try:
                     pdf_response = requests.get(pdf_link)
                     filename = f"SO_{encoded_doi}.pdf"
@@ -1032,11 +1383,24 @@ def scrape_scienceopen(search_terms, retmax):
             driver.quit()
         return []
 
+
 def arxiv_search(search_terms, retmax, repository):
+    """
+    Search and download papers from arXiv or ChemRxiv repositories.
+
+    Args:
+    search_terms (list): List of search terms.
+    retmax (int): Maximum number of results to retrieve.
+    repository (str): Either 'arxiv' or 'chemrxiv'.
+
+    Returns:
+    list: List of filenames of downloaded papers.
+    """
     print(f"Starting {repository} search with terms: {search_terms}")
     query = "+AND+".join(search_terms).replace(' ', '%20')
     print(f"Constructed query: {query}")
 
+    # Set up tracking file for resuming interrupted searches
     tracking_filename = os.path.join(os.getcwd(), 'search_info', 'arXiv',
                                      f"{repository}_{'_'.join(search_terms)}_count.txt")
     fetched = 0
@@ -1044,7 +1408,6 @@ def arxiv_search(search_terms, retmax, repository):
         with open(tracking_filename, 'r') as f:
             fetched = int(f.read().strip())
     else:
-        fetched = 0
         os.makedirs(os.path.join(os.getcwd(), 'search_info', 'arXiv'), exist_ok=True)
 
     print(f"Starting fetch from count: {fetched}")
@@ -1056,6 +1419,7 @@ def arxiv_search(search_terms, retmax, repository):
     while fetched < retmax:
         current_max = min(100, retmax - fetched)
 
+        # Construct API URL based on repository
         if repository == 'arxiv':
             api_url = f"https://export.arxiv.org/api/query?search_query=all:{query}&start={fetched}&max_results={current_max}"
         elif repository == 'chemrxiv':
@@ -1076,9 +1440,7 @@ def arxiv_search(search_terms, retmax, repository):
                 print(f"API response status code: {response.status_code}")
                 response.raise_for_status()
 
-                # print(f"Raw API response for {repository}:")
-                # print(response.text[:1000])  # Print first 1000 characters of the response
-
+                # Parse response based on repository
                 if repository == 'arxiv':
                     xml_data = response.text
                     soup = BeautifulSoup(xml_data, "xml")
@@ -1093,6 +1455,7 @@ def arxiv_search(search_terms, retmax, repository):
                     print("No more results found. Exiting.")
                     break
 
+                # Process each entry
                 for index, entry in enumerate(entries, start=1):
                     print(f"Processing entry {index} out of {len(entries)}...")
                     retry_count = 0
@@ -1100,6 +1463,7 @@ def arxiv_search(search_terms, retmax, repository):
 
                     while retry_count < MAX_RETRIES and not download_successful:
                         try:
+                            # Extract PDF link and DOI based on repository
                             if repository == 'arxiv':
                                 pdf_link = entry.find('link', {'title': 'pdf'})['href']
                                 arxiv_id = entry.find('id').text.split('/')[-1]
@@ -1111,6 +1475,7 @@ def arxiv_search(search_terms, retmax, repository):
                             print(f"PDF link found: {pdf_link}")
 
                             if pdf_link:
+                                # Download PDF
                                 pdf_response = requests.get(pdf_link)
                                 pdf_response.raise_for_status()
                                 pdf_content = pdf_response.content
@@ -1124,6 +1489,7 @@ def arxiv_search(search_terms, retmax, repository):
                                 fetched += 1
                                 download_successful = True
 
+                                # Update tracking file
                                 with open(tracking_filename, 'w') as f:
                                     f.write(str(fetched))
 
@@ -1164,7 +1530,18 @@ def arxiv_search(search_terms, retmax, repository):
     print(f"{repository} search completed. Total files scraped: {len(scraped_files)}")
     return scraped_files
 
+
 def pubmed_search(search_terms, retmax):
+    """
+    Search and download papers from PubMed Central.
+
+    Args:
+    search_terms (list): List of search terms.
+    retmax (int): Maximum number of results to retrieve.
+
+    Returns:
+    list: List of filenames of downloaded papers.
+    """
     query = " AND ".join(search_terms)
 
     esearch_params = {
@@ -1191,11 +1568,11 @@ def pubmed_search(search_terms, retmax):
             print("No search results found.")
             return []
 
+        # Check for already downloaded files
         downloaded_files = os.listdir(os.path.join(os.getcwd(), 'scraped_docs'))
         downloaded_files = [file.replace("pubmed_", "").replace(".xml", "") for file in downloaded_files if
                             "pubmed_" in file]
 
-        # Count only the downloaded files that are part of this search
         downloaded_from_current_search = [uid for uid in uid_list if uid in downloaded_files]
         num_downloaded = len(downloaded_from_current_search)
 
@@ -1241,7 +1618,14 @@ def pubmed_search(search_terms, retmax):
 
         return scraped_files
 
+
 def read_api_count():
+    """
+    Read the current API call count for Unpaywall.
+
+    Returns:
+    tuple: (date, count) of the last API call count.
+    """
     try:
         with open(os.path.join(os.getcwd(), 'search_info', 'unpaywall', 'api_call_count.txt'), "r") as f:
             data = f.read().split("\n")
@@ -1251,11 +1635,26 @@ def read_api_count():
     except FileNotFoundError:
         return None, 0
 
+
 def write_api_count(date, count):
+    """
+    Write the current API call count for Unpaywall.
+
+    Args:
+    date (str): Current date.
+    count (int): Current API call count.
+    """
     with open(os.path.join(os.getcwd(), 'search_info', 'unpaywall', 'api_call_count.txt'), "w") as f:
         f.write(f"{date}\n{count}")
 
+
 def read_last_state():
+    """
+    Read the last state of Unpaywall search.
+
+    Returns:
+    tuple: (last_chunk, last_page) of the last search state.
+    """
     try:
         with open(os.path.join(os.getcwd(), 'search_info', 'unpaywall', 'last_state.txt'), "r") as f:
             data = json.load(f)
@@ -1263,11 +1662,30 @@ def read_last_state():
     except FileNotFoundError:
         return None, 1
 
+
 def write_last_state(last_chunk, last_page):
+    """
+    Write the current state of Unpaywall search.
+
+    Args:
+    last_chunk (list): Last processed search chunk.
+    last_page (int): Last processed page number.
+    """
     with open(os.path.join(os.getcwd(), 'search_info', 'unpaywall', 'last_state.txt'), "w") as f:
         json.dump({'last_chunk': last_chunk, 'last_page': last_page}, f)
 
+
 def download_pdf(url, doi):
+    """
+    Download a PDF from a given URL.
+
+    Args:
+    url (str): URL of the PDF.
+    doi (str): DOI of the paper.
+
+    Returns:
+    str: Filename of the downloaded PDF, or None if download failed.
+    """
     try:
         pdf_response = requests.get(url)
         pdf_response.raise_for_status()
@@ -1279,30 +1697,48 @@ def download_pdf(url, doi):
         print(f"PDF download failed: {e}")
         return None
 
+
 def unpaywall_search(query_chunks, retmax, email):
+    """
+    Search and download papers from Unpaywall API.
+
+    Args:
+    query_chunks (list): List of search term chunks to query.
+    retmax (int): Maximum number of results to retrieve.
+    email (str): Email address for Unpaywall API authentication.
+
+    Returns:
+    list: List of filenames of downloaded papers and JSON metadata.
+    """
+    # Read the last API call count and date
     last_date, api_count = read_api_count()
     today = datetime.now().strftime("%Y-%m-%d")
     os.makedirs(os.path.join(os.getcwd(), 'search_info', 'unpaywall'), exist_ok=True)
 
+    # Reset API count if it's a new day
     if last_date != today:
         api_count = 0
 
+    # Check if daily API limit is reached
     if api_count >= 100000:
         print("Reached daily API call limit. Try again tomorrow.")
         return []
 
+    # Read the last search state for resuming interrupted searches
     last_chunk, last_page = read_last_state()
 
     resume = False if last_chunk is None else True
     scraped_files = []
     total_downloaded = 0
 
+    # Iterate through search term chunks
     for chunk in query_chunks:
         if resume and chunk != last_chunk:
             continue
         query = " AND ".join(chunk)
         page = last_page if resume and chunk == last_chunk else 1
 
+        # Continue searching while within limits
         while total_downloaded <= retmax and api_count < 100000:
             unpaywall_params = {
                 'query': query,
@@ -1313,6 +1749,7 @@ def unpaywall_search(query_chunks, retmax, email):
 
             print(f"Now scraping Unpaywall for {chunk}, page {page}")
 
+            # Make API request
             try:
                 unpaywall_response = requests.get("https://api.unpaywall.org/v2/search", params=unpaywall_params)
                 unpaywall_response.raise_for_status()
@@ -1320,6 +1757,7 @@ def unpaywall_search(query_chunks, retmax, email):
                 print(f"Request failed: {e}")
                 return scraped_files
 
+            # Update API call count
             api_count += 1
             if api_count >= 100000:
                 print("Reached daily API call limit. Exiting.")
@@ -1331,10 +1769,12 @@ def unpaywall_search(query_chunks, retmax, email):
 
             unpaywall_data = json.loads(unpaywall_response.text)
 
+            # Check if results are present
             if 'results' not in unpaywall_data:
                 print("No results found in the Unpaywall API response.")
                 break
 
+            # Extract DOIs from the response
             doi_list = [result['response']['doi'] for result in unpaywall_data['results'] if
                         'response' in result and 'doi' in result['response']]
 
@@ -1344,6 +1784,7 @@ def unpaywall_search(query_chunks, retmax, email):
 
             downloaded_files = os.listdir(os.path.join(os.getcwd(), 'scraped_docs'))
 
+            # Process each DOI
             for doi in doi_list:
                 if total_downloaded >= retmax:
                     print(f"Reached retmax of {retmax}. Stopping search.")
@@ -1358,6 +1799,7 @@ def unpaywall_search(query_chunks, retmax, email):
                         print(f"Request failed: {e}")
                         continue
 
+                    # Update API call count
                     api_count += 1
                     if api_count >= 100000:
                         print("Reached daily API call limit. Exiting.")
@@ -1369,6 +1811,7 @@ def unpaywall_search(query_chunks, retmax, email):
 
                     doi_data = doi_response.json()
 
+                    # Download PDF if available
                     if doi_data.get('is_oa'):
                         pdf_url = doi_data['best_oa_location']['url_for_pdf']
                         if pdf_url:
@@ -1379,6 +1822,7 @@ def unpaywall_search(query_chunks, retmax, email):
                         else:
                             print(f"No PDF URL found for DOI {doi}")
 
+                    # Save metadata as JSON
                     doi_data_str = json.dumps(doi_data, indent=4)
                     json_filename = f"unpaywall_{doi_to_filename(doi)}.json"
                     with open(os.path.join(os.getcwd(), 'scraped_docs', json_filename), 'w') as f:
@@ -1386,7 +1830,7 @@ def unpaywall_search(query_chunks, retmax, email):
                     scraped_files.append(json_filename)
                     total_downloaded += 1
 
-                    time.sleep(1 / 10)
+                    time.sleep(1 / 10)  # Rate limiting
 
             page += 1
             write_last_state(chunk, page)

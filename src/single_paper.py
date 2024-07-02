@@ -2,12 +2,31 @@ from pathlib import Path
 import subprocess
 from src.document_reader import doc_to_elements
 from src.utils import *
+import xml.etree.ElementTree as ET
+import time
 
+# URLs for PubMed Central API
 ESEARCH_URL = 'https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esearch.fcgi'
 EFETCH_URL = 'https://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch.fcgi'
 
-
 def scrape_and_extract_concurrent(args):
+    """
+    Concurrently scrape papers from PubMed Central and extract information based on a given schema.
+
+    This function performs the following steps:
+    1. Set up the environment and parameters
+    2. Search for papers using the PubMed Central API
+    3. Download full-text XML for each paper
+    4. Extract and validate information from each paper
+    5. Write the extracted information to a CSV file
+
+    Args:
+    args (dict): A dictionary containing configuration parameters.
+
+    Returns:
+    None
+    """
+    # Extract parameters from args or use default values
     search_terms = args.get('search_terms')
     schema_file = args.get('schema_file')
     user_instructions = args.get('user_instructions')
@@ -15,45 +34,43 @@ def scrape_and_extract_concurrent(args):
     model_name_version = args.get('model_name_version')
     retmax = args.get('retmax')
 
-    # Check if the ollama binary exists in the current working directory
+    # Check for ollama binary and download if not present
     if not os.path.isfile('ollama'):
         print("ollama binary not found. Downloading the latest release...")
         download_ollama()
     else:
         print("ollama binary already exists in the current directory.")
 
+    # Start ollama server
     subprocess.Popen(["./ollama", "serve"], stdout=subprocess.DEVNULL, stderr=subprocess.STDOUT)
-    # subprocess.Popen(["./ollama", "serve"])
 
+    # If not in auto mode, prompt for user inputs
     if auto is None:
         search_terms = input("Enter search terms (comma-separated): ").split(',')
         retmax = int(input("Enter the maximum number of papers to process: "))
-
-        # Select the schema file
         schema_file = select_schema_file()
-
-        # Provide extraction information
         model_name_version = input("Please enter the model name and version (e.g., 'mistral:7b-instruct-v0.2-q8_0'): ")
         user_instructions = input(
             "Please briefly tell the model what information it is trying to extract, in the format of a "
             "command/instructions:\n\n")
     else:
-        # output_directory_id, trash = get_out_id(def_search_terms, maybe_search_terms)
-        # del trash
-        # search_info_file = os.path.join(os.getcwd(), 'search_info', f"{output_directory_id}.txt")
+        # In auto mode, construct schema file path
         schema_file = os.path.join(os.getcwd(), 'dataModels', schema_file)
+
+    # Split model name and version
     try:
         model_name, model_version = model_name_version.split(':')
     except ValueError:
         model_name = model_name_version
         model_version = 'latest'
 
+    # Set up output directory
     output_dir = os.path.join(os.getcwd(), 'results')
     os.makedirs(output_dir, exist_ok=True)
 
+    # Check if the model is available, download if not
     model_file = os.path.join(str(Path.home()), ".ollama", "models", "manifests", "registry.ollama.ai", "library",
                               model_name, model_version)
-
     if not os.path.exists(model_file):
         print(f"Model file {model_file} not found. Pulling the model...")
         try:
@@ -62,22 +79,22 @@ def scrape_and_extract_concurrent(args):
             print(f"Failed to pull the model: {e}")
             return
 
-    # Load schema file
+    # Load schema file and generate prompt
     schema_data, key_columns = load_schema_file(schema_file)
-
     num_columns = len(schema_data)
-
     headers = [schema_data[column_number]['name'] for column_number in range(1, num_columns + 1)] + ['paper']
-
-    # print(f"Schema Data: \n{schema_data}\n\n")
     prompt = generate_prompt(schema_data, user_instructions, key_columns)
 
+    # Set up CSV file for results
     csv_file = os.path.join(os.getcwd(), 'results', f"{os.path.splitext(schema_file)[0].split('/')[-1]}.csv")
 
+    # Get lists of processed PMIDs and PMIDs with no full text
     processed_pmids, no_fulltext_pmids = get_processed_pmids(csv_file)
 
+    # Construct search query
     query = " AND ".join(search_terms) + " AND free full text[filter]"
 
+    # Set up search parameters
     esearch_params = {
         'db': 'pmc',
         'term': query,
@@ -85,8 +102,10 @@ def scrape_and_extract_concurrent(args):
         'retmax': retmax
     }
 
+    # Generate examples for validation
     examples = generate_examples(schema_data)
 
+    # Perform search
     print("Now performing esearch...")
     try:
         esearch_response = requests.get(ESEARCH_URL, params=esearch_params)
@@ -103,6 +122,7 @@ def scrape_and_extract_concurrent(args):
             print("No search results found.")
             return
 
+        # Check for already downloaded files
         downloaded_files = os.listdir(os.path.join(os.getcwd(), 'scraped_docs'))
         downloaded_files = [file.replace("pubmed_", "").replace(".xml", "") for file in
                             downloaded_files if "pubmed_" in file]
@@ -116,6 +136,7 @@ def scrape_and_extract_concurrent(args):
         ollama_url = "http://localhost:11434"
         max_retries = 3
 
+        # Process each UID
         for uid in uid_list:
             if uid in processed_pmids:
                 print(f"UID {uid} already processed. Skipping.")
@@ -127,7 +148,7 @@ def scrape_and_extract_concurrent(args):
                 print("Reached maximum number of downloads for this search. Stopping.")
                 break
             if uid not in downloaded_files:
-
+                # Fetch full text XML
                 efetch_params = {
                     'db': 'pmc',
                     'id': uid,
@@ -167,9 +188,10 @@ def scrape_and_extract_concurrent(args):
                 retry_count = 0
                 success = False
 
+                # Attempt extraction with retries
                 while retry_count < max_retries and not success:
                     try:
-
+                        # Set up model options
                         model_options = {
                             "num_ctx": 32768,
                             "num_predict": 2048,
@@ -184,6 +206,7 @@ def scrape_and_extract_concurrent(args):
                             "stop": ["|||"],
                         }
 
+                        # Prepare prompt and send request to ollama
                         prompt_with_content = (f"{prompt}\n\n{paper_content}\n\nAgain, please make sure to respond "
                                                f"only in the specified format exactly as described, or you will cause"
                                                f" errors.\nResponse:")
@@ -205,6 +228,7 @@ def scrape_and_extract_concurrent(args):
                             retry_count = max_retries
                             continue
 
+                        # Parse and validate the result
                         parsed_result = parse_llm_response(result, num_columns)
                         if not parsed_result:
                             print("Parsed Result empty, trying again")
@@ -214,14 +238,11 @@ def scrape_and_extract_concurrent(args):
                             print("Parsed result:")
                             print(parsed_result)
 
-                        row = 0
-                        item = 0
-
+                        # Clean up 'null' values
                         for row in parsed_result:
                             for item in row:
                                 try:
-                                    if item.lower().replace(" ",
-                                                            "") == 'null' or item == '' or item == '""' or item == "''":
+                                    if item.lower().replace(" ", "") == 'null' or item == '' or item == '""' or item == "''":
                                         parsed_result[row][item] = 'null'
                                 except:
                                     pass
@@ -232,6 +253,7 @@ def scrape_and_extract_concurrent(args):
                             print("Validated result:")
                             print(validated_result)
 
+                            # Filter results based on key columns
                             for key_column in key_columns:
                                 if key_column is not None:
                                     key_values = set()
@@ -243,9 +265,11 @@ def scrape_and_extract_concurrent(args):
                                             filtered_result.append(row)
                                     validated_result = filtered_result
 
+                            # Add UID to each row
                             for row in validated_result:
                                 row.append(uid)
 
+                            # Write results to CSV
                             write_to_csv(validated_result, headers, filename=csv_file)
 
                             success = True

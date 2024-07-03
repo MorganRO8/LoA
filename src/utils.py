@@ -907,9 +907,9 @@ def generate_examples(schema_data, num_examples=3):
                 max_value = column_data.get('max_value', column_number + 10)
 
                 # Generate two random integers for the range
-                random.seed(datetime.datetime.now().timestamp())
+                random.seed(datetime.now().timestamp())
                 rand1 = random.randint(min_value, max_value)
-                random.seed(datetime.datetime.now().timestamp())
+                random.seed(datetime.now().timestamp())
                 rand2 = random.randint(min_value, max_value)
 
                 # Ensure the first number is smaller

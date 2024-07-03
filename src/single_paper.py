@@ -9,6 +9,7 @@ import time
 ESEARCH_URL = 'https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esearch.fcgi'
 EFETCH_URL = 'https://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch.fcgi'
 
+
 def scrape_and_extract_concurrent(args):
     """
     Concurrently scrape papers from PubMed Central and extract information based on a given schema.
@@ -86,7 +87,8 @@ def scrape_and_extract_concurrent(args):
     prompt = generate_prompt(schema_data, user_instructions, key_columns)
 
     # Set up CSV file for results
-    csv_file = os.path.join(os.getcwd(), 'results', f"{model_name}_{model_version}_{os.path.splitext(schema_file)[0].split('/')[-1]}.csv")
+    csv_file = os.path.join(os.getcwd(), 'results',
+                            f"{model_name}_{model_version}_{os.path.splitext(schema_file)[0].split('/')[-1]}.csv")
 
     # Get lists of processed PMIDs and PMIDs with no full text
     processed_pmids, no_fulltext_pmids = get_processed_pmids(csv_file)
@@ -223,10 +225,15 @@ def scrape_and_extract_concurrent(args):
                         print("Unparsed result:")
                         print(result)
 
-                        if result == '|||':
+                        # Check if the model is trying to tell us there are no results
+                        if result.strip() == '|||' or result.strip() == '':
                             print(f"Got signal from model that the information is not present in {filename}")
-                            retry_count = max_retries
-                            continue
+                            result = ""
+                            n = 0
+                            while n < num_columns:
+                                result += "'null', "
+                                n += 1
+                            result = result[:-2]
 
                         # Parse and validate the result
                         parsed_result = parse_llm_response(result, num_columns)
@@ -242,7 +249,8 @@ def scrape_and_extract_concurrent(args):
                         for row in parsed_result:
                             for item in row:
                                 try:
-                                    if item.lower().replace(" ", "") == 'null' or item == '' or item == '""' or item == "''":
+                                    if item.lower().replace(" ",
+                                                            "") == 'null' or item == '' or item == '""' or item == "''":
                                         parsed_result[row][item] = 'null'
                                 except:
                                     pass

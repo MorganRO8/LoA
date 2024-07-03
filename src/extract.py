@@ -165,10 +165,15 @@ def batch_extract(args):
                 print("Unparsed result:")
                 print(result)
 
-                if response == '|||':
-                    print(f"Got signal from model that the information is not present in {file}")
-                    retry_count = max_retries
-                    continue
+                # Check if the model is trying to tell us there are no results
+                if result.strip() == '|||' or result.strip() == '':
+                    print(f"Got signal from model that the information is not present")
+                    result = ""
+                    n = 0
+                    while n < num_columns:
+                        result += "'null', "
+                        n += 1
+                    result = result[:-2]
 
                 # Parse and validate the result
                 parsed_result = parse_llm_response(result, num_columns)
@@ -308,9 +313,15 @@ def extract(file_path, schema_file, model_name_version, user_instructions):
             response.raise_for_status()
             result = response.json()["response"]
 
-            if result == '|||':
-                print(f"Got signal from model that the information is not present in {file_path}")
-                return None
+            # Check if the model is trying to tell us there are no results
+            if result.strip() == '|||' or result.strip() == '':
+                print(f"Got signal from model that the information is not present")
+                result = ""
+                n = 0
+                while n < num_columns:
+                    result += "'null', "
+                    n += 1
+                result = result[:-2]
 
             # Parse and validate the result
             parsed_result = parse_llm_response(result, num_columns)

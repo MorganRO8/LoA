@@ -123,6 +123,8 @@ def scrape_and_extract_concurrent(args):
         if not uid_list:
             print("No search results found.")
             return
+        else:
+            print(f"Found {len(uid_list)} results from pubmed")
 
         # Check for already downloaded files
         downloaded_files = os.listdir(os.path.join(os.getcwd(), 'scraped_docs'))
@@ -135,11 +137,16 @@ def scrape_and_extract_concurrent(args):
 
         print(f"{num_downloaded} files already downloaded for this search.")
 
+        # Define some variables for the loop
         ollama_url = "http://localhost:11434"
         max_retries = 3
+        current_paper = 1
 
         # Process each UID
         for uid in uid_list:
+            # Keep track of which paper we're on
+            print(f"Now processing paper {current_paper}/{len(uid_list)}")
+            current_paper += 1
             if uid in processed_pmids:
                 print(f"UID {uid} already processed. Skipping.")
                 continue

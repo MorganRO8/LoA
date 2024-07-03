@@ -171,7 +171,7 @@ def batch_extract(args):
                     result = ""
                     n = 0
                     while n < num_columns:
-                        result += "'null', "
+                        result += "null, "
                         n += 1
                     result = result[:-2]
 
@@ -319,7 +319,7 @@ def extract(file_path, schema_file, model_name_version, user_instructions):
                 result = ""
                 n = 0
                 while n < num_columns:
-                    result += "'null', "
+                    result += "null, "
                     n += 1
                 result = result[:-2]
 

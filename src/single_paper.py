@@ -231,7 +231,7 @@ def scrape_and_extract_concurrent(args):
                             result = ""
                             n = 0
                             while n < num_columns:
-                                result += "'null', "
+                                result += "null, "
                                 n += 1
                             result = result[:-2]
 

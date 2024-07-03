@@ -812,7 +812,7 @@ def validate_result(parsed_result, schema_data, examples):
 
         # Process and validate each value in the row
         for i, value in enumerate(row):
-            if value != 'null':
+            if value.replace("'","").replace('"','').strip() != 'null':
                 column_data = schema_data[i + 1]
                 try:
                     processed_value = process_value(value, column_data)

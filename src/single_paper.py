@@ -86,7 +86,7 @@ def scrape_and_extract_concurrent(args):
     prompt = generate_prompt(schema_data, user_instructions, key_columns)
 
     # Set up CSV file for results
-    csv_file = os.path.join(os.getcwd(), 'results', f"{os.path.splitext(schema_file)[0].split('/')[-1]}.csv")
+    csv_file = os.path.join(os.getcwd(), 'results', f"{model_name}_{model_version}_{os.path.splitext(schema_file)[0].split('/')[-1]}.csv")
 
     # Get lists of processed PMIDs and PMIDs with no full text
     processed_pmids, no_fulltext_pmids = get_processed_pmids(csv_file)

@@ -69,7 +69,8 @@ def batch_extract(args):
                             os.path.isfile(os.path.join(os.getcwd(), 'scraped_docs', file))]
 
     # Set up CSV file for results
-    csv_file = os.path.join(os.getcwd(), 'results', f"{os.path.splitext(schema_file)[0].split('/')[-1]}.csv")
+    csv_file = os.path.join(os.getcwd(), 'results',
+                            f"{model_name}_{model_version}_{os.path.splitext(schema_file)[0].split('/')[-1]}.csv")
 
     # Check for already processed papers
     if os.path.exists(csv_file):

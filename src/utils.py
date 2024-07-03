@@ -417,8 +417,6 @@ def elements_to_string(elements_list):
     return formatted_output
 
 
-import os
-
 
 def select_schema_file():
     """
@@ -582,10 +580,6 @@ Paper Contents:
     """
 
     return prompt
-
-
-import csv
-import re
 
 
 def parse_llm_response(response, num_columns):

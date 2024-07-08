@@ -1,8 +1,15 @@
 import subprocess
 import sys
 from pathlib import Path
-from src.utils import *
+import os
+import csv
+import requests
+import json
 from src.document_reader import doc_to_elements
+from src.utils import (load_schema_file, generate_prompt, generate_examples,
+                       parse_llm_response, validate_result, write_to_csv,
+                       truncate_text, select_search_info_file, select_schema_file,
+                       get_out_id, list_files_in_directory, download_ollama)
 
 
 def batch_extract(args):
@@ -95,7 +102,7 @@ def batch_extract(args):
     if not os.path.exists(model_file):
         print(f"Model file {model_file} not found. Pulling the model...")
         try:
-            subprocess.run(["./ollama", "pull", model_name], check=True)
+            subprocess.run(["./ollama", "pull", model_name_version], check=True)
         except subprocess.CalledProcessError as e:
             print(f"Failed to pull the model: {e}")
             return
@@ -153,7 +160,7 @@ def batch_extract(args):
                 # Prepare prompt and send request to ollama
                 prompt_with_content = f"{prompt}\n\n{paper_content}\n\nAgain, please make sure to respond only in the specified format exactly as described, or you will cause errors.\nResponse:"
                 data = {
-                    "model": model_name,
+                    "model": model_name_version,
                     "prompt": prompt_with_content,
                     "stream": False,
                     "options": model_options
@@ -247,11 +254,7 @@ def batch_extract(args):
 
 def extract(file_path, schema_file, model_name_version, user_instructions):
     '''
-    Extract function for processing a single paper.
-
-    This function is designed to process a single file, making it suitable for
-    parallelization. It loads the model for each file, which is slightly slower
-    but allows for better parallelization.
+    Extract function for processing a single paper and writing results to a CSV file.
 
     Args:
     file_path (str): Path to the file to be processed.
@@ -262,6 +265,7 @@ def extract(file_path, schema_file, model_name_version, user_instructions):
     Returns:
     list or None: Validated results if successful, None if extraction fails.
     '''
+
     # Load schema file
     schema_data, key_columns = load_schema_file(schema_file)
     num_columns = len(schema_data)
@@ -283,6 +287,14 @@ def extract(file_path, schema_file, model_name_version, user_instructions):
     retry_count = 0
     success = False
     ollama_url = "http://localhost:11434"
+
+    # Split model name and version
+    try:
+        model_name, model_version = model_name_version.split(':')
+    except ValueError:
+        model_name = model_name_version
+        model_version = 'latest'
+        model_name_version = f"{model_name}:{model_version}"
 
     while retry_count < max_retries and not success:
         try:
@@ -313,8 +325,10 @@ def extract(file_path, schema_file, model_name_version, user_instructions):
             response.raise_for_status()
             result = response.json()["response"]
 
+            print(f"Unparsed Result:\n{result}")
+
             # Check if the model is trying to tell us there are no results
-            if result.strip() == '|||' or result.strip() == '':
+            if 'no information found' in result.strip().lower() or result.strip() == '':
                 print(f"Got signal from model that the information is not present")
                 result = ""
                 n = 0
@@ -325,12 +339,14 @@ def extract(file_path, schema_file, model_name_version, user_instructions):
 
             # Parse and validate the result
             parsed_result = parse_llm_response(result, num_columns)
+            print(f"Parsed Result:\n{parsed_result}")
             if not parsed_result:
                 print("Parsed Result empty, trying again")
                 retry_count += 1
                 continue
 
             validated_result = validate_result(parsed_result, schema_data, examples)
+            print(f"Validated Result:\n{validated_result}")
 
             if validated_result:
                 paper_filename = os.path.splitext(os.path.basename(file_path))[0]
@@ -350,6 +366,11 @@ def extract(file_path, schema_file, model_name_version, user_instructions):
                 # Add paper filename to each row
                 for row in validated_result:
                     row.append(paper_filename)
+
+                # Write results to CSV
+                csv_file = os.path.join(os.getcwd(), 'results',
+                                        f"{model_name}_{model_version}_{os.path.splitext(schema_file)[0].split('/')[-1]}.csv")
+                write_to_csv(validated_result, headers, filename=csv_file)
 
                 success = True
                 return validated_result

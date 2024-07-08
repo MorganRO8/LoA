@@ -3,8 +3,9 @@ from unstructured.staging.base import convert_to_dict
 from unstructured.partition.auto import partition
 from unstructured.partition.pdf import partition_pdf
 from pdf2image.exceptions import PDFSyntaxError
-from src.utils import *
 import logging
+import os
+from src.utils import has_multiple_columns, xml_to_string, elements_to_string
 
 # Configure logging to minimize output from the 'unstructured' library
 LOGGER = logging.getLogger()

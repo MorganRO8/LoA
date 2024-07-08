@@ -1,4 +1,3 @@
-from src.utils import *
 import os
 import sys
 

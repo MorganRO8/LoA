@@ -1,9 +1,9 @@
 from pathlib import Path
 import subprocess
-from src.document_reader import doc_to_elements
-from src.utils import *
-import xml.etree.ElementTree as ET
-import time
+import sys
+import os
+from src.utils import (download_ollama, select_schema_file)
+from src.scrape import (pubmed_search, arxiv_search, scrape_scienceopen, unpaywall_search)
 
 # URLs for PubMed Central API
 ESEARCH_URL = 'https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esearch.fcgi'
@@ -12,14 +12,7 @@ EFETCH_URL = 'https://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch.fcgi'
 
 def scrape_and_extract_concurrent(args):
     """
-    Concurrently scrape papers from PubMed Central and extract information based on a given schema.
-
-    This function performs the following steps:
-    1. Set up the environment and parameters
-    2. Search for papers using the PubMed Central API
-    3. Download full-text XML for each paper
-    4. Extract and validate information from each paper
-    5. Write the extracted information to a CSV file
+    Concurrently scrape papers from multiple sources and extract information based on a given schema.
 
     Args:
     args (dict): A dictionary containing configuration parameters.
@@ -28,35 +21,61 @@ def scrape_and_extract_concurrent(args):
     None
     """
     # Extract parameters from args or use default values
-    search_terms = args.get('search_terms')
+    def_search_terms = args.get('def_search_terms')
+    maybe_search_terms = args.get('maybe_search_terms')
     schema_file = args.get('schema_file')
     user_instructions = args.get('user_instructions')
     auto = args.get('auto')
     model_name_version = args.get('model_name_version')
-    retmax = args.get('retmax')
+    retmax = args.get('retmax', 100)  # Default to 100 if not specified
+    email = args.get('email')  # For Unpaywall
+
+    # If not in auto mode, prompt for user inputs
+    if auto is None:
+        def_search_terms = input(
+            "Enter 'definitely contains' search terms (comma separated) or type 'None': ").lower().split(',')
+        maybe_search_terms = input(
+            "Enter 'maybe contains' search terms (comma separated) or type 'None': ").lower().split(',')
+        retmax = int(input("Enter the maximum number of papers to process per source: "))
+        schema_file = select_schema_file()
+        model_name_version = input("Please enter the model name and version (e.g., 'mistral:7b-instruct-v0.2-q8_0'): ")
+        user_instructions = input("Please briefly tell the model what information it is trying to extract: ")
+
+        # Ask which sources to search
+        pubmedyn = input("Search PubMed? (y/n): ").lower() == 'y'
+        arxivyn = input("Search arXiv? (y/n): ").lower() == 'y'
+        chemrxivyn = input("Search ChemRxiv? (y/n): ").lower() == 'y'
+        scienceopenyn = input("Search ScienceOpen? (y/n): ").lower() == 'y'
+        unpaywallyn = input("Search Unpaywall? (y/n): ").lower() == 'y'
+        if unpaywallyn:
+            email = input("Enter email for Unpaywall API: ")
+    else:
+        # In auto mode, use provided args or default to searching all sources
+        pubmedyn = args.get('pubmedyn', True)
+        arxivyn = args.get('arxivyn', True)
+        chemrxivyn = args.get('chemrxivyn', True)
+        scienceopenyn = args.get('scienceopenyn', True)
+        unpaywallyn = args.get('unpaywallyn', True)
+        schema_file = os.path.join(os.getcwd(), 'dataModels', schema_file)
+
+    # Prepare search terms
+    search_terms = [term for term in def_search_terms if term.lower() != 'none']
+    search_terms.extend([term for term in maybe_search_terms if term.lower() != 'none'])
+
+    # Set up output directory
+    output_dir = os.path.join(os.getcwd(), 'results')
+    os.makedirs(output_dir, exist_ok=True)
 
     # Check for ollama binary and download if not present
     if not os.path.isfile('ollama'):
         print("ollama binary not found. Downloading the latest release...")
         download_ollama()
-    else:
-        print("ollama binary already exists in the current directory.")
 
     # Start ollama server
     subprocess.Popen(["./ollama", "serve"], stdout=subprocess.DEVNULL, stderr=subprocess.STDOUT)
 
-    # If not in auto mode, prompt for user inputs
-    if auto is None:
-        search_terms = input("Enter search terms (comma-separated): ").split(',')
-        retmax = int(input("Enter the maximum number of papers to process: "))
-        schema_file = select_schema_file()
-        model_name_version = input("Please enter the model name and version (e.g., 'mistral:7b-instruct-v0.2-q8_0'): ")
-        user_instructions = input(
-            "Please briefly tell the model what information it is trying to extract, in the format of a "
-            "command/instructions:\n\n")
-    else:
-        # In auto mode, construct schema file path
-        schema_file = os.path.join(os.getcwd(), 'dataModels', schema_file)
+    # Debug version of starting the server
+    # subprocess.Popen(["./ollama", "serve"])
 
     # Split model name and version
     try:
@@ -64,10 +83,7 @@ def scrape_and_extract_concurrent(args):
     except ValueError:
         model_name = model_name_version
         model_version = 'latest'
-
-    # Set up output directory
-    output_dir = os.path.join(os.getcwd(), 'results')
-    os.makedirs(output_dir, exist_ok=True)
+        model_name_version = f"{model_name}:{model_version}"
 
     # Check if the model is available, download if not
     model_file = os.path.join(str(Path.home()), ".ollama", "models", "manifests", "registry.ollama.ai", "library",
@@ -75,235 +91,43 @@ def scrape_and_extract_concurrent(args):
     if not os.path.exists(model_file):
         print(f"Model file {model_file} not found. Pulling the model...")
         try:
-            subprocess.run(["./ollama", "pull", model_name], check=True)
+            subprocess.run(["./ollama", "pull", model_name_version], check=True)
         except subprocess.CalledProcessError as e:
             print(f"Failed to pull the model: {e}")
             return
 
-    # Load schema file and generate prompt
-    schema_data, key_columns = load_schema_file(schema_file)
-    num_columns = len(schema_data)
-    headers = [schema_data[column_number]['name'] for column_number in range(1, num_columns + 1)] + ['paper']
-    prompt = generate_prompt(schema_data, user_instructions, key_columns)
+    # Perform searches and extractions
+    if pubmedyn:
+        print("Searching PubMed...")
+        pubmed_search(search_terms, retmax, concurrent=True, schema_file=schema_file,
+                      user_instructions=user_instructions, model_name_version=model_name_version)
 
-    # Set up CSV file for results
-    csv_file = os.path.join(os.getcwd(), 'results',
-                            f"{model_name}_{model_version}_{os.path.splitext(schema_file)[0].split('/')[-1]}.csv")
+    if arxivyn:
+        print("Searching arXiv...")
+        arxiv_search(search_terms, retmax, 'arxiv', concurrent=True, schema_file=schema_file,
+                     user_instructions=user_instructions, model_name_version=model_name_version)
 
-    # Get lists of processed PMIDs and PMIDs with no full text
-    processed_pmids, no_fulltext_pmids = get_processed_pmids(csv_file)
+    if chemrxivyn:
+        print("Searching ChemRxiv...")
+        arxiv_search(search_terms, retmax, 'chemrxiv', concurrent=True, schema_file=schema_file,
+                     user_instructions=user_instructions, model_name_version=model_name_version)
 
-    # Construct search query
-    query = " AND ".join(search_terms) + " AND free full text[filter]"
+    if scienceopenyn:
+        print("Searching ScienceOpen...")
+        scrape_scienceopen(search_terms, retmax, concurrent=True, schema_file=schema_file,
+                           user_instructions=user_instructions, model_name_version=model_name_version)
 
-    # Set up search parameters
-    esearch_params = {
-        'db': 'pmc',
-        'term': query,
-        'retmode': 'json',
-        'retmax': retmax
-    }
-
-    # Generate examples for validation
-    examples = generate_examples(schema_data)
-
-    # Perform search
-    print("Now performing esearch...")
-    try:
-        esearch_response = requests.get(ESEARCH_URL, params=esearch_params)
-        esearch_response.raise_for_status()
-    except requests.exceptions.RequestException as e:
-        print(f"Request failed: {e}")
-        return
-    esearch_data = esearch_response.json()
-
-    if 'esearchresult' in esearch_data:
-        uid_list = esearch_data['esearchresult']['idlist']
-
-        if not uid_list:
-            print("No search results found.")
-            return
+    if unpaywallyn:
+        if email is None:
+            print("Email is required for Unpaywall search. Skipping Unpaywall.")
         else:
-            print(f"Found {len(uid_list)} results from pubmed")
+            print("Searching Unpaywall...")
+            unpaywall_search([search_terms], retmax, email, concurrent=True, schema_file=schema_file,
+                             user_instructions=user_instructions, model_name_version=model_name_version)
 
-        # Check for already downloaded files
-        downloaded_files = os.listdir(os.path.join(os.getcwd(), 'scraped_docs'))
-        downloaded_files = [file.replace("pubmed_", "").replace(".xml", "") for file in
-                            downloaded_files if "pubmed_" in file]
+    print("Concurrent scraping and extraction completed.")
 
-        # Count only the downloaded files that are part of this search
-        downloaded_from_current_search = [uid for uid in uid_list if uid in downloaded_files]
-        num_downloaded = len(downloaded_from_current_search)
-
-        print(f"{num_downloaded} files already downloaded for this search.")
-
-        # Define some variables for the loop
-        ollama_url = "http://localhost:11434"
-        max_retries = 3
-        current_paper = 1
-
-        # Process each UID
-        for uid in uid_list:
-            # Keep track of which paper we're on
-            print(f"Now processing paper {current_paper}/{len(uid_list)}")
-            current_paper += 1
-            if uid in processed_pmids:
-                print(f"UID {uid} already processed. Skipping.")
-                continue
-            if uid in no_fulltext_pmids:
-                print(f"UID {uid} previously found to have no full text. Skipping.")
-                continue
-            if num_downloaded >= retmax:
-                print("Reached maximum number of downloads for this search. Stopping.")
-                break
-            if uid not in downloaded_files:
-                # Fetch full text XML
-                efetch_params = {
-                    'db': 'pmc',
-                    'id': uid,
-                    'retmode': 'xml',
-                    'rettype': 'full'
-                }
-
-                print(f"Now performing efetch for UID {uid}...")
-                try:
-                    efetch_response = requests.get(EFETCH_URL, params=efetch_params)
-                    efetch_response.raise_for_status()
-                except requests.exceptions.RequestException as e:
-                    print(f"Request failed: {e}")
-                    continue
-
-                xml_data = efetch_response.text
-                root = ET.fromstring(xml_data)
-
-                # Check if full-text is available
-                if root.find(".//body"):
-                    filename = f"pubmed_{uid}.xml"
-                    file_path = os.path.join(os.getcwd(), 'scraped_docs', filename)
-                    with open(file_path, 'w') as f:
-                        f.write(xml_data)
-                    num_downloaded += 1
-                else:
-                    print(f"Full text not available for UID {uid}. Skipping.")
-                    no_fulltext_pmids.add(uid)
-                    with open(os.path.join(os.getcwd(), 'search_info', 'no_fulltext.txt'), 'a') as f:
-                        f.write(f"{uid}\n")
-                    time.sleep(0.35)
-                    continue
-
-                # Extract data from the scraped paper
-                paper_content = truncate_text(doc_to_elements(file_path))
-
-                retry_count = 0
-                success = False
-
-                # Attempt extraction with retries
-                while retry_count < max_retries and not success:
-                    try:
-                        # Set up model options
-                        model_options = {
-                            "num_ctx": 32768,
-                            "num_predict": 2048,
-                            "mirostat": 0,
-                            "mirostat_tau": 0.5,
-                            "mirostat_eta": 1,
-                            "tfs_z": 1,
-                            "top_p": 1,
-                            "top_k": 5,
-                            "temperature": (0.35 * retry_count),
-                            "repeat_penalty": (1.1 + (0.1 * retry_count)),
-                            "stop": ["|||"],
-                        }
-
-                        # Prepare prompt and send request to ollama
-                        prompt_with_content = (f"{prompt}\n\n{paper_content}\n\nAgain, please make sure to respond "
-                                               f"only in the specified format exactly as described, or you will cause"
-                                               f" errors.\nResponse:")
-                        data = {
-                            "model": model_name,
-                            "prompt": prompt_with_content,
-                            "stream": False,
-                            "options": model_options
-                        }
-                        response = requests.post(f"{ollama_url}/api/generate", json=data)
-                        response.raise_for_status()
-                        result = response.json()["response"]
-
-                        print("Unparsed result:")
-                        print(result)
-
-                        # Check if the model is trying to tell us there are no results
-                        if result.strip() == '|||' or result.strip() == '':
-                            print(f"Got signal from model that the information is not present in {filename}")
-                            result = ""
-                            n = 0
-                            while n < num_columns:
-                                result += "null, "
-                                n += 1
-                            result = result[:-2]
-
-                        # Parse and validate the result
-                        parsed_result = parse_llm_response(result, num_columns)
-                        if not parsed_result:
-                            print("Parsed Result empty, trying again")
-                            retry_count += 1
-                            continue
-                        else:
-                            print("Parsed result:")
-                            print(parsed_result)
-
-                        # Clean up 'null' values
-                        for row in parsed_result:
-                            for item in row:
-                                try:
-                                    if item.lower().replace(" ",
-                                                            "") == 'null' or item == '' or item == '""' or item == "''":
-                                        parsed_result[row][item] = 'null'
-                                except:
-                                    pass
-
-                        validated_result = validate_result(parsed_result, schema_data, examples)
-
-                        if validated_result:
-                            print("Validated result:")
-                            print(validated_result)
-
-                            # Filter results based on key columns
-                            for key_column in key_columns:
-                                if key_column is not None:
-                                    key_values = set()
-                                    filtered_result = []
-                                    for row in validated_result:
-                                        key_value = row[key_column - 1]
-                                        if key_value not in key_values:
-                                            key_values.add(key_value)
-                                            filtered_result.append(row)
-                                    validated_result = filtered_result
-
-                            # Add UID to each row
-                            for row in validated_result:
-                                row.append(uid)
-
-                            # Write results to CSV
-                            write_to_csv(validated_result, headers, filename=csv_file)
-
-                            success = True
-
-                        else:
-                            print("Result failed to validate, trying again.")
-                            retry_count += 1
-
-                    except ValueError as e:
-                        print(f"Validation failed for {filename}: {str(e)}")
-                        retry_count += 1
-                        print(f"Retrying ({retry_count}/{max_retries})...")
-
-                    except (requests.exceptions.RequestException, json.JSONDecodeError, KeyError) as e:
-                        print(f"Error processing {filename}: {type(e).__name__} - {str(e)}")
-                        retry_count += 1
-                        print(f"Retrying ({retry_count}/{max_retries})...")
-
-                if not success:
-                    print(f"Failed to extract data from {filename} after {max_retries} retries.")
-                else:
-                    processed_pmids.add(uid)
+    # If not in auto mode, restart the script
+    if auto is None:
+        python = sys.executable
+        os.execl(python, python, *sys.argv)

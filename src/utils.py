@@ -592,9 +592,8 @@ def parse_llm_response(response, num_columns):
     Returns:
     list: A list of unique rows, where each row is a list of column values.
     """
-    # Split the response into lines and remove any lines containing example strings
+    # Split the response into lines
     lines = response.strip().split('\n')
-    lines = [line for line in lines if 'example_string' not in line]
     parsed_data = []
 
     # Use csv reader to properly handle quoted values and commas within fields
@@ -810,7 +809,7 @@ def validate_result(parsed_result, schema_data, examples, key_columns=None):
 
         # Process and validate each value in the row
         for i, value in enumerate(row):
-            if value.replace("'","").replace('"','').strip().lower() != 'null':
+            if value.replace("'","").replace('"','').strip().lower() != 'null' and 'example_string' not in value.replace("'","").replace('"','').strip().lower():
                 all_null = False
                 column_data = schema_data[i + 1]
                 try:

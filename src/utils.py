@@ -541,13 +541,14 @@ Instructions:
 - Each line should contain {num_columns} values, corresponding to the {num_columns} columns in the schema.
 - If information is missing for a column, use 'null' as a placeholder.
 - Do not use anything other than 'null' as a placeholder.
-- Enclose all string values in quotes.
+- Enclose all string values in double-quotes.
 - Never use natural language outside of a string enclosed in double-quotes.
 - For range values, use the format "min-max".
-- Do not include headers, explanations, or any additional formatting.
+- Do not include headers, explanations, summaries, or any additional formatting.
 - Invalid responses will result in retries, thus causing significant time loss per paper.
-- If no relevant information is found, either respond only with 'no information found' or do not respond at all.
-- A response of 'no information found' (without quotes) or an empty response will programmatically signal that we can move on without retrying.
+- If no relevant information is found at all, respond only with 'no information found' or do not respond at all.
+- A response of 'no information found' will invalidate any other results in your response, and prevent any more retries.
+- Only include 'no information found' in your response if there is absolutely no relevant information in the paper, otherwise use 'null' for blank entries.
 - Ignore any information in references that may be included at the end of the paper.
 
 Below I shall provide a few examples to help you understand the desired output format.
@@ -759,7 +760,7 @@ def process_value(value, column_data):
         return value
 
 
-def validate_result(parsed_result, schema_data, examples):
+def validate_result(parsed_result, schema_data, examples, key_columns=None):
     """
     Validate the parsed result against the schema and remove any invalid or example rows.
 
@@ -770,6 +771,7 @@ def validate_result(parsed_result, schema_data, examples):
     parsed_result (list): The parsed data from the language model response.
     schema_data (dict): The schema defining the structure and constraints of the data.
     examples (str): A string containing example rows to be excluded from the result.
+    key_columns (list): A list of column numbers to be used as keys for checking duplicates.
 
     Returns:
     list: A list of validated rows that meet all the schema requirements.
@@ -819,6 +821,13 @@ def validate_result(parsed_result, schema_data, examples):
                     break
             else:
                 validated_row.append('null')
+
+        # Check if at least one key column has a non-null value
+        if row_valid and key_columns:
+            key_values = [validated_row[i-1] for i in key_columns]
+            if all(value == 'null' for value in key_values):
+                print(f"Skipping row with all null key columns: {row}")
+                row_valid = False
 
         if row_valid:
             validated_result.append(validated_row)

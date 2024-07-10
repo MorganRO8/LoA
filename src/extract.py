@@ -201,7 +201,7 @@ def batch_extract(args):
                         except:
                             pass
 
-                validated_result = validate_result(parsed_result, schema_data, examples)
+                validated_result = validate_result(parsed_result, schema_data, examples, key_columns)
 
                 if validated_result:
                     print("Validated result:")
@@ -345,7 +345,7 @@ def extract(file_path, schema_file, model_name_version, user_instructions):
                 retry_count += 1
                 continue
 
-            validated_result = validate_result(parsed_result, schema_data, examples)
+            validated_result = validate_result(parsed_result, schema_data, examples, key_columns)
             print(f"Validated Result:\n{validated_result}")
 
             if validated_result:

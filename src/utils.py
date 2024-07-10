@@ -806,10 +806,12 @@ def validate_result(parsed_result, schema_data, examples, key_columns=None):
 
         validated_row = []
         row_valid = True
+        all_null = True
 
         # Process and validate each value in the row
         for i, value in enumerate(row):
-            if value.replace("'","").replace('"','').strip() != 'null':
+            if value.replace("'","").replace('"','').strip().lower() != 'null':
+                all_null = False
                 column_data = schema_data[i + 1]
                 try:
                     processed_value = process_value(value, column_data)
@@ -822,10 +824,10 @@ def validate_result(parsed_result, schema_data, examples, key_columns=None):
             else:
                 validated_row.append('null')
 
-        # Check if at least one key column has a non-null value
-        if row_valid and key_columns:
+        # Check if at least one key column has a non-null value, but only if the row is not all nulls
+        if row_valid and key_columns and not all_null:
             key_values = [validated_row[i-1] for i in key_columns]
-            if all(value == 'null' for value in key_values):
+            if all(value.lower() == 'null' for value in key_values):
                 print(f"Skipping row with all null key columns: {row}")
                 row_valid = False
 

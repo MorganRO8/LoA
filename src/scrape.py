@@ -466,6 +466,14 @@ def pubmed_search(search_terms, retmax, concurrent=False, schema_file=None, user
     csv_file = os.path.join(os.getcwd(), 'results',
                             f"{model_name}_{model_version}_{os.path.splitext(schema_file)[0].split('/')[-1]}.csv")
 
+    # Load the list of PMIDs without full text
+    no_fulltext_file = os.path.join(os.getcwd(), 'search_info', 'no_fulltext.txt')
+    if os.path.exists(no_fulltext_file):
+        with open(no_fulltext_file, 'r') as f:
+            no_fulltext_pmids = set(f.read().splitlines())
+    else:
+        no_fulltext_pmids = set()
+
     query = " AND ".join(search_terms)
 
     esearch_params = {
@@ -504,6 +512,10 @@ def pubmed_search(search_terms, retmax, concurrent=False, schema_file=None, user
         scraped_files = []
 
         for uid in uid_list:
+            if uid in no_fulltext_pmids:
+                print(f"Skipping UID {uid} as it was previously found to have no full text available.")
+                continue
+
             filename = f"pubmed_{uid}.xml"
             file_path = os.path.join(os.getcwd(), 'scraped_docs', filename)
             if uid not in downloaded_files:
@@ -545,7 +557,10 @@ def pubmed_search(search_terms, retmax, concurrent=False, schema_file=None, user
                         except Exception as e:
                             print(f"Error extracting data from {filename}: {e}")
                 else:
-                    print(f"Full text not available for UID {uid}. Skipping.")
+                    print(f"Full text not available for UID {uid}. Adding to no_fulltext.txt and skipping.")
+                    with open(no_fulltext_file, 'a') as f:
+                        f.write(f"{uid}\n")
+                    no_fulltext_pmids.add(uid)
 
                 time.sleep(1 / 2)
 

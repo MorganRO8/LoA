@@ -173,7 +173,8 @@ def batch_extract(args):
                 print(result)
 
                 # Check if the model is trying to tell us there are no results
-                if result.strip() == '|||' or result.strip() == '':
+                if result.strip().lower().replace("'", "").replace('"',
+                                                                   '') == 'no information found' or result.strip() == '':
                     print(f"Got signal from model that the information is not present")
                     result = ""
                     n = 0
@@ -196,7 +197,9 @@ def batch_extract(args):
                 for row in parsed_result:
                     for item in row:
                         try:
-                            if item.lower().replace(" ", "") == 'null' or item == '' or item == '""' or item == "''":
+                            if item.lower().replace(" ",
+                                                    "") == 'null' or item == '' or item == '""' or item == "''" or item.strip().lower().replace(
+                                    '"', '').replace("'", "") == 'no information found':
                                 parsed_result[row][item] = 'null'
                         except:
                             pass
@@ -328,7 +331,7 @@ def extract(file_path, schema_file, model_name_version, user_instructions):
             print(f"Unparsed Result:\n{result}")
 
             # Check if the model is trying to tell us there are no results
-            if 'no information found' in result.strip().lower() or result.strip() == '':
+            if result.strip().lower().replace("'", "").replace('"', '') == 'no information found' or result.strip() == '':
                 print(f"Got signal from model that the information is not present")
                 result = ""
                 n = 0
@@ -344,6 +347,17 @@ def extract(file_path, schema_file, model_name_version, user_instructions):
                 print("Parsed Result empty, trying again")
                 retry_count += 1
                 continue
+
+            # Clean up 'null' values
+            for row in parsed_result:
+                for item in row:
+                    try:
+                        if item.lower().replace(" ",
+                                                "") == 'null' or item == '' or item == '""' or item == "''" or item.strip().lower().replace(
+                                '"', '').replace("'", "") == 'no information found':
+                            parsed_result[row][item] = 'null'
+                    except:
+                        pass
 
             validated_result = validate_result(parsed_result, schema_data, examples, key_columns)
             print(f"Validated Result:\n{validated_result}")

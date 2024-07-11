@@ -547,8 +547,7 @@ Instructions:
 - Do not include headers, explanations, summaries, or any additional formatting.
 - Invalid responses will result in retries, thus causing significant time loss per paper.
 - If no relevant information is found at all, respond only with 'no information found' or do not respond at all.
-- A response of 'no information found' will invalidate any other results in your response, and prevent any more retries.
-- Only include 'no information found' in your response if there is absolutely no relevant information in the paper, otherwise use 'null' for blank entries.
+- A response of only 'no information found' will signal to skip the paper, but only if that's the entire response.
 - Ignore any information in references that may be included at the end of the paper.
 
 Below I shall provide a few examples to help you understand the desired output format.

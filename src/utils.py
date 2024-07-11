@@ -19,12 +19,37 @@ from datetime import datetime
 import xml.etree.ElementTree as ET
 import requests
 
-
 CONVERT_URL = "https://www.ncbi.nlm.nih.gov/pmc/utils/idconv/v1.0/?ids={}&format=json"
 EUTILS_URL = "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch.fcgi?db=pmc&id={}"
 ESEARCH_URL = 'https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esearch.fcgi'
 EFETCH_URL = 'https://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch.fcgi'
 
+def splashbanner():
+    print("""
+
+              _____           _______                   _____          
+             /\    \         /::\    \                 /\    \         
+            /::\____\       /::::\    \               /::\    \        
+           /:::/    /      /::::::\    \             /::::\    \       
+          /:::/    /      /::::::::\    \           /::::::\    \      
+         /:::/    /      /:::/~~\:::\    \         /:::/\:::\    \     
+        /:::/    /      /:::/    \:::\    \       /:::/__\:::\    \    
+       /:::/    /      /:::/    / \:::\    \     /::::\   \:::\    \   
+      /:::/    /      /:::/____/   \:::\____\   /::::::\   \:::\    \  
+     /:::/    /      |:::|    |     |:::|    | /:::/\:::\   \:::\    \ 
+    /:::/____/       |:::|____|     |:::|    |/:::/  \:::\   \:::\____\
+
+    \:::\    \        \:::\    \   /:::/    / \::/    \:::\  /:::/    /
+     \:::\    \        \:::\    \ /:::/    /   \/____/ \:::\/:::/    / 
+      \:::\    \        \:::\    /:::/    /             \::::::/    /  
+       \:::\    \        \:::\__/:::/    /               \::::/    /   
+        \:::\    \        \::::::::/    /                /:::/    /    
+         \:::\    \        \::::::/    /                /:::/    /     
+          \:::\    \        \::::/    /                /:::/    /      
+           \:::\____\        \::/____/                /:::/    /       
+            \::/    /         ~~                      \::/    /        
+             \/____/                                   \/____/         
+    """)
 
 def print(text):
     """Prints the given text to the console and to a log file, with a timestamp."""

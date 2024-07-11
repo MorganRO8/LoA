@@ -13,7 +13,6 @@ repositories = ['arxiv', 'chemrxiv']  # Decided to remove bio and med, as their 
 # I could be convinced to add them back, but because the api doesn't allow for search terms, I would need to write code
 # to build a local database and search that, which would be time-consuming and a hassle for the end user.
 
-
 class ScrapeParams():
     def __init__(self,args):
         self.def_search_terms = args.get('def_search_terms')

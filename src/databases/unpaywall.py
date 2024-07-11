@@ -6,15 +6,6 @@ from datetime import datetime
 from src.extract import extract
 from src.utils import ( doi_to_filename, is_file_processed)
 
-# Constants
-CONVERT_URL = "https://www.ncbi.nlm.nih.gov/pmc/utils/idconv/v1.0/?ids={}&format=json"
-EUTILS_URL = "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch.fcgi?db=pmc&id={}"
-ESEARCH_URL = 'https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esearch.fcgi'
-EFETCH_URL = 'https://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch.fcgi'
-repositories = ['arxiv', 'chemrxiv']  # Decided to remove bio and med, as their api's are not very good
-# I could be convinced to add them back, but because the api doesn't allow for search terms, I would need to write code
-# to build a local database and search that, which would be time-consuming and a hassle for the end user.
-
 def read_api_count():
     """
     Read the current API call count for Unpaywall.
@@ -109,7 +100,7 @@ def unpaywall_search(query_chunks, retmax, email, concurrent=False, schema_file=
     Returns:
     list: List of filenames of downloaded papers and JSON metadata.
     """
-    if concurrent and (schema_file is None or user_instructions is None or model_name_version is None):
+    if concurrent and any([schema_file is None, user_instructions is None, model_name_version is None]):
         raise ValueError("schema_file, user_instructions, and model_name_version must be provided when concurrent is True")
 
     # Split model name and version

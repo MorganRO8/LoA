@@ -58,16 +58,18 @@ def main():
 
     else:
         # Interactive mode
-        while task not in [1, 2, 3, 4]:
+        while task not in ["1", "2", "3", "4", "5"]:
             # Prompt the user to select a task
             print("Please select a task:")
             print("1. Scrape Papers")
             print("2. Define a CSV Structure")
             print("3. Extract Data from Papers into Defined CSV Structure")
             print("4. Scrape and Extract Concurrently")
+            print("5. Exit")
 
             # Get user input
             task = input("Enter the task number (1, 2, 3, or 4): ")
+            task = str(task) ## force string representation of integer inputs.
 
             # Execute the selected task based on user input
             if task == "1":
@@ -87,8 +89,12 @@ def main():
                 from src.single_paper import scrape_and_extract_concurrent
                 scrape_and_extract_concurrent({})
 
+            elif task == "5":
+                print("Exiting the Library...")
+                sys.exit()
+
             else:
-                print("Invalid task number. Please enter 1 to 4")
+                print("Invalid task number. Please enter 1 to 5.")
 
 
 if __name__ == '__main__':

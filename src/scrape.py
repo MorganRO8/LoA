@@ -25,10 +25,112 @@ EUTILS_URL = "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch.fcgi?db=pmc&i
 ESEARCH_URL = 'https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esearch.fcgi'
 EFETCH_URL = 'https://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch.fcgi'
 repositories = ['arxiv', 'chemrxiv']  # Decided to remove bio and med, as their api's are not very good
-
-
 # I could be convinced to add them back, but because the api doesn't allow for search terms, I would need to write code
 # to build a local database and search that, which would be time-consuming and a hassle for the end user.
+
+class ScrapeParams():
+    def __init__(self,args):
+        self.def_search_terms = args.get('def_search_terms')
+        self.maybe_search_terms = args.get('maybe_search_terms')
+        self.pubmedyn = args.get('pubmedyn')
+        self.arxivyn = args.get('arxivyn')
+        self.soyn = args.get('ScienceOpenyn')
+        self.customdb = args.get('customdb')
+        self.auto = args.get('auto')
+        self.retmax = args.get('retmax')
+        self.base_url = args.get('base_url')
+        self.upwyn = args.get('Unpaywallyn')
+        self.email = args.get('Email')
+        if self.auto is None:
+            # Get 'definitely contains' search terms from user
+            self.def_search_terms = input(
+                "Enter 'definitely contains' search terms (comma separated) or type 'None' to only use maybe search terms: ").lower().split(
+                ',')
+
+            # Get 'maybe contains' search terms from user
+            self.maybe_search_terms = input(
+                "Enter 'maybe contains' search terms (comma separated) or type 'None' to only use definite search terms: ").lower().split(
+                ',')
+
+            # Define maximum returned papers per search term
+            # while True:
+                # try:
+            self.retmax = int(input("Set the maximum number of papers to fetch per search:"))
+            attempt_count = 0
+            while self.retmax < 1:
+                print("Please enter a positive integer.")
+                self.retmax = int(input("Set the maximum number of papers to fetch per search:"))
+                attempt_count+=1
+                if attempt_count == 5:
+                    print("Sorry you're having difficulty. Setting max fetch to 10.")
+                    self.retmax = 10 ## Prevent user from being stuck in an eternal loop if they don't know what a positive integer is after five tries.
+                #     else:
+                #         break
+                # except ValueError:  #This will end the entire job run, forcing the user to start all over...
+                #     print("Please enter a valid number.")
+
+            # Get user preferences for different repositories
+            ## PubMed
+            self.pubmedyn = input("Would you like to search PubMed?(y/n)").lower()
+            attempt_count = 0
+            while self.pubmedyn not in ["y","n"]: #erroneous input check
+                print("Please enter either 'y' or 'n'. ")
+                self.pubmedyn = input("Would you like to search PubMed?(y/n)").lower()
+                attempt_count+=1
+                if attempt_count == 5:
+                    self.pubmedyn = "n"
+                    print("Sorry you're having difficulty.  Skipping PubMed scrape.")
+
+            ## ArXiv
+            self.arxivyn = input("Would you like to search through the ArXivs?(y/n)").lower()
+            attempt_count = 0
+            while self.arxivyn not in ["y","n"]: #erroneous input check
+                print("Please enter either 'y' or 'n'. ")
+                self.arxivyn = input("Would you like to search through the ArXivs?(y/n)").lower()
+                attempt_count+=1
+                if attempt_count == 5:
+                    self.arxivyn = "n"
+                    print("Sorry you're having difficulty.  Skipping ArXiv scrape.")
+            
+            ## ScienceOpen
+            self.soyn = input("Would you like to scrape ScienceOpen?(y/n):").lower()
+            attempt_count = 0
+            while self.soyn not in ["y","n"]: #erroneous input check
+                print("Please enter either 'y' or 'n'. ")
+                self.soyn = input("Would you like to scrape ScienceOpen?(y/n):").lower()
+                attempt_count+=1
+                if attempt_count == 5:
+                    self.soyn = "n"
+                    print("Sorry you're having difficulty.  Skipping ScienceOpen scrape.")
+
+            ## Unpaywall
+            self.upwyn = input("Would you like to scrape Unpaywall?(y/n):").lower()
+            attempt_count = 0
+            while self.upwyn not in ["y","n"]: #erroneous input check
+                print("Please enter either 'y' or 'n'. ")
+                self.upwyn = input("Would you like to scrape Unpaywall?(y/n):").lower()
+                attempt_count+=1
+                if attempt_count == 5:
+                    self.upwyn = "n"
+                    print("Sorry you're having difficulty.  Skipping Unpaywall scrape.")
+
+            if self.upwyn == 'y':
+                self.email = input("Enter email for use with Unpaywall:").lower()
+
+            ## Custom Database
+            self.customdb = input("Would you like to search and download from a custom database?(y/n):").lower()
+            attempt_count = 0
+            while self.customdb not in ["y","n"]: #erroneous input check
+                print("Please enter either 'y' or 'n'. ")
+                self.customdb = input("Would you like to search and download from a custom database?(y/n):").lower()
+                attempt_count+=1
+                if attempt_count == 5:
+                    self.customdb = "n"
+                    print("Sorry you're having difficulty.  Skipping custom database scrape.")
+
+            if self.customdb == 'y':
+                self.base_url = input("Enter base url:")
+
 
 def scrape_scienceopen(search_terms, retmax, concurrent=False, schema_file=None, user_instructions=None, model_name_version=None):
     """
@@ -844,55 +946,60 @@ def scrape(args):
     Returns:
     None: The function writes scraped file information to a text file and doesn't return any value.
     """
+
+    ##Going to try to chunk-out and modularize some of this function to make it easier to read/edit.
+
+    scrape_params = ScrapeParams(args)
+
     # Extract arguments or set to None if not provided
-    def_search_terms = args.get('def_search_terms')
-    maybe_search_terms = args.get('maybe_search_terms')
-    pubmedyn = args.get('pubmedyn')
-    arxivyn = args.get('arxivyn')
-    soyn = args.get('ScienceOpenyn')
-    customdb = args.get('customdb')
-    auto = args.get('auto')
-    retmax = args.get('retmax')
-    base_url = args.get('base_url')
-    upwyn = args.get('Unpaywallyn')
-    email = args.get('Email')
+    # def_search_terms = args.get('def_search_terms')
+    # maybe_search_terms = args.get('maybe_search_terms')
+    # pubmedyn = args.get('pubmedyn')
+    # arxivyn = args.get('arxivyn')
+    # soyn = args.get('ScienceOpenyn')
+    # customdb = args.get('customdb')
+    # auto = args.get('auto')
+    # retmax = args.get('retmax')
+    # base_url = args.get('base_url')
+    # upwyn = args.get('Unpaywallyn')
+    # email = args.get('Email')
 
     # If not in automatic mode, get user inputs
-    if auto is None:
-        # Get 'definitely contains' search terms from user
-        def_search_terms = input(
-            "Enter 'definitely contains' search terms (comma separated) or type 'None' to only use maybe search terms: ").lower().split(
-            ',')
+    # if auto is None:
+    #     # Get 'definitely contains' search terms from user
+    #     def_search_terms = input(
+    #         "Enter 'definitely contains' search terms (comma separated) or type 'None' to only use maybe search terms: ").lower().split(
+    #         ',')
 
-        # Get 'maybe contains' search terms from user
-        maybe_search_terms = input(
-            "Enter 'maybe contains' search terms (comma separated) or type 'None' to only use definite search terms: ").lower().split(
-            ',')
+    #     # Get 'maybe contains' search terms from user
+    #     maybe_search_terms = input(
+    #         "Enter 'maybe contains' search terms (comma separated) or type 'None' to only use definite search terms: ").lower().split(
+    #         ',')
 
-        # Define maximum returned papers per search term
-        while True:
-            try:
-                retmax = int(input("Set the maximum number of papers to fetch per search:"))
-                if retmax < 1:
-                    print("Please enter a positive integer.")
-                else:
-                    break
-            except ValueError:
-                print("Please enter a valid number.")
+    #     # Define maximum returned papers per search term
+    #     while True:
+    #         try:
+    #             retmax = int(input("Set the maximum number of papers to fetch per search:"))
+    #             if retmax < 1:
+    #                 print("Please enter a positive integer.")
+    #             else:
+    #                 break
+    #         except ValueError:
+    #             print("Please enter a valid number.")
 
-        # Get user preferences for different repositories
-        pubmedyn = input("Would you like to search pubmed?(y/n)").lower()
-        arxivyn = input("Would you like to search through the arxivs?(y/n)").lower()
-        soyn = input("Would you like to scrape ScienceOpen?(y/n):").lower()
-        upwyn = input("Would you like to scrape unpwaywall?(y/n):").lower()
+    #     # Get user preferences for different repositories
+    #     pubmedyn = input("Would you like to search PubMed?(y/n)").lower()
+    #     arxivyn = input("Would you like to search through the ArXivs?(y/n)").lower()
+    #     soyn = input("Would you like to scrape ScienceOpen?(y/n):").lower()
+    #     upwyn = input("Would you like to scrape Unpaywall?(y/n):").lower()
 
-        if upwyn == 'y':
-            email = input("Enter email for use with unpaywall:").lower()
+    #     if upwyn == 'y':
+    #         email = input("Enter email for use with Unpaywall:").lower()
 
-        customdb = input("Would you like to search and download from a custom database?(y/n):").lower()
+    #     customdb = input("Would you like to search and download from a custom database?(y/n):").lower()
 
-        if customdb == 'y':
-            base_url = input("Enter base url:")
+    #     if customdb == 'y':
+    #         base_url = input("Enter base url:")
 
     # Generate output directory ID and query chunks
     output_directory_id, query_chunks = get_out_id(def_search_terms, maybe_search_terms)

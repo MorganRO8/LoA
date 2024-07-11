@@ -13,35 +13,11 @@ os.makedirs(os.path.join(os.getcwd(), 'logs'), exist_ok=True)
 # This creates a log file with the current timestamp in the filename
 builtins.a = os.path.join(os.getcwd(), "logs", f"{str(datetime.datetime.now()).replace(' ', '_')}.txt")
 from src.utils import print  # Custom print function for logging
-
+from src.utils import splashbanner 
 
 def main():
     # Print ASCII art banner
-    print("""
-
-              _____           _______                   _____          
-             /\    \         /::\    \                 /\    \         
-            /::\____\       /::::\    \               /::\    \        
-           /:::/    /      /::::::\    \             /::::\    \       
-          /:::/    /      /::::::::\    \           /::::::\    \      
-         /:::/    /      /:::/~~\:::\    \         /:::/\:::\    \     
-        /:::/    /      /:::/    \:::\    \       /:::/__\:::\    \    
-       /:::/    /      /:::/    / \:::\    \     /::::\   \:::\    \   
-      /:::/    /      /:::/____/   \:::\____\   /::::::\   \:::\    \  
-     /:::/    /      |:::|    |     |:::|    | /:::/\:::\   \:::\    \ 
-    /:::/____/       |:::|____|     |:::|    |/:::/  \:::\   \:::\____\
-
-    \:::\    \        \:::\    \   /:::/    / \::/    \:::\  /:::/    /
-     \:::\    \        \:::\    \ /:::/    /   \/____/ \:::\/:::/    / 
-      \:::\    \        \:::\    /:::/    /             \::::::/    /  
-       \:::\    \        \:::\__/:::/    /               \::::/    /   
-        \:::\    \        \::::::::/    /                /:::/    /    
-         \:::\    \        \::::::/    /                /:::/    /     
-          \:::\    \        \::::/    /                /:::/    /      
-           \:::\____\        \::/____/                /:::/    /       
-            \::/    /         ~~                      \::/    /        
-             \/____/                                   \/____/         
-    """)
+    splashbanner() # moved to src.utils to make main easier to read
 
     # Initialize task variable
     task = 0

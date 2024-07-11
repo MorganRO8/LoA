@@ -30,7 +30,8 @@ repositories = ['arxiv', 'chemrxiv']  # Decided to remove bio and med, as their 
 # I could be convinced to add them back, but because the api doesn't allow for search terms, I would need to write code
 # to build a local database and search that, which would be time-consuming and a hassle for the end user.
 
-def scrape_scienceopen(search_terms, retmax, concurrent=False, schema_file=None, user_instructions=None, model_name_version=None):
+def scrape_scienceopen(search_terms, retmax, concurrent=False, schema_file=None, user_instructions=None,
+                       model_name_version=None):
     """
     Scrape articles from ScienceOpen based on search terms, with optional concurrent extraction.
 
@@ -46,7 +47,8 @@ def scrape_scienceopen(search_terms, retmax, concurrent=False, schema_file=None,
     list: A list of filenames of the scraped PDFs.
     """
     if concurrent and (schema_file is None or user_instructions is None or model_name_version is None):
-        raise ValueError("schema_file, user_instructions, and model_name_version must be provided when concurrent is True")
+        raise ValueError(
+            "schema_file, user_instructions, and model_name_version must be provided when concurrent is True")
 
     # Split model name and version
     try:
@@ -247,7 +249,8 @@ def scrape_scienceopen(search_terms, retmax, concurrent=False, schema_file=None,
         return []
 
 
-def arxiv_search(search_terms, retmax, repository, concurrent=False, schema_file=None, user_instructions=None, model_name_version=None):
+def arxiv_search(search_terms, retmax, repository, concurrent=False, schema_file=None, user_instructions=None,
+                 model_name_version=None):
     """
     Search and download papers from arXiv or ChemRxiv repositories, with optional concurrent extraction.
 
@@ -264,7 +267,8 @@ def arxiv_search(search_terms, retmax, repository, concurrent=False, schema_file
     list: List of filenames of downloaded papers.
     """
     if concurrent and (schema_file is None or user_instructions is None or model_name_version is None):
-        raise ValueError("schema_file, user_instructions, and model_name_version must be provided when concurrent is True")
+        raise ValueError(
+            "schema_file, user_instructions, and model_name_version must be provided when concurrent is True")
 
     # Split model name and version
     try:
@@ -284,26 +288,30 @@ def arxiv_search(search_terms, retmax, repository, concurrent=False, schema_file
     tracking_filename = os.path.join(os.getcwd(), 'search_info', 'arXiv',
                                      f"{repository}_{'_'.join(search_terms)}_count.txt")
     fetched = 0
+    page_start = 0
     if os.path.exists(tracking_filename):
         with open(tracking_filename, 'r') as f:
-            fetched = int(f.read().strip())
+            data = f.read().strip().split(',')
+            fetched = int(data[0])
+            page_start = int(data[1]) if len(data) > 1 else 0
     else:
         os.makedirs(os.path.join(os.getcwd(), 'search_info', 'arXiv'), exist_ok=True)
 
-    print(f"Starting fetch from count: {fetched}")
+    print(f"Starting fetch from count: {fetched}, page start: {page_start}")
 
     MAX_RETRIES = 3
     SEARCH_MAX_RETRIES = 10
+    MAX_PAGES = 1000  # Adjust as needed
     scraped_files = []
 
-    while fetched < retmax:
+    while fetched < retmax and page_start // 50 < MAX_PAGES:
         current_max = min(50, retmax - fetched)
 
         # Construct API URL based on repository
         if repository == 'arxiv':
             api_url = f"https://export.arxiv.org/api/query?search_query=all:{query}&start={fetched}&max_results={current_max}"
         elif repository == 'chemrxiv':
-            api_url = f"https://chemrxiv.org/engage/chemrxiv/public-api/v1/items?term={query}&skip={fetched}&limit={current_max}"
+            api_url = f"https://chemrxiv.org/engage/chemrxiv/public-api/v1/items?term={query}&skip={page_start}&limit={current_max}"
         else:
             print(f"Unsupported repository: {repository}")
             return []
@@ -334,6 +342,8 @@ def arxiv_search(search_terms, retmax, repository, concurrent=False, schema_file
                 if not entries:
                     print("No more results found. Exiting.")
                     break
+
+                new_files_downloaded = 0
 
                 # Process each entry
                 for index, entry in enumerate(entries, start=1):
@@ -382,17 +392,15 @@ def arxiv_search(search_terms, retmax, repository, concurrent=False, schema_file
 
                                 scraped_files.append(filename)
                                 fetched += 1
+                                new_files_downloaded += 1
                                 download_successful = True
-
-                                # Update tracking file
-                                with open(tracking_filename, 'w') as f:
-                                    f.write(str(fetched))
 
                                 print(f"Successfully downloaded PDF for entry {index}.")
 
                                 if concurrent:
                                     try:
-                                        extracted_data = extract(file_path, schema_file, model_name_version, user_instructions)
+                                        extracted_data = extract(file_path, schema_file, model_name_version,
+                                                                 user_instructions)
                                         if extracted_data:
                                             print(f"Successfully extracted data from {filename}")
                                         else:
@@ -418,8 +426,15 @@ def arxiv_search(search_terms, retmax, repository, concurrent=False, schema_file
                         print(f"Reached retmax of {retmax}. Stopping search.")
                         break
 
-                if fetched == 0:
-                    print("No new entries fetched. Breaking loop.")
+                if repository == 'chemrxiv':
+                    page_start += len(entries)
+
+                # Update tracking file
+                with open(tracking_filename, 'w') as f:
+                    f.write(f"{fetched},{page_start}")
+
+                if new_files_downloaded == 0:
+                    print("No new files downloaded in this iteration. Breaking loop.")
                     break
 
                 search_successful = True
@@ -437,7 +452,8 @@ def arxiv_search(search_terms, retmax, repository, concurrent=False, schema_file
     return scraped_files
 
 
-def pubmed_search(search_terms, retmax, concurrent=False, schema_file=None, user_instructions=None, model_name_version=None):
+def pubmed_search(search_terms, retmax, concurrent=False, schema_file=None, user_instructions=None,
+                  model_name_version=None):
     """
     Search and download papers from PubMed Central, with optional concurrent extraction.
 
@@ -453,7 +469,8 @@ def pubmed_search(search_terms, retmax, concurrent=False, schema_file=None, user
     list: List of filenames of downloaded papers (and extracted data if concurrent is True).
     """
     if concurrent and (schema_file is None or user_instructions is None or model_name_version is None):
-        raise ValueError("schema_file, user_instructions, and model_name_version must be provided when concurrent is True")
+        raise ValueError(
+            "schema_file, user_instructions, and model_name_version must be provided when concurrent is True")
 
     # Split model name and version
     try:
@@ -660,7 +677,8 @@ def download_pdf(url, doi):
         return None
 
 
-def unpaywall_search(query_chunks, retmax, email, concurrent=False, schema_file=None, user_instructions=None, model_name_version=None):
+def unpaywall_search(query_chunks, retmax, email, concurrent=False, schema_file=None, user_instructions=None,
+                     model_name_version=None):
     """
     Search and download papers from Unpaywall API, with optional concurrent extraction.
 
@@ -677,7 +695,8 @@ def unpaywall_search(query_chunks, retmax, email, concurrent=False, schema_file=
     list: List of filenames of downloaded papers and JSON metadata.
     """
     if concurrent and (schema_file is None or user_instructions is None or model_name_version is None):
-        raise ValueError("schema_file, user_instructions, and model_name_version must be provided when concurrent is True")
+        raise ValueError(
+            "schema_file, user_instructions, and model_name_version must be provided when concurrent is True")
 
     # Split model name and version
     try:
@@ -821,7 +840,8 @@ def unpaywall_search(query_chunks, retmax, email, concurrent=False, schema_file=
 
                             if concurrent:
                                 try:
-                                    extracted_data = extract(pdf_path, schema_file, model_name_version, user_instructions)
+                                    extracted_data = extract(pdf_path, schema_file, model_name_version,
+                                                             user_instructions)
                                     if extracted_data:
                                         print(f"Successfully extracted data from {pdf_filename}")
                                     else:
@@ -844,6 +864,7 @@ def unpaywall_search(query_chunks, retmax, email, concurrent=False, schema_file=
             write_last_state(chunk, page)
 
     return scraped_files
+
 
 def scrape(args):
     """

@@ -15,13 +15,13 @@ repositories = ['arxiv', 'chemrxiv']  # Decided to remove bio and med, as their 
 
 class ScrapeParams():
     def __init__(self,args):
+        self.auto = args.get('auto')
         self.def_search_terms = args.get('def_search_terms')
         self.maybe_search_terms = args.get('maybe_search_terms')
         self.pubmedyn = args.get('pubmedyn')
         self.arxivyn = args.get('arxivyn')
         self.soyn = args.get('ScienceOpenyn')
         self.customdb = args.get('customdb')
-        self.auto = args.get('auto')
         self.retmax = args.get('retmax')
         self.base_url = args.get('base_url')
         self.upwyn = args.get('Unpaywallyn')
@@ -95,9 +95,8 @@ def main_scrape_arxiv(scrape_params,query_chunks,search_info_file):
             for chunk in query_chunks:
                 print("Current search: " + str(chunk))
                 scraped_files = arxiv_search(chunk, scrape_params.retmax, repository)
-                if scraped_files is not None:
-                    with open(search_info_file, 'a') as f:
-                        f.write('\n'.join(scraped_files) + '\n')
+                with open(search_info_file, 'a') as f:
+                    f.write('\n'.join(scraped_files) + '\n')
 
 def main_scrape_science_open(scrape_params,query_chunks,search_info_file):
     if scrape_params.soyn == "y":

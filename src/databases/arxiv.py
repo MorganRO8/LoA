@@ -5,11 +5,6 @@ from bs4 import BeautifulSoup
 from src.extract import extract
 from src.utils import (doi_to_filename, is_file_processed)
 
-# Constants
-repositories = ['arxiv', 'chemrxiv']  # Decided to remove bio and med, as their api's are not very good
-# I could be convinced to add them back, but because the api doesn't allow for search terms, I would need to write code
-# to build a local database and search that, which would be time-consuming and a hassle for the end user.
-
 def arxiv_search(search_terms, retmax, repository, concurrent=False, schema_file=None, user_instructions=None, model_name_version=None):
     """
     Search and download papers from arXiv or ChemRxiv repositories, with optional concurrent extraction.
@@ -26,7 +21,7 @@ def arxiv_search(search_terms, retmax, repository, concurrent=False, schema_file
     Returns:
     list: List of filenames of downloaded papers.
     """
-    if concurrent and (schema_file is None or user_instructions is None or model_name_version is None):
+    if concurrent and any([schema_file is None, user_instructions is None, model_name_version is None]):
         raise ValueError("schema_file, user_instructions, and model_name_version must be provided when concurrent is True")
 
     # Split model name and version
@@ -85,9 +80,7 @@ def arxiv_search(search_terms, retmax, repository, concurrent=False, schema_file
 
                 # Parse response based on repository
                 if repository == 'arxiv':
-                    xml_data = response.text
-                    soup = BeautifulSoup(xml_data, "xml")
-                    entries = soup.find_all("entry")
+                    entries = BeautifulSoup(response.text, "xml").find_all("entry")
                 elif repository == 'chemrxiv':
                     json_data = response.json()
                     entries = json_data.get('itemHits', [])
@@ -107,8 +100,7 @@ def arxiv_search(search_terms, retmax, repository, concurrent=False, schema_file
                     # Extract PDF link and DOI based on repository
                     if repository == 'arxiv':
                         pdf_link = entry.find('link', {'title': 'pdf'})['href']
-                        arxiv_id = entry.find('id').text.split('/')[-1]
-                        doi = f"{arxiv_id}"
+                        doi = entry.find('id').text.split('/')[-1]
                     elif repository == 'chemrxiv':
                         pdf_link = entry['item']['asset']['original']['url']
                         doi = entry['item'].get('doi', '')

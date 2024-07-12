@@ -68,7 +68,7 @@ def main():
             print("5. Exit")
 
             # Get user input
-            task = input("Enter the task number (1, 2, 3, or 4): ")
+            task = input("Enter the task number (1-5): ")
             task = str(task) ## force string representation of integer inputs.
 
             # Execute the selected task based on user input

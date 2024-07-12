@@ -4,7 +4,11 @@ import sys
 import os
 import csv
 from src.utils import (download_ollama, select_schema_file)
-from src.scrape import (pubmed_search, arxiv_search, scrape_scienceopen, unpaywall_search)
+from src.databases.pubmed import pubmed_search
+from src.databases.arxiv import arxiv_search
+from src.databases.science_open import scrape_scienceopen
+from src.databases.unpaywall import unpaywall_search
+
 
 # URLs for PubMed Central API
 ESEARCH_URL = 'https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esearch.fcgi'

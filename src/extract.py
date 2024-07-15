@@ -27,6 +27,7 @@ def batch_extract(args):
     Returns:
     None: Results are written to a CSV file.
     '''
+
     # Check for ollama binary and download if not present
     if not os.path.isfile('ollama'):
         print("ollama binary not found. Downloading the latest release...")
@@ -140,31 +141,30 @@ def batch_extract(args):
         success = False
 
         # Attempt extraction with retries
-        while retry_count < max_retries and not success:
-            try:
-                # Set up model options
-                model_options = {
-                    "num_ctx": 32768,
-                    "num_predict": 2048,
-                    "mirostat": 0,
-                    "mirostat_tau": 0.5,
-                    "mirostat_eta": 1,
-                    "tfs_z": 1,
-                    "top_p": 1,
-                    "top_k": 5,
-                    "temperature": (0.35 * retry_count),
-                    "repeat_penalty": (1.1 + (0.1 * retry_count)),
-                    "stop": ["|||"],
-                }
+        # We can create the "data" dictionary here, once, and just update the temperature and repeat_penalty values during each loop.
 
-                # Prepare prompt and send request to ollama
-                prompt_with_content = f"{prompt}\n\n{paper_content}\n\nAgain, please make sure to respond only in the specified format exactly as described, or you will cause errors.\nResponse:"
-                data = {
-                    "model": model_name_version,
-                    "prompt": prompt_with_content,
-                    "stream": False,
-                    "options": model_options
-                }
+        # Prepare prompt data
+        data = {
+            "model": model_name_version,
+            "prompt": f"{prompt}\n\n{paper_content}\n\nAgain, please make sure to respond only in the specified format exactly as described, or you will cause errors.\nResponse:",
+            "stream": False,
+            "options":  {
+                        "num_ctx": 32768,
+                        "num_predict": 2048,
+                        "mirostat": 0,
+                        "mirostat_tau": 0.5,
+                        "mirostat_eta": 1,
+                        "tfs_z": 1,
+                        "top_p": 1,
+                        "top_k": 5,
+                        "stop": ["|||"],
+                        }
+        }
+
+        while retry_count < max_retries and not success:
+            data["options"]["temperature"] =  (0.35 * retry_count)
+            data["options"]["repeat_penalty"] =  (1.1 + (0.1 * retry_count))
+            try:
                 response = requests.post(f"{ollama_url}/api/generate", json=data)
                 response.raise_for_status()
                 result = response.json()["response"]
@@ -299,31 +299,30 @@ def extract(file_path, schema_file, model_name_version, user_instructions):
         model_version = 'latest'
         model_name_version = f"{model_name}:{model_version}"
 
-    while retry_count < max_retries and not success:
-        try:
-            # Set up model options
-            model_options = {
-                "num_ctx": 32768,
-                "num_predict": 2048,
-                "mirostat": 0,
-                "mirostat_tau": 0.5,
-                "mirostat_eta": 1,
-                "tfs_z": 1,
-                "top_p": 1,
-                "top_k": 5,
-                "temperature": (0.35 * retry_count),
-                "repeat_penalty": (1.1 + (0.1 * retry_count)),
-                "stop": ["|||"],
-            }
+    # We can create the "data" dictionary here, once, and just update the temperature and repeat_penalty values during each loop.
 
-            # Prepare prompt and send request to ollama
-            prompt_with_content = f"{prompt}\n\n{paper_content}\n\nAgain, please make sure to respond only in the specified format exactly as described, or you will cause errors.\nResponse:"
-            data = {
-                "model": model_name_version,
-                "prompt": prompt_with_content,
-                "stream": False,
-                "options": model_options
-            }
+    # Prepare prompt data
+    data = {
+        "model": model_name_version,
+        "prompt": f"{prompt}\n\n{paper_content}\n\nAgain, please make sure to respond only in the specified format exactly as described, or you will cause errors.\nResponse:",
+        "stream": False,
+        "options":  {
+                    "num_ctx": 32768,
+                    "num_predict": 2048,
+                    "mirostat": 0,
+                    "mirostat_tau": 0.5,
+                    "mirostat_eta": 1,
+                    "tfs_z": 1,
+                    "top_p": 1,
+                    "top_k": 5,
+                    "stop": ["|||"],
+                    }
+    }
+
+    while retry_count < max_retries and not success:
+        data["options"]["temperature"] =  (0.35 * retry_count)
+        data["options"]["repeat_penalty"] =  (1.1 + (0.1 * retry_count))
+        try:
             response = requests.post(f"{ollama_url}/api/generate", json=data)
             response.raise_for_status()
             result = response.json()["response"]

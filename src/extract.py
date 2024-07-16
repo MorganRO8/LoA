@@ -45,9 +45,46 @@ class ExtractParams():
         self.schema_data, self.key_columns = load_schema_file(self.schema_file)
         self.num_columns = len(self.schema_data)
         self.headers = [self.schema_data[column_number]['name'] for column_number in range(1, self.num_columns + 1)] + ['paper']
+        self.prompt = generate_prompt(self.schema_data, self.user_instructions, self.key_columns)
+        self.examples = generate_examples(self.schema_data)
+        self.data = {
+            "model": self.model_name_version,
+            "stream": False,
+            "options":  {
+                        "num_ctx": 32768,
+                        "num_predict": 2048,
+                        "mirostat": 0,
+                        "mirostat_tau": 0.5,
+                        "mirostat_eta": 1,
+                        "tfs_z": 1,
+                        "top_p": 1,
+                        "top_k": 5,
+                        "stop": ["|||"],
+                        }
+        }
 
-    def _refresh_data(self):
-        pass
+    def _refresh_paper_content(self,file):
+        file_path = os.path.join(os.getcwd(), 'scraped_docs', file)
+        processed_file_path = os.path.join(os.getcwd(), 'processed_docs', os.path.splitext(file)[0] + '.txt')
+
+        # Load paper content
+        if os.path.exists(processed_file_path):
+            with open(processed_file_path, 'r') as f:
+                paper_content = truncate_text(f.read())
+        else:
+            try:
+                paper_content = truncate_text(doc_to_elements(file_path))
+            except Exception as err:
+                print(f"Unable to process {file} into plaintext due to {err}")
+                return True
+        self.data["prompt"] = f"{self.prompt}\n\n{paper_content}\n\nAgain, please make sure to respond only in the specified format exactly as described, or you will cause errors.\nResponse:"
+        return False
+
+    def _refresh_data(self,retry_count):
+        self.data["options"]["temperature"] = (0.35 * retry_count)
+        self.data["options"]["repeat_penalty"] = (1.1 + (0.1 * retry_count))
+        
+        
 
 
 def begin_ollama_server():
@@ -135,59 +172,22 @@ def batch_extract(args):
     if check_model_file(extract_params):
         return
 
-    # Set up extraction parameters
-    prompt = generate_prompt(extract_params.schema_data, extract_params.user_instructions, extract_params.key_columns)
-    examples = generate_examples(extract_params.schema_data)
-
     print(f"Found {len(files_to_process)} files to process, starting!")
 
     # Process each file
     for file in files_to_process:
         print(f"Now processing {file}")
-        file_path = os.path.join(os.getcwd(), 'scraped_docs', file)
-        processed_file = os.path.splitext(file)[0] + '.txt'
-        processed_file_path = os.path.join(os.getcwd(), 'processed_docs', processed_file)
-
-        # Load paper content
-        if os.path.exists(processed_file_path):
-            with open(processed_file_path, 'r') as f:
-                paper_content = truncate_text(f.read())
-        else:
-            try:
-                paper_content = truncate_text(doc_to_elements(file_path))
-            except Exception as err:
-                print(f"Unable to process {file} into plaintext due to {err}")
-                continue
+        if extract_params._refresh_paper_content(file): 
+            continue
 
         retry_count = 0
         success = False
 
         # Attempt extraction with retries
-        # We can create the "data" dictionary here, once, and just update the temperature and repeat_penalty values during each loop.
-
-        # Prepare prompt data
-        data = {
-            "model": extract_params.model_name_version,
-            "prompt": f"{prompt}\n\n{paper_content}\n\nAgain, please make sure to respond only in the specified format exactly as described, or you will cause errors.\nResponse:",
-            "stream": False,
-            "options":  {
-                        "num_ctx": 32768,
-                        "num_predict": 2048,
-                        "mirostat": 0,
-                        "mirostat_tau": 0.5,
-                        "mirostat_eta": 1,
-                        "tfs_z": 1,
-                        "top_p": 1,
-                        "top_k": 5,
-                        "stop": ["|||"],
-                        }
-        }
-
         while retry_count < ExtractionDefaults['max_retries'] and not success:
-            data["options"]["temperature"] =  (0.35 * retry_count)
-            data["options"]["repeat_penalty"] =  (1.1 + (0.1 * retry_count))
+            extract_params._refresh_data(retry_count)
             try:
-                response = requests.post(f"{ExtractionDefaults['ollama_url']}/api/generate", json=data)
+                response = requests.post(f"{ExtractionDefaults['ollama_url']}/api/generate", json=extract_params.data)
                 response.raise_for_status()
                 result = response.json()["response"]
 
@@ -208,7 +208,7 @@ def batch_extract(args):
                 # Parse and validate the result
                 parsed_result = parse_llm_response(result, extract_params.num_columns)
                 if not parsed_result:
-                    print("Parsed Result empty, trying again")
+                    print("Parsed result empty, trying again")
                     retry_count += 1
                     continue
 
@@ -226,7 +226,7 @@ def batch_extract(args):
                         except:
                             pass
 
-                validated_result = validate_result(parsed_result, extract_params.schema_data, examples, extract_params.key_columns)
+                validated_result = validate_result(parsed_result, extract_params.schema_data, extract_params.examples, extract_params.key_columns)
 
                 if validated_result:
                     print("Validated result:")
@@ -309,9 +309,10 @@ def extract(file_path, schema_file, model_name_version, user_instructions):
 
     # Extract data
     max_retries = 3
+    ollama_url = "http://localhost:11434"
+
     retry_count = 0
     success = False
-    ollama_url = "http://localhost:11434"
 
     # Split model name and version
     try:

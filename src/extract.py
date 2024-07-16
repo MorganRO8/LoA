@@ -47,10 +47,14 @@ class ExtractParams():
         self.headers = [self.schema_data[column_number]['name'] for column_number in range(1, self.num_columns + 1)] + ['paper']
         self.prompt = generate_prompt(self.schema_data, self.user_instructions, self.key_columns)
         self.examples = generate_examples(self.schema_data)
-        self.data = {
-            "model": self.model_name_version,
-            "stream": False,
-            "options":  {
+        self.data = PromptData(self.model_name_version)
+
+       
+class PromptData():
+    def __init__(self,model_name_version):
+        self.model = model_name_version
+        self.stream = False
+        self.options = {
                         "num_ctx": 32768,
                         "num_predict": 2048,
                         "mirostat": 0,
@@ -61,9 +65,9 @@ class ExtractParams():
                         "top_k": 5,
                         "stop": ["|||"],
                         }
-        }
+        self.prompt = ""
 
-    def _refresh_paper_content(self,file):
+    def _refresh_paper_content(self,file,prompt):
         file_path = os.path.join(os.getcwd(), 'scraped_docs', file)
         processed_file_path = os.path.join(os.getcwd(), 'processed_docs', os.path.splitext(file)[0] + '.txt')
 
@@ -77,14 +81,18 @@ class ExtractParams():
             except Exception as err:
                 print(f"Unable to process {file} into plaintext due to {err}")
                 return True
-        self.data["prompt"] = f"{self.prompt}\n\n{paper_content}\n\nAgain, please make sure to respond only in the specified format exactly as described, or you will cause errors.\nResponse:"
+        self.prompt = f"{prompt}\n\n{paper_content}\n\nAgain, please make sure to respond only in the specified format exactly as described, or you will cause errors.\nResponse:"
         return False
-
+    
     def _refresh_data(self,retry_count):
-        self.data["options"]["temperature"] = (0.35 * retry_count)
-        self.data["options"]["repeat_penalty"] = (1.1 + (0.1 * retry_count))
-        
-        
+        self.options["temperature"] = (0.35 * retry_count)
+        self.options["repeat_penalty"] = (1.1 + (0.1 * retry_count))
+
+    def __dict__(self):
+        return {"model": self.model,
+                "stream": self.stream,
+                "options":self.options,
+                "prompt":self.prompt}
 
 
 def begin_ollama_server():
@@ -98,12 +106,12 @@ def begin_ollama_server():
     # Start ollama server
     subprocess.Popen(["./ollama", "serve"], stdout=subprocess.DEVNULL, stderr=subprocess.STDOUT)
 
-def get_files_to_process(auto,output_directory_id,csv_file):
+def get_files_to_process(extract_params,csv_file):
     ## Get "search_info_file"
-    if auto is None:
+    if extract_params.auto is None:
         search_info_file = select_search_info_file()
     else:
-        search_info_file = os.path.join(os.getcwd(), 'search_info', f"{output_directory_id}.txt")
+        search_info_file = os.path.join(os.getcwd(), 'search_info', f"{extract_params.output_directory_id}.txt")
 
     ## Process "search_info_file" to get list of files to process
     if search_info_file == 'All':
@@ -163,7 +171,7 @@ def batch_extract(args):
     csv_file = os.path.join(os.getcwd(), 'results',f"{extract_params.model_name}_{extract_params.model_version}_{os.path.splitext(extract_params.schema_file)[0].split('/')[-1]}.csv")
 
     ## Determine which files to process
-    files_to_process = get_files_to_process(extract_params.auto, extract_params.output_directory_id, csv_file)
+    files_to_process = get_files_to_process(extract_params, csv_file)
 
     ## Ensure output directory exists
     os.makedirs(os.path.join(os.getcwd(), 'results'), exist_ok=True)
@@ -177,7 +185,7 @@ def batch_extract(args):
     # Process each file
     for file in files_to_process:
         print(f"Now processing {file}")
-        if extract_params._refresh_paper_content(file): 
+        if extract_params.data._refresh_paper_content(file): 
             continue
 
         retry_count = 0
@@ -185,9 +193,9 @@ def batch_extract(args):
 
         # Attempt extraction with retries
         while retry_count < ExtractionDefaults['max_retries'] and not success:
-            extract_params._refresh_data(retry_count)
+            extract_params.data._refresh_data(retry_count)
             try:
-                response = requests.post(f"{ExtractionDefaults['ollama_url']}/api/generate", json=extract_params.data)
+                response = requests.post(f"{ExtractionDefaults['ollama_url']}/api/generate", json=dict(extract_params.data))
                 response.raise_for_status()
                 result = response.json()["response"]
 
@@ -198,12 +206,7 @@ def batch_extract(args):
                 if result.strip().lower().replace("'", "").replace('"',
                                                                    '') == 'no information found' or result.strip() == '':
                     print(f"Got signal from model that the information is not present")
-                    result = ""
-                    n = 0
-                    while n < extract_params.num_columns:
-                        result += "null, "
-                        n += 1
-                    result = result[:-2]
+                    result = ", ".join(["null" for n in range(extract_params.num_columns)])
 
                 # Parse and validate the result
                 parsed_result = parse_llm_response(result, extract_params.num_columns)
@@ -290,135 +293,89 @@ def extract(file_path, schema_file, model_name_version, user_instructions):
     Returns:
     list or None: Validated results if successful, None if extraction fails.
     '''
-
-    # Load schema file
-    schema_data, key_columns = load_schema_file(schema_file)
-    num_columns = len(schema_data)
-    headers = [schema_data[column_number]['name'] for column_number in range(1, num_columns + 1)] + ['paper']
-
-    # Generate prompt
-    prompt = generate_prompt(schema_data, user_instructions, key_columns)
-    examples = generate_examples(schema_data)
-
-    # Process file
-    try:
-        paper_content = truncate_text(doc_to_elements(file_path))
-    except Exception as err:
-        print(f"Unable to process {file_path} into plaintext due to {err}")
-        return None
-
-    # Extract data
-    max_retries = 3
-    ollama_url = "http://localhost:11434"
-
-    retry_count = 0
-    success = False
-
-    # Split model name and version
-    try:
-        model_name, model_version = model_name_version.split(':')
-    except ValueError:
-        model_name = model_name_version
-        model_version = 'latest'
-        model_name_version = f"{model_name}:{model_version}"
-
-    # We can create the "data" dictionary here, once, and just update the temperature and repeat_penalty values during each loop.
+    args = {'auto':True,
+            'def_search_terms':None,
+            'maybe_search_terms':None,
+            'schema_file':schema_file,
+            'user_instructions':user_instructions,
+            'model_name_version':model_name_version
+}
+    extract_params = ExtractParams(args)
 
     # Prepare prompt data
-    data = {
-        "model": model_name_version,
-        "prompt": f"{prompt}\n\n{paper_content}\n\nAgain, please make sure to respond only in the specified format exactly as described, or you will cause errors.\nResponse:",
-        "stream": False,
-        "options":  {
-                    "num_ctx": 32768,
-                    "num_predict": 2048,
-                    "mirostat": 0,
-                    "mirostat_tau": 0.5,
-                    "mirostat_eta": 1,
-                    "tfs_z": 1,
-                    "top_p": 1,
-                    "top_k": 5,
-                    "stop": ["|||"],
-                    }
-    }
+    extract_params.data._refresh_paper_content(file_path,generate_prompt(extract_params.schema_data, user_instructions, extract_params.key_columns))
 
-    while retry_count < max_retries and not success:
-        data["options"]["temperature"] =  (0.35 * retry_count)
-        data["options"]["repeat_penalty"] =  (1.1 + (0.1 * retry_count))
+    
+    validated_result = single_file_extract(extract_params,file_path)
+    if not validated_result:
+        print(f"Failed to extract data from {file_path} after {ExtractionDefaults['max_retries']} retries.")
+        return None
+    else:
+        return validated_result
+
+
+def single_file_extract(extract_params: ExtractParams, file_path):
+    retry_count = 0
+    while retry_count < ExtractionDefaults["max_retries"]:
+        extract_params.data._refresh_data(retry_count)
         try:
-            response = requests.post(f"{ollama_url}/api/generate", json=data)
+            response = requests.post(f"{ExtractionDefaults['ollama_url']}/api/generate", json=dict(extract_params.data))
             response.raise_for_status()
             result = response.json()["response"]
-
             print(f"Unparsed Result:\n{result}")
 
             # Check if the model is trying to tell us there are no results
             if result.strip().lower().replace("'", "").replace('"', '') == 'no information found' or result.strip() == '':
                 print(f"Got signal from model that the information is not present")
-                result = ""
-                n = 0
-                while n < num_columns:
-                    result += "null, "
-                    n += 1
-                result = result[:-2]
+                result = ", ".join(["null" for n in range(extract_params.num_columns)])
 
             # Parse and validate the result
-            parsed_result = parse_llm_response(result, num_columns)
-            print(f"Parsed Result:\n{parsed_result}")
+            parsed_result = parse_llm_response(result, extract_params.num_columns)
             if not parsed_result:
                 print("Parsed Result empty, trying again")
                 retry_count += 1
                 continue
+            print(f"Parsed Result:\n{parsed_result}")
 
             # Clean up 'null' values
             for row in parsed_result:
                 for item in row:
                     try:
-                        if item.lower().replace(" ",
-                                                "") == 'null' or item == '' or item == '""' or item == "''" or item.strip().lower().replace(
-                                '"', '').replace("'", "") == 'no information found':
+                        if any([item.lower().replace(" ","") == 'null',
+                                item in ['','""',"''"], 
+                                item.strip().lower().replace('"', '').replace("'", "") == 'no information found']):
                             parsed_result[row][item] = 'null'
                     except:
                         pass
 
-            validated_result = validate_result(parsed_result, schema_data, examples, key_columns)
+            validated_result = validate_result(parsed_result, extract_params.schema_data, extract_params.examples, extract_params.key_columns)
             print(f"Validated Result:\n{validated_result}")
-
-            if validated_result:
-                paper_filename = os.path.splitext(os.path.basename(file_path))[0]
-
-                # Filter results based on key columns
-                for key_column in key_columns:
-                    if key_column is not None:
-                        key_values = set()
-                        filtered_result = []
-                        for row in validated_result:
-                            key_value = row[key_column - 1]
-                            if key_value not in key_values:
-                                key_values.add(key_value)
-                                filtered_result.append(row)
-                        validated_result = filtered_result
-
-                # Add paper filename to each row
-                for row in validated_result:
-                    row.append(paper_filename)
-
-                # Write results to CSV
-                csv_file = os.path.join(os.getcwd(), 'results',
-                                        f"{model_name}_{model_version}_{os.path.splitext(schema_file)[0].split('/')[-1]}.csv")
-                write_to_csv(validated_result, headers, filename=csv_file)
-
-                success = True
-                return validated_result
-            else:
+            if not validated_result:
                 print("Result failed to validate, trying again.")
                 retry_count += 1
+                continue
+
+            if validated_result:
+                # Filter results based on key columns
+                for key_column in extract_params.key_columns:
+                    if key_column is None:
+                        continue
+                    key_values = set()
+                    filtered_result = []
+                    for row in validated_result:
+                        key_value = row[key_column - 1]
+                        if key_value not in key_values:
+                            key_values.add(key_value)
+                            row.append(os.path.splitext(os.path.basename(file_path))[0]) ## paper_filename # Add paper filename to each row if validated
+                            filtered_result.append(row)
+                    validated_result = filtered_result
+
+                # Write results to CSV
+                write_to_csv(validated_result, extract_params.headers, filename=os.path.join(os.getcwd(), 'results', f"{extract_params.model_name}_{extract_params.model_version}_{os.path.splitext(extract_params.schema_file)[0].split('/')[-1]}.csv"))
+                return validated_result
 
         except Exception as e:
             print(f"Error processing {file_path}: {type(e).__name__} - {str(e)}")
             retry_count += 1
-            print(f"Retrying ({retry_count}/{max_retries})...")
-
-    if not success:
-        print(f"Failed to extract data from {file_path} after {max_retries} retries.")
-        return None
+            print(f"Retrying ({retry_count}/{ExtractionDefaults['max_retries']})...")
+    return None

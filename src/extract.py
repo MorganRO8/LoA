@@ -11,6 +11,94 @@ from src.utils import (load_schema_file, generate_prompt, generate_examples,
                        truncate_text, select_search_info_file, select_schema_file,
                        get_out_id, list_files_in_directory, download_ollama)
 
+ExtractionDefaults={"max_retries":3,
+                    "ollama_url":"http://localhost:11434"
+                    }
+
+class ExtractParams():
+    def __init__(self,args):
+        self.auto = args.get('auto')
+        self.def_search_terms = args.get('def_search_terms')
+        self.maybe_search_terms = args.get('maybe_search_terms')
+        self.schema_file = args.get('schema_file')
+        self.user_instructions = args.get('user_instructions')
+        self.model_name_version = args.get('model_name_version')
+        if self.auto is None:
+            self.schema_file = select_schema_file()
+            self.model_name_version = input("Please enter the model name and version (e.g., 'mistral:7b-instruct-v0.2-q8_0'): ")
+            self.user_instructions = input(
+                "Please briefly tell the model what information it is trying to extract, in the format of a "
+                "command/instructions:\n\n")
+        else:
+            # In auto mode, construct file paths based on search terms
+            self.output_directory_id, _ = get_out_id(self.def_search_terms, self.maybe_search_terms)
+            self.schema_file = os.path.join(os.getcwd(), 'dataModels', self.schema_file)
+        
+        # Split model name and version
+        try:
+            self.model_name, self.model_version = self.model_name_version.split(':')
+        except ValueError:
+            self.model_name = self.model_name_version
+            self.model_version = 'latest'
+        
+        ## Set up extraction parameters
+        self.schema_data, self.key_columns = load_schema_file(self.schema_file)
+        self.num_columns = len(self.schema_data)
+        self.headers = [self.schema_data[column_number]['name'] for column_number in range(1, self.num_columns + 1)] + ['paper']
+
+    def _refresh_data(self):
+        pass
+
+
+def begin_ollama_server():
+    # Check for ollama binary and download if not present
+    if not os.path.isfile('ollama'):
+        print("ollama binary not found. Downloading the latest release...")
+        download_ollama()
+    else:
+        print("ollama binary already exists in the current directory.")
+
+    # Start ollama server
+    subprocess.Popen(["./ollama", "serve"], stdout=subprocess.DEVNULL, stderr=subprocess.STDOUT)
+
+def get_files_to_process(auto,output_directory_id,csv_file):
+    ## Get "search_info_file"
+    if auto is None:
+        search_info_file = select_search_info_file()
+    else:
+        search_info_file = os.path.join(os.getcwd(), 'search_info', f"{output_directory_id}.txt")
+
+    ## Process "search_info_file" to get list of files to process
+    if search_info_file == 'All':
+        files_to_process = list_files_in_directory(os.path.join(os.getcwd(), 'scraped_docs'))
+    else:
+        with open(search_info_file, 'r') as f:
+            files_to_process = f.read().splitlines()
+        files_to_process =  [file for file in files_to_process if os.path.isfile(os.path.join(os.getcwd(), 'scraped_docs', file))]
+
+    ## Check for already processed papers
+    if os.path.exists(csv_file):
+        with open(csv_file, 'r') as f:
+            reader = csv.reader(f)
+            processed_papers = [row[-1] for row in reader]
+            processed_papers = processed_papers[1:]  # Exclude the header row
+    else:
+        processed_papers = []
+
+    # Filter out already processed papers
+    files_to_process = [file for file in files_to_process if
+                        os.path.splitext(os.path.basename(file))[0] not in processed_papers]
+
+def check_model_file(extract_params):
+    model_file = os.path.join(str(Path.home()), ".ollama", "models", "manifests", "registry.ollama.ai", "library",extract_params.model_name, extract_params.model_version)
+    if not os.path.exists(model_file):
+        print(f"Model file {model_file} not found. Pulling the model...")
+        try:
+            subprocess.run(["./ollama", "pull", extract_params.model_name_version], check=True)
+        except subprocess.CalledProcessError as e:
+            print(f"Failed to pull the model: {e}")
+            return True
+        return False
 
 def batch_extract(args):
     '''
@@ -28,94 +116,28 @@ def batch_extract(args):
     None: Results are written to a CSV file.
     '''
 
-    # Check for ollama binary and download if not present
-    if not os.path.isfile('ollama'):
-        print("ollama binary not found. Downloading the latest release...")
-        download_ollama()
-    else:
-        print("ollama binary already exists in the current directory.")
+    ## Check for ollama binary and download if not present
+    begin_ollama_server()
 
-    # Start ollama server
-    subprocess.Popen(["./ollama", "serve"], stdout=subprocess.DEVNULL, stderr=subprocess.STDOUT)
+    ## Extract arguments or use default values
+    extract_params = ExtractParams(args)
 
-    # Extract arguments or use default values
-    def_search_terms = args.get('def_search_terms')
-    maybe_search_terms = args.get('maybe_search_terms')
-    schema_file = args.get('schema_file')
-    user_instructions = args.get('user_instructions')
-    auto = args.get('auto')
-    model_name_version = args.get('model_name_version')
+    ## Set up CSV file for results
+    csv_file = os.path.join(os.getcwd(), 'results',f"{extract_params.model_name}_{extract_params.model_version}_{os.path.splitext(extract_params.schema_file)[0].split('/')[-1]}.csv")
 
-    # If not in auto mode, prompt user for inputs
-    if auto is None:
-        search_info_file = select_search_info_file()
-        schema_file = select_schema_file()
-        model_name_version = input("Please enter the model name and version (e.g., 'mistral:7b-instruct-v0.2-q8_0'): ")
-        user_instructions = input(
-            "Please briefly tell the model what information it is trying to extract, in the format of a "
-            "command/instructions:\n\n")
-    else:
-        # In auto mode, construct file paths based on search terms
-        output_directory_id, _ = get_out_id(def_search_terms, maybe_search_terms)
-        schema_file = os.path.join(os.getcwd(), 'dataModels', schema_file)
-        search_info_file = os.path.join(os.getcwd(), 'search_info', f"{output_directory_id}.txt")
+    ## Determine which files to process
+    files_to_process = get_files_to_process(extract_params.auto, extract_params.output_directory_id, csv_file)
 
-    # Split model name and version
-    try:
-        model_name, model_version = model_name_version.split(':')
-    except ValueError:
-        model_name = model_name_version
-        model_version = 'latest'
+    ## Ensure output directory exists
+    os.makedirs(os.path.join(os.getcwd(), 'results'), exist_ok=True)
 
-    # Determine which files to process
-    if search_info_file == 'All':
-        files_to_process = list_files_in_directory(os.path.join(os.getcwd(), 'scraped_docs'))
-    else:
-        with open(search_info_file, 'r') as f:
-            files_to_process = f.read().splitlines()
-        files_to_process = [file for file in files_to_process if
-                            os.path.isfile(os.path.join(os.getcwd(), 'scraped_docs', file))]
-
-    # Set up CSV file for results
-    csv_file = os.path.join(os.getcwd(), 'results',
-                            f"{model_name}_{model_version}_{os.path.splitext(schema_file)[0].split('/')[-1]}.csv")
-
-    # Check for already processed papers
-    if os.path.exists(csv_file):
-        with open(csv_file, 'r') as f:
-            reader = csv.reader(f)
-            processed_papers = [row[-1] for row in reader]
-            processed_papers = processed_papers[1:]  # Exclude the header row
-    else:
-        processed_papers = []
-
-    # Filter out already processed papers
-    files_to_process = [file for file in files_to_process if
-                        os.path.splitext(os.path.basename(file))[0] not in processed_papers]
-
-    # Ensure output directory exists
-    output_dir = os.path.join(os.getcwd(), 'results')
-    os.makedirs(output_dir, exist_ok=True)
-
-    # Check if the model is available, download if not
-    model_file = os.path.join(str(Path.home()), ".ollama", "models", "manifests", "registry.ollama.ai", "library",
-                              model_name, model_version)
-    if not os.path.exists(model_file):
-        print(f"Model file {model_file} not found. Pulling the model...")
-        try:
-            subprocess.run(["./ollama", "pull", model_name_version], check=True)
-        except subprocess.CalledProcessError as e:
-            print(f"Failed to pull the model: {e}")
-            return
+    ## Check if the model is available, download if not
+    if check_model_file(extract_params):
+        return
 
     # Set up extraction parameters
-    max_retries = 3
-    ollama_url = "http://localhost:11434"
-    schema_data, key_columns = load_schema_file(schema_file)
-    num_columns = len(schema_data)
-    headers = [schema_data[column_number]['name'] for column_number in range(1, num_columns + 1)] + ['paper']
-    prompt = generate_prompt(schema_data, user_instructions, key_columns)
-    examples = generate_examples(schema_data)
+    prompt = generate_prompt(extract_params.schema_data, extract_params.user_instructions, extract_params.key_columns)
+    examples = generate_examples(extract_params.schema_data)
 
     print(f"Found {len(files_to_process)} files to process, starting!")
 
@@ -145,7 +167,7 @@ def batch_extract(args):
 
         # Prepare prompt data
         data = {
-            "model": model_name_version,
+            "model": extract_params.model_name_version,
             "prompt": f"{prompt}\n\n{paper_content}\n\nAgain, please make sure to respond only in the specified format exactly as described, or you will cause errors.\nResponse:",
             "stream": False,
             "options":  {
@@ -161,11 +183,11 @@ def batch_extract(args):
                         }
         }
 
-        while retry_count < max_retries and not success:
+        while retry_count < ExtractionDefaults['max_retries'] and not success:
             data["options"]["temperature"] =  (0.35 * retry_count)
             data["options"]["repeat_penalty"] =  (1.1 + (0.1 * retry_count))
             try:
-                response = requests.post(f"{ollama_url}/api/generate", json=data)
+                response = requests.post(f"{ExtractionDefaults['ollama_url']}/api/generate", json=data)
                 response.raise_for_status()
                 result = response.json()["response"]
 
@@ -178,13 +200,13 @@ def batch_extract(args):
                     print(f"Got signal from model that the information is not present")
                     result = ""
                     n = 0
-                    while n < num_columns:
+                    while n < extract_params.num_columns:
                         result += "null, "
                         n += 1
                     result = result[:-2]
 
                 # Parse and validate the result
-                parsed_result = parse_llm_response(result, num_columns)
+                parsed_result = parse_llm_response(result, extract_params.num_columns)
                 if not parsed_result:
                     print("Parsed Result empty, trying again")
                     retry_count += 1
@@ -204,7 +226,7 @@ def batch_extract(args):
                         except:
                             pass
 
-                validated_result = validate_result(parsed_result, schema_data, examples, key_columns)
+                validated_result = validate_result(parsed_result, extract_params.schema_data, examples, extract_params.key_columns)
 
                 if validated_result:
                     print("Validated result:")
@@ -213,7 +235,7 @@ def batch_extract(args):
                     paper_filename = os.path.splitext(os.path.basename(file))[0]
 
                     # Filter results based on key columns
-                    for key_column in key_columns:
+                    for key_column in extract_params.key_columns:
                         if key_column is not None:
                             key_values = set()
                             filtered_result = []
@@ -229,7 +251,7 @@ def batch_extract(args):
                         row.append(paper_filename)
 
                     # Write results to CSV
-                    write_to_csv(validated_result, headers, filename=csv_file)
+                    write_to_csv(validated_result, extract_params.headers, filename=csv_file)
 
                     success = True
                 else:
@@ -239,18 +261,18 @@ def batch_extract(args):
             except ValueError as e:
                 print(f"Validation failed for {file}: {str(e)}")
                 retry_count += 1
-                print(f"Retrying ({retry_count}/{max_retries})...")
+                print(f"Retrying ({retry_count}/{ExtractionDefaults['max_retries']})...")
 
             except (requests.exceptions.RequestException, json.JSONDecodeError, KeyError) as e:
                 print(f"Error processing {file}: {type(e).__name__} - {str(e)}")
                 retry_count += 1
-                print(f"Retrying ({retry_count}/{max_retries})...")
+                print(f"Retrying ({retry_count}/{ExtractionDefaults['max_retries']})...")
 
         if not success:
-            print(f"Failed to extract data from {file} after {max_retries} retries.")
+            print(f"Failed to extract data from {file} after {ExtractionDefaults['max_retries']} retries.")
 
     # If not in auto mode, restart the script
-    if auto is None:
+    if extract_params.auto is None:
         python = sys.executable
         os.execl(python, python, *sys.argv)
 

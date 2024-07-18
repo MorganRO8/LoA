@@ -5,63 +5,64 @@ import os
 import csv
 from src.utils import (download_ollama, select_schema_file)
 from src.scrape import (pubmed_search, arxiv_search, scrape_scienceopen, unpaywall_search)
+from src.classes import JobSettings
 
 # URLs for PubMed Central API
 ESEARCH_URL = 'https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esearch.fcgi'
 EFETCH_URL = 'https://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch.fcgi'
 
 
-def scrape_and_extract_concurrent(args):
+def scrape_and_extract_concurrent(job_settings):
     """
     Concurrently scrape papers from multiple sources and extract information based on a given schema.
 
     Args:
-    args (dict): A dictionary containing configuration parameters.
+    job_settings (JobSettings class): A class containing all configuration parameters.
 
     Returns:
     None
     """
-    # Extract parameters from args or use default values
-    def_search_terms = args.get('def_search_terms')
-    maybe_search_terms = args.get('maybe_search_terms')
-    schema_file = args.get('schema_file')
-    user_instructions = args.get('user_instructions')
-    auto = args.get('auto')
-    model_name_version = args.get('model_name_version')
-    retmax = args.get('retmax', 100)  # Default to 100 if not specified
-    email = args.get('email')  # For Unpaywall
+    # # Extract parameters from args or use default values
+    # def_search_terms = args.get('def_search_terms')
+    # maybe_search_terms = args.get('maybe_search_terms')
+    # schema_file = args.get('schema_file')
+    # user_instructions = args.get('user_instructions')
+    # auto = args.get('auto')
+    # model_name_version = args.get('model_name_version')
+    # retmax = args.get('retmax', 100)  # Default to 100 if not specified
+    # email = args.get('email')  # For Unpaywall
 
-    # If not in auto mode, prompt for user inputs
-    if auto is None:
-        def_search_terms = input(
-            "Enter 'definitely contains' search terms (comma separated) or type 'None': ").lower().split(',')
-        maybe_search_terms = input(
-            "Enter 'maybe contains' search terms (comma separated) or type 'None': ").lower().split(',')
-        retmax = int(input("Enter the maximum number of papers to process per source: "))
-        schema_file = select_schema_file()
-        model_name_version = input("Please enter the model name and version (e.g., 'mistral:7b-instruct-v0.2-q8_0'): ")
-        user_instructions = input("Please briefly tell the model what information it is trying to extract: ")
+    # # If not in auto mode, prompt for user inputs
+    # if auto is None:
+    #     def_search_terms = input(
+    #         "Enter 'definitely contains' search terms (comma separated) or type 'None': ").lower().split(',')
+    #     maybe_search_terms = input(
+    #         "Enter 'maybe contains' search terms (comma separated) or type 'None': ").lower().split(',')
+    #     retmax = int(input("Enter the maximum number of papers to process per source: "))
+    #     schema_file = select_schema_file()
+    #     model_name_version = input("Please enter the model name and version (e.g., 'mistral:7b-instruct-v0.2-q8_0'): ")
+    #     user_instructions = input("Please briefly tell the model what information it is trying to extract: ")
 
-        # Ask which sources to search
-        pubmedyn = input("Search PubMed? (y/n): ").lower() == 'y'
-        arxivyn = input("Search arXiv? (y/n): ").lower() == 'y'
-        chemrxivyn = input("Search ChemRxiv? (y/n): ").lower() == 'y'
-        scienceopenyn = input("Search ScienceOpen? (y/n): ").lower() == 'y'
-        unpaywallyn = input("Search Unpaywall? (y/n): ").lower() == 'y'
-        if unpaywallyn:
-            email = input("Enter email for Unpaywall API: ")
-    else:
-        # In auto mode, use provided args or default to searching all sources
-        pubmedyn = args.get('pubmedyn', True)
-        arxivyn = args.get('arxivyn', True)
-        chemrxivyn = args.get('chemrxivyn', True)
-        scienceopenyn = args.get('scienceopenyn', True)
-        unpaywallyn = args.get('unpaywallyn', True)
-        schema_file = os.path.join(os.getcwd(), 'dataModels', schema_file)
+    #     # Ask which sources to search
+    #     pubmedyn = input("Search PubMed? (y/n): ").lower() == 'y'
+    #     arxivyn = input("Search arXiv? (y/n): ").lower() == 'y'
+    #     chemrxivyn = input("Search ChemRxiv? (y/n): ").lower() == 'y'
+    #     scienceopenyn = input("Search ScienceOpen? (y/n): ").lower() == 'y'
+    #     unpaywallyn = input("Search Unpaywall? (y/n): ").lower() == 'y'
+    #     if unpaywallyn:
+    #         email = input("Enter email for Unpaywall API: ")
+    # else:
+    #     # In auto mode, use provided args or default to searching all sources
+    #     pubmedyn = args.get('pubmedyn', True)
+    #     arxivyn = args.get('arxivyn', True)
+    #     chemrxivyn = args.get('chemrxivyn', True)
+    #     scienceopenyn = args.get('scienceopenyn', True)
+    #     unpaywallyn = args.get('unpaywallyn', True)
+    #     schema_file = os.path.join(os.getcwd(), 'dataModels', schema_file)
 
     # Prepare search terms
-    search_terms = [term for term in def_search_terms if term.lower() != 'none']
-    search_terms.extend([term for term in maybe_search_terms if term.lower() != 'none'])
+    search_terms = [term for term in job_settings.def_search_terms if term.lower() != 'none']
+    search_terms.extend([term for term in job_settings.maybe_search_terms if term.lower() != 'none'])
 
     # Set up output directory
     output_dir = os.path.join(os.getcwd(), 'results')
@@ -75,27 +76,27 @@ def scrape_and_extract_concurrent(args):
     # Start ollama server
     subprocess.Popen(["./ollama", "serve"], stdout=subprocess.DEVNULL, stderr=subprocess.STDOUT)
 
-    # Split model name and version
-    try:
-        model_name, model_version = model_name_version.split(':')
-    except ValueError:
-        model_name = model_name_version
-        model_version = 'latest'
-        model_name_version = f"{model_name}:{model_version}"
+    # # Split model name and version
+    # try:
+    #     model_name, model_version = model_name_version.split(':')
+    # except ValueError:
+    #     model_name = model_name_version
+    #     model_version = 'latest'
+    #     model_name_version = f"{model_name}:{model_version}"
 
     # Check if the model is available, download if not
     model_file = os.path.join(str(Path.home()), ".ollama", "models", "manifests", "registry.ollama.ai", "library",
-                              model_name, model_version)
+                              job_settings.model_name, job_settings.model_version)
     if not os.path.exists(model_file):
         print(f"Model file {model_file} not found. Pulling the model...")
         try:
-            subprocess.run(["./ollama", "pull", model_name_version], check=True)
+            subprocess.run(["./ollama", "pull", job_settings.model_name_version], check=True)
         except subprocess.CalledProcessError as e:
             print(f"Failed to pull the model: {e}")
             return
 
     # Get the CSV file path
-    csv_file = os.path.join(output_dir, f"{model_name}_{model_version}_{os.path.splitext(schema_file)[0].split('/')[-1]}.csv")
+    csv_file = os.path.join(output_dir, f"{job_settings.model_name}_{job_settings.model_version}_{os.path.splitext(job_settings.files.schema_file)[0].split('/')[-1]}.csv")
 
     # Count processed papers for each source
     source_counts = {
@@ -125,34 +126,34 @@ def scrape_and_extract_concurrent(args):
                         source_counts['unpaywall'] += 1
 
     # Adjust retmax for each source
-    pubmed_retmax = max(0, retmax - source_counts['pubmed'])
-    arxiv_retmax = max(0, retmax - source_counts['arxiv'])
-    chemrxiv_retmax = max(0, retmax - source_counts['chemrxiv'])
-    scienceopen_retmax = max(0, retmax - source_counts['SO'])
-    unpaywall_retmax = max(0, retmax - source_counts['unpaywall'])
+    pubmed_retmax = max(0, job_settings.scrape.retmax - source_counts['pubmed'])
+    arxiv_retmax = max(0, job_settings.scrape.retmax - source_counts['arxiv'])
+    chemrxiv_retmax = max(0, job_settings.scrape.retmax - source_counts['chemrxiv'])
+    scienceopen_retmax = max(0, job_settings.scrape.retmax - source_counts['SO'])
+    unpaywall_retmax = max(0, job_settings.scrape.retmax - source_counts['unpaywall'])
 
     # Perform searches and extractions
-    if pubmedyn and pubmed_retmax > 0:
+    if job_settings.scrape.scrape_pubmed and pubmed_retmax > 0:
         print(f"Searching PubMed for {pubmed_retmax} papers...")
-        pubmed_search(search_terms, pubmed_retmax, concurrent=True, schema_file=schema_file,
-                      user_instructions=user_instructions, model_name_version=model_name_version)
+        pubmed_search(search_terms, pubmed_retmax, concurrent=True, schema_file=job_settings.files.schema_file,
+                      user_instructions=job_settings.extract.user_instructions, model_name_version=job_settings.model_name_version)
 
-    if arxivyn and arxiv_retmax > 0:
+    if job_settings.scrape.scrape_arxiv and arxiv_retmax > 0:
         print(f"Searching arXiv for {arxiv_retmax} papers...")
-        arxiv_search(search_terms, arxiv_retmax, 'arxiv', concurrent=True, schema_file=schema_file,
-                     user_instructions=user_instructions, model_name_version=model_name_version)
+        arxiv_search(search_terms, arxiv_retmax, 'arxiv', concurrent=True, schema_file=job_settings.files.schema_file,
+                     user_instructions=job_settings.extract.user_instructions, model_name_version=job_settings.model_name_version)
 
-    if chemrxivyn and chemrxiv_retmax > 0:
-        print(f"Searching ChemRxiv for {chemrxiv_retmax} papers...")
-        arxiv_search(search_terms, chemrxiv_retmax, 'chemrxiv', concurrent=True, schema_file=schema_file,
-                     user_instructions=user_instructions, model_name_version=model_name_version)
+    # if job_settings.scrape.scrape_chemrxiv and chemrxiv_retmax > 0:
+    #     print(f"Searching ChemRxiv for {chemrxiv_retmax} papers...")
+    #     arxiv_search(search_terms, chemrxiv_retmax, 'chemrxiv', concurrent=True, schema_file=job_settings.files.schema_file,
+    #                  user_instructions=job_settings.extract.user_instructions, model_name_version=job_settings.model_name_version)
 
-    if scienceopenyn and scienceopen_retmax > 0:
+    if job_settings.scrape.scrape_scienceopen and scienceopen_retmax > 0:
         print(f"Searching ScienceOpen for {scienceopen_retmax} papers...")
-        scrape_scienceopen(search_terms, scienceopen_retmax, concurrent=True, schema_file=schema_file,
-                           user_instructions=user_instructions, model_name_version=model_name_version)
+        scrape_scienceopen(search_terms, scienceopen_retmax, concurrent=True, schema_file=job_settings.files.schema_file,
+                           user_instructions=job_settings.extract.user_instructions, model_name_version=job_settings.model_name_version)
 
-    if unpaywallyn and unpaywall_retmax > 0:
+    if job_settings.scrape.scrape_unpaywall and unpaywall_retmax > 0:
         if email is None:
             print("Email is required for Unpaywall search. Skipping Unpaywall.")
         else:

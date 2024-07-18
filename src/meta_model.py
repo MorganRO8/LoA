@@ -14,13 +14,9 @@ def create_schema_file(fields, key_columns, filename='./dataModels/default_schem
         # Create the schema definition as a string
         schema_definition = ""
         for field in fields:
-            column_number = field['column_number']
-            field_type = field['type']
-            field_name = field['name']
-            field_description = field['description']
-            schema_definition += f"{column_number} - Type: '{field_type}'\n"
-            schema_definition += f"{column_number} - Name: '{field_name}'\n"
-            schema_definition += f"{column_number} - Description: '{field_description}'\n\n"
+            schema_definition += f"{field['column_number']} - Type: \'{field['type']}\'\n"
+            schema_definition += f"{field['column_number']} - Name: \'{field['name']}\'\n"
+            schema_definition += f"{field['column_number']} - Description: \'{field['description']}\'\n\n"
 
         # Write the schema definition to a file
         with open(f"{filename}.pkl", 'w') as file:
@@ -62,15 +58,15 @@ def UI_schema_creator():
 
         Choice: """)
 
-        # Map user input to Python data types
-        type_mapping = {
-            "1": "str",
-            "2": "int",
-            "3": "float",
-            "4": "complex",
-            "5": "range",
-            "6": "bool"
-        }
+        # Map user input to Python data types ## Never gets used in this function/scope
+        # type_mapping = {
+        #     "1": "str",
+        #     "2": "int",
+        #     "3": "float",
+        #     "4": "complex",
+        #     "5": "range",
+        #     "6": "bool"
+        # }
 
         columnDescription = input(f"Please enter a brief description of the data to be stored in this column: ")
 

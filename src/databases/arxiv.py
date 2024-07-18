@@ -4,6 +4,7 @@ import time
 from bs4 import BeautifulSoup
 from src.extract import extract
 from src.utils import (doi_to_filename, is_file_processed)
+from src.classes import JobSettings
 
 # Constants
 repositories = ['arxiv', 'chemrxiv']  # Decided to remove bio and med, as their api's are not very good

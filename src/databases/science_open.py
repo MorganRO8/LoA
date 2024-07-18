@@ -13,6 +13,7 @@ from selenium.webdriver.support import expected_conditions as EC
 from selenium.webdriver.support.ui import WebDriverWait
 from src.extract import extract
 from src.utils import (get_chrome_driver, is_file_processed)
+from src.classes import JobSettings
 
 def scrape_scienceopen(search_terms, retmax, concurrent=False, schema_file=None, user_instructions=None, model_name_version=None):
     """

@@ -120,6 +120,10 @@ def select_data_model_file():
     # List all .pkl files in the directory
     data_model_files = [file for file in os.listdir(data_models_dir) if file.endswith('.pkl')]
 
+    if len(data_model_files) == 0:
+        print("No data model files found!")
+        return "NO_DATA_MODELS_FOUND"
+    
     # Display available files to the user
     print("Available data model files:")
     for i, file in enumerate(data_model_files):
@@ -1227,3 +1231,15 @@ def is_file_processed(csv_file, filename):
         next(reader)  # Skip header
         processed_files = [row[-1] for row in reader]
     return os.path.splitext(filename)[0] in processed_files
+
+def get_yn_response(prompt, attempts=5):
+        response = input(prompt).lower()
+        attempt_count = 0
+        while response not in ["y","n"]:
+            if attempt_count > attempts:
+                print("Sorry you're having difficulty.  Setting response to 'n' and continuing onward.")
+                return "n"
+            print("Please enter either 'y' or 'n'. ")
+            attempt_count += 1
+            response = input(prompt).lower()
+        return response

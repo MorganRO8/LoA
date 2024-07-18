@@ -10,6 +10,7 @@ from src.utils import (load_schema_file, generate_prompt, generate_examples,
                        parse_llm_response, validate_result, write_to_csv,
                        truncate_text, select_search_info_file, select_schema_file,
                        get_out_id, list_files_in_directory, download_ollama)
+from src.classes import JobSettings
 
 ExtractionDefaults={"max_retries":3,
                     "ollama_url":"http://localhost:11434"
@@ -117,9 +118,12 @@ def get_files_to_process(extract_params,csv_file):
     if search_info_file == 'All':
         files_to_process = list_files_in_directory(os.path.join(os.getcwd(), 'scraped_docs'))
     else:
-        with open(search_info_file, 'r') as f:
-            files_to_process = f.read().splitlines()
-        files_to_process =  [file for file in files_to_process if os.path.isfile(os.path.join(os.getcwd(), 'scraped_docs', file))]
+        if os.path.exists(search_info_file):
+            with open(search_info_file, 'r') as f:
+                files_to_process = f.read().splitlines()
+            files_to_process =  [file for file in files_to_process if os.path.isfile(os.path.join(os.getcwd(), 'scraped_docs', file))]
+        else:
+            files_to_process = []
 
     ## Check for already processed papers
     if os.path.exists(csv_file):

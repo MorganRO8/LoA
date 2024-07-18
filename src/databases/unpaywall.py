@@ -5,6 +5,7 @@ import json
 from datetime import datetime
 from src.extract import extract
 from src.utils import ( doi_to_filename, is_file_processed)
+from src.classes import JobSettings
 
 def read_api_count():
     """

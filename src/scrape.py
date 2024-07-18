@@ -5,6 +5,7 @@ import requests
 from urllib.parse import quote
 from bs4 import BeautifulSoup
 from src.utils import get_out_id
+from src.classes import JobSettings
 
 # Constants
 ESEARCH_URL = 'https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esearch.fcgi'
@@ -67,11 +68,11 @@ class ScrapeParams():
             if self.customdb == 'y':
                 self.base_url = input("Enter base url:")
 
-    def get_yn_response(prompt,attempts=5):
+    def get_yn_response(self,prompt,attempts = 5):
         response = input(prompt).lower()
         attempt_count = 0
         while response not in ["y","n"]:
-            if attempt_count >4:
+            if attempt_count > attempts:
                 print("Sorry you're having difficulty.  Setting response to 'n' and continuing onward.")
                 return "n"
             print("Please enter either 'y' or 'n'. ")
@@ -221,7 +222,7 @@ def main_scrape_custom_db(scrape_params,query_chunks,search_info_file):
         # Close the connection to the database
         conn.close()
 
-def scrape(args):
+def scrape(job_settings):
     """
     Main function to scrape papers from various sources based on user input or provided arguments.
 
@@ -236,10 +237,10 @@ def scrape(args):
     None: The function writes scraped file information to a text file and doesn't return any value.
     """
 
-    scrape_params = ScrapeParams(args)
+    # scrape_params = ScrapeParams(args)
 
     # Generate output directory ID and query chunks
-    output_directory_id, query_chunks = get_out_id(scrape_params.def_search_terms, scrape_params.maybe_search_terms)
+    output_directory_id, query_chunks = get_out_id(job_settings.def_search_terms, scrape_params.maybe_search_terms)
 
     # Create necessary directories
     os.makedirs(os.path.join(os.getcwd(), 'scraped_docs'), exist_ok=True)

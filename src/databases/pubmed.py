@@ -4,12 +4,13 @@ import time
 import xml.etree.ElementTree as ET
 from src.extract import extract
 from src.utils import is_file_processed
+from src.classes import JobSettings
 
 # Constants
 ESEARCH_URL = 'https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esearch.fcgi'
 EFETCH_URL = 'https://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch.fcgi'
 
-def pubmed_search(search_terms, retmax, concurrent=False, schema_file=None, user_instructions=None, model_name_version=None):
+def pubmed_search(search_terms, retmax, concurrent=False, schema_file=None, user_instructions=None, model_name_version="mistral:7b-instruct-v0.2-q8_0"  ):
     """
     Search and download papers from PubMed Central, with optional concurrent extraction.
 
@@ -28,15 +29,18 @@ def pubmed_search(search_terms, retmax, concurrent=False, schema_file=None, user
         raise ValueError("schema_file, user_instructions, and model_name_version must be provided when concurrent is True")
 
     # Split model name and version
+    if ":" not in model_name_version:
+        model_name_version += ":latest"
     try:
         model_name, model_version = model_name_version.split(':')
     except ValueError:
         model_name = model_name_version
         model_version = 'latest'
         model_name_version = f"{model_name}:{model_version}"
-
-    csv_file = os.path.join(os.getcwd(), 'results',
-                            f"{model_name}_{model_version}_{os.path.splitext(schema_file)[0].split('/')[-1]}.csv")
+    
+    print(f"Schema File: {schema_file}") ##print debugging!
+    
+    csv_file = os.path.join(os.getcwd(), 'results', f"{model_name}_{model_version}_{os.path.splitext(schema_file)[0].split('/')[-1]}.csv")
 
     query = " AND ".join(search_terms)
 

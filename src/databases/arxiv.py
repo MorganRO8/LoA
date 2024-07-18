@@ -11,7 +11,7 @@ repositories = ['arxiv', 'chemrxiv']  # Decided to remove bio and med, as their 
 # I could be convinced to add them back, but because the api doesn't allow for search terms, I would need to write code
 # to build a local database and search that, which would be time-consuming and a hassle for the end user.
 
-def arxiv_search(search_terms, retmax, repository, concurrent=False, schema_file=None, user_instructions=None, model_name_version=None):
+def arxiv_search(job_settings:JobSettings, search_terms, repository): # retmax, concurrent=False, schema_file=None, user_instructions=None, model_name_version=None
     """
     Search and download papers from arXiv or ChemRxiv repositories, with optional concurrent extraction.
 
@@ -27,18 +27,8 @@ def arxiv_search(search_terms, retmax, repository, concurrent=False, schema_file
     Returns:
     list: List of filenames of downloaded papers.
     """
-    if concurrent and (schema_file is None or user_instructions is None or model_name_version is None):
+    if job_settings.concurrent and (job_settings.files.schema is None or job_settings.extract.user_instructions is None or job_settings.model_name_version is None):
         raise ValueError("schema_file, user_instructions, and model_name_version must be provided when concurrent is True")
-
-    # Split model name and version
-    try:
-        model_name, model_version = model_name_version.split(':')
-    except ValueError:
-        model_name = model_name_version
-        model_version = 'latest'
-
-    csv_file = os.path.join(os.getcwd(), 'results',
-                            f"{model_name}_{model_version}_{os.path.splitext(schema_file)[0].split('/')[-1]}.csv")
 
     print(f"Starting {repository} search with terms: {search_terms}")
     query = "+AND+".join(search_terms).replace(' ', '%20')
@@ -60,18 +50,17 @@ def arxiv_search(search_terms, retmax, repository, concurrent=False, schema_file
     SEARCH_MAX_RETRIES = 10
     scraped_files = []
 
-    while fetched < retmax:
-        current_max = min(50, retmax - fetched)
+    while fetched < job_settings.scrape.retmax:
+        current_max = min(50, job_settings.scrape.retmax - fetched)
 
         # Construct API URL based on repository
-        if repository == 'arxiv':
-            api_url = f"https://export.arxiv.org/api/query?search_query=all:{query}&start={fetched}&max_results={current_max}"
-        elif repository == 'chemrxiv':
-            api_url = f"https://chemrxiv.org/engage/chemrxiv/public-api/v1/items?term={query}&skip={fetched}&limit={current_max}"
-        else:
+        known_api_urls = {'arxiv': f"https://export.arxiv.org/api/query?search_query=all:{query}&start={fetched}&max_results={current_max}",
+                          'chemrxiv': f"https://chemrxiv.org/engage/chemrxiv/public-api/v1/items?term={query}&skip={fetched}&limit={current_max}",
+                          }
+        if repository not in [x for x in known_api_urls.keys()]:
             print(f"Unsupported repository: {repository}")
             return []
-
+        api_url = known_api_urls[repository]
         print(f"Fetching results from: {api_url}")
 
         search_retry_count = 0
@@ -119,10 +108,10 @@ def arxiv_search(search_terms, retmax, repository, concurrent=False, schema_file
 
                     if os.path.exists(file_path):
                         print(f"{filename} already downloaded.")
-                        if concurrent and not is_file_processed(csv_file, filename):
+                        if job_settings.concurrent and not is_file_processed(job_settings.files.csv, filename):
                             print(f"{filename} not extracted for this task; performing extraction...")
                             try:
-                                extracted_data = extract(file_path, schema_file, model_name_version, user_instructions)
+                                extracted_data = extract(file_path, job_settings.files.schema, job_settings.model_name_version, job_settings.extract.user_instructions)
                                 if extracted_data:
                                     print(f"Successfully extracted data from {filename}")
                                 else:
@@ -154,9 +143,9 @@ def arxiv_search(search_terms, retmax, repository, concurrent=False, schema_file
 
                                 print(f"Successfully downloaded PDF for entry {index}.")
 
-                                if concurrent:
+                                if job_settings.concurrent:
                                     try:
-                                        extracted_data = extract(file_path, schema_file, model_name_version, user_instructions)
+                                        extracted_data = extract(file_path, job_settings.files.schema, job_settings.model_name_version, job_settings.extract.user_instructions)
                                         if extracted_data:
                                             print(f"Successfully extracted data from {filename}")
                                         else:
@@ -178,8 +167,8 @@ def arxiv_search(search_terms, retmax, repository, concurrent=False, schema_file
                         print(
                             f"Failed to download entry {index} after {MAX_RETRIES} attempts. Skipping this entry.")
 
-                    if fetched >= retmax:
-                        print(f"Reached retmax of {retmax}. Stopping search.")
+                    if fetched >= job_settings.scrape.retmax:
+                        print(f"Reached retmax of {job_settings.scrape.retmax}. Stopping search.")
                         break
 
                 if fetched == 0:
@@ -194,7 +183,7 @@ def arxiv_search(search_terms, retmax, repository, concurrent=False, schema_file
                     f"Failed to fetch search results. Retry attempt {search_retry_count}/{SEARCH_MAX_RETRIES}. Error: {e}")
                 time.sleep(10)
 
-        if not search_successful or not entries or fetched >= retmax:
+        if not search_successful or not entries or fetched >= job_settings.scrape.retmax:
             break
 
     print(f"{repository} search completed. Total files scraped: {len(scraped_files)}")

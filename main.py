@@ -13,7 +13,7 @@ os.makedirs(os.path.join(os.getcwd(), 'logs'), exist_ok=True)
 # This creates a log file with the current timestamp in the filename
 builtins.a = os.path.join(os.getcwd(), "logs", f"{str(datetime.datetime.now()).replace(' ', '_')}.txt")
 from src.utils import print  # Custom print function for logging
-from src.utils import splashbanner, get_yn_response, select_data_model_file
+from src.utils import splashbanner, get_yn_response, select_data_model_file, get_out_id, check_model_file
 from src.classes import JobSettings
 
 def write_json_jobfile(job_settings: JobSettings):
@@ -226,66 +226,80 @@ def main():
     
     if "-auto" not in sys.argv:  # Not in automatic mode, therefore in interactive mode.
         interactive_main(job_settings)
+        return ## ensures exit of program after completion of interactive_main (though sys.exit in that function should take care of this)
 
-    elif "-auto" in sys.argv:  # In automatic mode, a.k.a. batch mode.  Runs off json file provided
-        # Parse command line arguments.
-        job_settings.auto = True
-        if len(sys.argv) > sys.argv.index("-auto") + 1:
-            # Use the next argument as the path to the JSON file
-            job_settings.files.json = sys.argv[sys.argv.index("-auto") + 1]
+    # In automatic mode, a.k.a. batch mode.  Runs off json file provided
+    # Parse command line arguments.
+    job_settings.auto = True
+    if len(sys.argv) > sys.argv.index("-auto") + 1:
+        # Use the next argument as the path to the JSON file
+        job_settings.files.json = sys.argv[sys.argv.index("-auto") + 1]
+    else:
+        print(f"JSON file not specified.  Defaulting to {job_settings.files.json}.\n")
+
+    # Open the JSON file and parse its contents
+    tasks = json.load(open(os.path.join(os.getcwd(), job_settings.files.json), "r"))
+    for task_name, task_params in tasks.items():
+        if task_name == "settings":
+            job_settings._parse_from_json(task_params)
+        elif task_name == "files":
+            job_settings.files._parse_from_json(task_params)
+        elif task_name == "scrape":
+            job_settings.scrape._parse_from_json(task_params)
+            job_settings.run_scrape = True
+        elif task_name == "extract":
+            job_settings.extract._parse_from_json(task_params)
+            job_settings.run_extract = True
         else:
-            print(f"JSON file not specified.  Defaulting to {job_settings.files.json}.\n")
-
-        # Open the JSON file and parse its contents
-        tasks = json.load(open(os.path.join(os.getcwd(), job_settings.files.json), "r"))
-        for task_name, task_params in tasks.items():
-            if task_name == "settings":
-                job_settings._parse_from_json(task_params)
-            elif task_name == "files":
-                job_settings.files._parse_from_json(task_params)
-            elif task_name == "scrape":
-                job_settings.scrape._parse_from_json(task_params)
-                job_settings.run_scrape = True
-            elif task_name == "extract":
-                job_settings.extract._parse_from_json(task_params)
-                job_settings.run_extract = True
-            else:
-                print(f"Unrecognized JSON section: {task_name}. Job will not continue.\n")
-                AUTO_EPICFAIL = True
-
-        # Print log of all identified settings.
-        print_all_settings(job_settings)
-        
-        # Verify filenames exist or can be created.
-        if not os.path.exists(job_settings.files.json):
-            print(f"JSON file {job_settings.files.json} not found.  Exiting program.\n")
+            print(f"Unrecognized JSON section: {task_name}. Job will not continue.\n")
             AUTO_EPICFAIL = True
-        if not os.path.exists(job_settings.files.schema):
-            print(f"SCHEMA file {job_settings.files.schema} not found.")
-            AUTO_EPICFAIL = True
-        if job_settings.auto and AUTO_EPICFAIL:
-            print("Error(s) encountered.  Please review logfile. Terminating program (unable to switch to interactive mode).\n")
-            sys.exit(1)
-        
-        
+    job_settings._finalize()
 
-        # Rather than loop over the tasks and do them one at a time, we should check to see if certain conditions exist in a given priority list.
-        if all([job_settings.concurrent, job_settings.run_scrape, job_settings.run_extract]):
-            # First, are both "scrape" and "extract" tasks active, and is the "concurrent" flag also set?  If so, we should run the "do both at once" function.
-            from src.single_paper import scrape_and_extract_concurrent
-            scrape_and_extract_concurrent(job_settings)
+    # Print log of all identified settings.
+    print_all_settings(job_settings)
+    
+    # Create all necessary directories.
+    os.makedirs(os.path.join(os.getcwd(), 'scraped_docs'), exist_ok=True)
+    os.makedirs(os.path.join(os.getcwd(), 'search_info'), exist_ok=True)
+    os.makedirs(os.path.join(os.getcwd(), 'results'), exist_ok=True)
 
-        else:
-            if job_settings.run_scrape:
-                # Then, if not "concurrent", is "scrape" active?  If so, do that before running "extract"
-                from src.scrape import scrape
-                scrape(job_settings)
 
-            if job_settings.run_extract:
-                # Finally, is "extract" active?  If so, run that after completing scrape.
-                # Initialize ollama server if necessary?
-                from src.extract import batch_extract
-                batch_extract(job_settings)
+    ################## SAFETY CHECKS! ##################
+    ## Check if the model is available, download if not.  If unable, crash out.
+    if check_model_file(job_settings):
+        print(f"Unable to find or obtain model file for {job_settings.model_name_version}.  Terminating.")
+        AUTO_EPICFAIL = True
+
+    # Verify filenames exist or can be created.
+    if not os.path.exists(job_settings.files.json):
+        print(f"JSON file {job_settings.files.json} not found.  Exiting program.\n")
+        AUTO_EPICFAIL = True
+    if not os.path.exists(job_settings.files.schema):
+        print(f"SCHEMA file {job_settings.files.schema} not found.")
+        AUTO_EPICFAIL = True
+    if job_settings.auto and AUTO_EPICFAIL:
+        print("Error(s) encountered.  Please review logfile. Terminating program (unable to switch to interactive mode).\n")
+        sys.exit(1)
+
+
+    ################## ACTUALLY PROCESS THE JOB! ##################
+    # Rather than loop over the tasks and do them one at a time, we check to see if certain conditions exist in a given priority list.
+    if all([job_settings.concurrent, job_settings.run_scrape, job_settings.run_extract]):
+        # First, are both "scrape" and "extract" tasks active, and is the "concurrent" flag also set?  If so, we should run the "do both at once" function.
+        from src.single_paper import scrape_and_extract_concurrent
+        scrape_and_extract_concurrent(job_settings)
+
+    else:
+        if job_settings.run_scrape:
+            # Then, if not "concurrent", is "scrape" active?  If so, do that before running "extract"
+            from src.scrape import scrape
+            scrape(job_settings)
+
+        if job_settings.run_extract:
+            # Finally, is "extract" active?  If so, run that after completing scrape.
+            # Initialize ollama server if necessary?
+            from src.extract import batch_extract
+            batch_extract(job_settings)
 
 if __name__ == '__main__':
     main()

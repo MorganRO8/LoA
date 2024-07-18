@@ -18,6 +18,9 @@ from tqdm import tqdm
 from datetime import datetime
 import xml.etree.ElementTree as ET
 import requests
+from src.classes import JobSettings
+from pathlib import Path
+import subprocess
 
 CONVERT_URL = "https://www.ncbi.nlm.nih.gov/pmc/utils/idconv/v1.0/?ids={}&format=json"
 EUTILS_URL = "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch.fcgi?db=pmc&id={}"
@@ -1243,3 +1246,14 @@ def get_yn_response(prompt, attempts=5):
             attempt_count += 1
             response = input(prompt).lower()
         return response
+
+def check_model_file(job_settings: JobSettings):
+    model_file = os.path.join(str(Path.home()), ".ollama", "models", "manifests", "registry.ollama.ai", "library", job_settings.model_name, job_settings.model_version)
+    if not os.path.exists(model_file):
+        print(f"Model file {model_file} not found. Pulling the model...")
+        try:
+            subprocess.run(["./ollama", "pull", job_settings.model_name_version], check=True)
+        except subprocess.CalledProcessError as e:
+            print(f"Failed to pull the model: {e}")
+            return True
+        return False

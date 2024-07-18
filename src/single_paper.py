@@ -8,6 +8,7 @@ from src.databases.pubmed import pubmed_search
 from src.databases.arxiv import arxiv_search
 from src.databases.science_open import scrape_scienceopen
 from src.databases.unpaywall import unpaywall_search
+from src.utils import print  # Custom print function for logging
 
 
 # URLs for PubMed Central API

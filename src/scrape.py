@@ -5,6 +5,7 @@ import requests
 from urllib.parse import quote
 from bs4 import BeautifulSoup
 from src.utils import get_out_id
+from src.utils import print  # Custom print function for logging
 
 # Constants
 ESEARCH_URL = 'https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esearch.fcgi'

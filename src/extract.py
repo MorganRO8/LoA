@@ -10,6 +10,7 @@ from src.utils import (load_schema_file, generate_prompt, generate_examples,
                        parse_llm_response, validate_result, write_to_csv,
                        truncate_text, select_search_info_file, select_schema_file,
                        get_out_id, list_files_in_directory, download_ollama)
+from src.utils import print  # Custom print function for logging
 
 
 def batch_extract(args):

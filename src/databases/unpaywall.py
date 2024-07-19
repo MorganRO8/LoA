@@ -85,7 +85,7 @@ def download_pdf(url, doi):
         print(f"PDF download failed: {e}")
         return None
 
-def unpaywall_search(job_settings:JobSettings): #, query_chunks, retmax, email, concurrent=False, schema_file=None, user_instructions=None, model_name_version=None
+def unpaywall_search(job_settings:JobSettings, query_chunks): #, query_chunks, retmax, email, concurrent=False, schema_file=None, user_instructions=None, model_name_version=None
     """
     Search and download papers from Unpaywall API, with optional concurrent extraction.
 

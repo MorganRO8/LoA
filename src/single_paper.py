@@ -76,32 +76,28 @@ def scrape_and_extract_concurrent(job_settings:JobSettings):
         job_settings.scrape.retmax = pubmed_retmax
         print(f"Searching PubMed for {pubmed_retmax} papers...")
         from src.databases.pubmed import pubmed_search
-        pubmed_search(search_terms, pubmed_retmax, concurrent=True, schema_file=job_settings.files.schema,
-                      user_instructions=job_settings.extract.user_instructions, model_name_version=job_settings.model_name_version)
+        pubmed_search(job_settings, search_terms)
         job_settings.scrape.retmax = original_retmax
 
     if job_settings.scrape.scrape_arxiv and arxiv_retmax > 0:
         job_settings.scrape.retmax = arxiv_retmax
         print(f"Searching arXiv for {arxiv_retmax} papers...")
         from src.databases.arxiv import arxiv_search
-        arxiv_search(search_terms, arxiv_retmax, 'arxiv', concurrent=True, schema_file=job_settings.files.schema,
-                     user_instructions=job_settings.extract.user_instructions, model_name_version=job_settings.model_name_version)
+        arxiv_search(job_settings, search_terms, 'arxiv')
         job_settings.scrape.retmax = original_retmax
 
     if job_settings.scrape.scrape_arxiv and chemrxiv_retmax > 0:
         job_settings.scrape.retmax = chemrxiv_retmax
         print(f"Searching ChemRxiv for {chemrxiv_retmax} papers...")
         from src.databases.arxiv import arxiv_search
-        arxiv_search(search_terms, chemrxiv_retmax, 'chemrxiv', concurrent=True, schema_file=job_settings.files.schema,
-                     user_instructions=job_settings.extract.user_instructions, model_name_version=job_settings.model_name_version)
+        arxiv_search(job_settings, search_terms, 'chemrxiv')
         job_settings.scrape.retmax = original_retmax
 
     if job_settings.scrape.scrape_scienceopen and scienceopen_retmax > 0:
         job_settings.scrape.retmax = scienceopen_retmax
         print(f"Searching ScienceOpen for {scienceopen_retmax} papers...")
         from src.databases.science_open import scrape_scienceopen
-        scrape_scienceopen(search_terms, scienceopen_retmax, concurrent=True, schema_file=job_settings.files.schema,
-                           user_instructions=job_settings.extract.user_instructions, model_name_version=job_settings.model_name_version)
+        scrape_scienceopen(job_settings, search_terms)
         job_settings.scrape.retmax = original_retmax
 
     if job_settings.scrape.scrape_unpaywall and unpaywall_retmax > 0:
@@ -111,8 +107,7 @@ def scrape_and_extract_concurrent(job_settings:JobSettings):
         else:
             print(f"Searching Unpaywall for {unpaywall_retmax} papers...")
             from src.databases.unpaywall import unpaywall_search
-            unpaywall_search([search_terms], unpaywall_retmax, job_settings.scrape.email, concurrent=True, schema_file=job_settings.files.schema,
-                             user_instructions=job_settings.extract.user_instructions, model_name_version=job_settings.model_name_version)
+            unpaywall_search(job_settings, [search_terms])
         job_settings.scrape.retmax = original_retmax
 
     print("Concurrent scraping and extraction completed.")

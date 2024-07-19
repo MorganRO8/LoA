@@ -5,6 +5,7 @@ import csv
 from src.utils import download_ollama
 from src.classes import JobSettings
 
+
 # URLs for PubMed Central API
 ESEARCH_URL = 'https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esearch.fcgi'
 EFETCH_URL = 'https://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch.fcgi'

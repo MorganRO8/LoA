@@ -6,6 +6,7 @@ from pdf2image.exceptions import PDFSyntaxError
 import logging
 import os
 from src.utils import has_multiple_columns, xml_to_string, elements_to_string
+from src.utils import print  # Custom print function for logging
 
 # Configure logging to minimize output from the 'unstructured' library
 LOGGER = logging.getLogger()

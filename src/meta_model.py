@@ -1,5 +1,6 @@
 import os
 import sys
+from src.utils import print  # Custom print function for logging
 
 def create_schema_file(fields, key_columns, filename='./dataModels/default_schema.txt'):
     """

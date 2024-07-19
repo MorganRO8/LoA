@@ -16,13 +16,10 @@ def read_api_count():
     """
     try:
         with open(os.path.join(os.getcwd(), 'search_info', 'unpaywall', 'api_call_count.txt'), "r") as f:
-            data = f.read().split("\n")
-            date = data[0]
-            count = int(data[1])
-        return date, count
+            date,count = f.read().split("\n")
+        return date, int(count)
     except FileNotFoundError:
         return None, 0
-
 
 def write_api_count(date, count):
     """
@@ -34,7 +31,6 @@ def write_api_count(date, count):
     """
     with open(os.path.join(os.getcwd(), 'search_info', 'unpaywall', 'api_call_count.txt'), "w") as f:
         f.write(f"{date}\n{count}")
-
 
 def read_last_state():
     """
@@ -49,7 +45,6 @@ def read_last_state():
         return data['last_chunk'], data['last_page']
     except FileNotFoundError:
         return None, 1
-
 
 def write_last_state(last_chunk, last_page):
     """
@@ -188,10 +183,7 @@ def unpaywall_search(job_settings:JobSettings): #, query_chunks, retmax, email, 
                 json_path = os.path.join(os.getcwd(), 'scraped_docs', json_filename)
 
                 # Check if files already exist
-                pdf_exists = os.path.exists(pdf_path)
-                json_exists = os.path.exists(json_path)
-
-                if pdf_exists or json_exists:
+                if any([os.path.exists(pdf_path),os.path.exists(json_path)]):
                     print(f"Files for DOI {doi} already exist.")
                     if job_settings.concurrent and not is_file_processed(job_settings.files.csv, pdf_filename):
                         print(f"{pdf_filename} not extracted for this task; performing extraction...")
@@ -228,7 +220,9 @@ def unpaywall_search(job_settings:JobSettings): #, query_chunks, retmax, email, 
                 # Download PDF if available
                 if doi_data.get('is_oa'):
                     pdf_url = doi_data['best_oa_location']['url_for_pdf']
-                    if pdf_url:
+                    if not pdf_url:
+                        print(f"No PDF URL found for DOI {doi}")
+                    else: ##rearranged if/else to make it easier to follow the flow.
                         pdf_filename = download_pdf(pdf_url, doi)
                         if pdf_filename:
                             scraped_files.append(pdf_filename)
@@ -243,8 +237,6 @@ def unpaywall_search(job_settings:JobSettings): #, query_chunks, retmax, email, 
                                         print(f"Failed to extract data from {pdf_filename}")
                                 except Exception as e:
                                     print(f"Error extracting data from {pdf_filename}: {e}")
-                    else:
-                        print(f"No PDF URL found for DOI {doi}")
 
                 # Save metadata as JSON
                 doi_data_str = json.dumps(doi_data, indent=4)

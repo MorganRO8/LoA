@@ -75,7 +75,7 @@ def scrape_scienceopen(job_settings:JobSettings, search_terms):  # retmax, concu
 
         if os.path.exists(scraped_links_file_path):
             with open(scraped_links_file_path, 'r') as file:
-                scraped_links = file.read().splitlines()
+                scraped_links = file.readlines()
         else:
             scraped_links = []
 

@@ -30,11 +30,9 @@ def pubmed_search(job_settings: JobSettings, search_terms): # concurrent=False, 
 
     # csv_file = os.path.join(os.getcwd(), 'results', f"{model_name}_{model_version}_{os.path.splitext(schema_file)[0].split('/')[-1]}.csv")
 
-    query = " AND ".join(search_terms)
-
     esearch_params = {
         'db': 'pmc',
-        'term': query,
+        'term': " AND ".join(search_terms),
         'retmode': 'json',
         'retmax': job_settings.scrape.retmax
     }
@@ -56,12 +54,12 @@ def pubmed_search(job_settings: JobSettings, search_terms): # concurrent=False, 
             print("No search results found.")
             return []
 
-        downloaded_files = os.listdir(os.path.join(os.getcwd(), 'scraped_docs'))
-        downloaded_files = [file.replace("pubmed_", "").replace(".xml", "") for file in downloaded_files if
-                            "pubmed_" in file]
+        # downloaded_files = os.listdir(os.path.join(os.getcwd(), 'scraped_docs'))
+        # downloaded_files = [file.replace("pubmed_", "").replace(".xml", "") for file in downloaded_files if
+        #                     "pubmed_" in file]
+        downloaded_files = [file.replace("pubmed_", "").replace(".xml", "") for file in os.listdir(os.path.join(os.getcwd(), 'scraped_docs')) if "pubmed_" in file] # one-liner to avoid storing excess data, even temporarily.
 
-        downloaded_from_current_search = [uid for uid in uid_list if uid in downloaded_files]
-        num_downloaded = len(downloaded_from_current_search)
+        num_downloaded = len([uid for uid in uid_list if uid in downloaded_files])
 
         print(f"{num_downloaded} files already downloaded for this search.")
 

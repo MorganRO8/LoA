@@ -61,7 +61,7 @@ def batch_extract(job_settings: JobSettings):
     # Process each file
     for file in files_to_process:
         print(f"Now processing {file}")
-        if data._refresh_paper_content(file): 
+        if data._refresh_paper_content(file,job_settings.extract.prompt): 
             continue
 
         retry_count = 0

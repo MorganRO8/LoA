@@ -107,7 +107,8 @@ def scrape_and_extract_concurrent(job_settings:JobSettings):
         else:
             print(f"Searching Unpaywall for {unpaywall_retmax} papers...")
             from src.databases.unpaywall import unpaywall_search
-            unpaywall_search(job_settings, [search_terms])
+            job_settings.query_chunks = [search_terms]
+            unpaywall_search(job_settings)
         job_settings.scrape.retmax = original_retmax
 
     print("Concurrent scraping and extraction completed.")

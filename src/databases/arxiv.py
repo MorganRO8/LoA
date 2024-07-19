@@ -111,7 +111,7 @@ def arxiv_search(job_settings:JobSettings, search_terms, repository): # retmax, 
                         if job_settings.concurrent and not is_file_processed(job_settings.files.csv, filename):
                             print(f"{filename} not extracted for this task; performing extraction...")
                             try:
-                                extracted_data = extract(file_path, job_settings.files.schema, job_settings.model_name_version, job_settings.extract.user_instructions)
+                                extracted_data = extract(file_path, job_settings)
                                 if extracted_data:
                                     print(f"Successfully extracted data from {filename}")
                                 else:
@@ -145,7 +145,7 @@ def arxiv_search(job_settings:JobSettings, search_terms, repository): # retmax, 
 
                                 if job_settings.concurrent:
                                     try:
-                                        extracted_data = extract(file_path, job_settings.files.schema, job_settings.model_name_version, job_settings.extract.user_instructions)
+                                        extracted_data = extract(file_path, job_settings)
                                         if extracted_data:
                                             print(f"Successfully extracted data from {filename}")
                                         else:

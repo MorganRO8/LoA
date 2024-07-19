@@ -101,7 +101,7 @@ def pubmed_search(job_settings: JobSettings, search_terms): # concurrent=False, 
 
                     if job_settings.concurrent:
                         try:
-                            extracted_data = extract(file_path, job_settings.files.schema, job_settings.model_name_version, job_settings.extract.user_instructions)
+                            extracted_data = extract(file_path, job_settings)
                             if extracted_data:
                                 print(f"Successfully extracted data from {filename}")
                             else:
@@ -116,7 +116,7 @@ def pubmed_search(job_settings: JobSettings, search_terms): # concurrent=False, 
             elif (not is_file_processed(job_settings.files.csv, filename)) and job_settings.concurrent:
                 print(f"{filename} already downloaded, but not extracted from for this task; performing extraction...")
                 try:
-                    extracted_data = extract(file_path, job_settings.files.schema, job_settings.model_name_version, job_settings.extract.user_instructions)
+                    extracted_data = extract(file_path, job_settings)
                     if extracted_data:
                         print(f"Successfully extracted data from {filename}")
                     else:

@@ -71,7 +71,7 @@ def batch_extract(job_settings: JobSettings):
         while retry_count < job_settings.extract.max_retries and not success:
             data._refresh_data(retry_count)
             try:
-                response = requests.post(f"{job_settings.extract.ollama_url}/api/generate", json=dict(data))
+                response = requests.post(f"{job_settings.extract.ollama_url}/api/generate", json=data.__dict__())
                 response.raise_for_status()
                 result = response.json()["response"]
 
@@ -188,7 +188,7 @@ def single_file_extract(job_settings:JobSettings, data:PromptData, file_path):
     while retry_count < job_settings.extract.max_retries:
         data._refresh_data(retry_count)
         try:
-            response = requests.post(f"{job_settings.extract.ollama_url}/api/generate", json=dict(data))
+            response = requests.post(f"{job_settings.extract.ollama_url}/api/generate", json=data.__dict__())
             response.raise_for_status()
             result = response.json()["response"]
             print(f"Unparsed Result:\n{result}")

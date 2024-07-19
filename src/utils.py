@@ -1161,7 +1161,11 @@ def get_chrome_version():
     str: The version number of the installed Chrome browser.
     """
     # This is specifically for linux
-    return os.popen('google-chrome --version').read().strip().split()[-1]
+    try:
+        vers = os.popen('google-chrome --version').read().strip().split()[-1]
+    except:
+        raise
+    return vers
 
 
 def get_or_download_chromedriver(version):

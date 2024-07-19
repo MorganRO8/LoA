@@ -12,9 +12,9 @@
     "logfile":"chromophore_output.log"
   },
   "scrape":{
-    "pubmed":"y",
+    "pubmed":"n",
     "arxiv":"n",
-    "scienceopen":"n",
+    "scienceopen":"y",
     "unpaywall":"n",
     "customdb":"n",
     "base_url":"",

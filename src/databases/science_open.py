@@ -30,6 +30,12 @@ def scrape_scienceopen(job_settings:JobSettings, search_terms):  # retmax, concu
     Returns:
     list: A list of filenames of the scraped PDFs.
     """
+
+    # First things first, if this whole function is dependent on Chrome being installed, we have to make sure it's installed and bail out if not.
+    if os.popen("which google-chrome").read().strip() == "":
+        print("Google Chrome is not installed on this system.  Aborting use of ScienceOpen database.")
+        return []
+
     if job_settings.concurrent and (job_settings.files.schema is None or job_settings.extract.user_instructions is None or job_settings.model_name_version is None):
         raise ValueError("schema_file, user_instructions, and model_name_version must be provided when concurrent is True")
 

@@ -190,15 +190,15 @@ def print_all_settings(job_settings: JobSettings):
     print("# Scraper Settings:")
     print("#   Scraping from: ")
     db_list = ""
-    if job_settings.scrape.scrape_pubmed == "y":
+    if job_settings.scrape.scrape_pubmed:
         db_list += "PubMed, "
-    if job_settings.scrape.scrape_arxiv == "y":
+    if job_settings.scrape.scrape_arxiv:
         db_list += "ArXiv, "
-    if job_settings.scrape.scrape_scienceopen == "y":
+    if job_settings.scrape.scrape_scienceopen:
         db_list += "ScienceOpen, "
-    if job_settings.scrape.scrape_unpaywall == "y":
+    if job_settings.scrape.scrape_unpaywall:
         db_list += "UnPaywall, "
-    if job_settings.scrape.scrape_custom_db == "y":
+    if job_settings.scrape.scrape_custom_db:
         db_list += f"Custom Database ({job_settings.scrape.base_url}), "
     db_list = db_list[:-2]
     print(f"#     {db_list}")

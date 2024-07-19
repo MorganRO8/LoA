@@ -1,0 +1,41 @@
+Chromophore,Absorption Wavelength,Emission Wavelength,Fluorescence Quantum Yield,paper
+(DABNA-1),(4393.345),(515.7---),(0.10.8),pubmed_11253189
+(DABNA-1-DMAP),(3681.545),(null),(null),pubmed_11253189
+(DABNA-1-NHC),(3573.438),(35.41362.3),(0.0),pubmed_11253189
+(DtBuCzB),(4666.548),(38.283.7/98.5/97.2/92.0/85.2),(1.0),pubmed_11253189
+(DtBuCzB-DMAP),(3681.548),(null),(null),pubmed_11253189
+(DtBuCzB-NHC),(3573.438),(2.0),(0.0),pubmed_11253189
+BODIPY (1),540-560,590-620,null,pubmed_11253169
+BOPHY dye (2),575-585,630-655,0.52,pubmed_11253169
+null,null,null,null,pubmed_11243112
+(RBP-D67C/G134C),(null),(null),(0.13),pubmed_11238208
+(MBP-Tz),(null),(null),(null),pubmed_11238208
+DC,918,1050,0.67,pubmed_11253120
+SC,871,1120,0.72,pubmed_11253120
+LSC,821,1200,0.81,pubmed_11253120
+This roadmap outlines the current state-of-the-art in multiscale modeling (MM) of radiation damage and related phenomena in complex systems,focusing on the interlinkages between quantum mechanical (QM)-based methods and classical molecular dynamics (MD),particle transport methods,and stochastic dynamics. The roadmap also highlights case studies and future directions for research in this area.,pubmed_11240271
+(example_1_1),(example_3_2),(example_3_4),(example_3_5),pubmed_11228761
+(human_rod_photoreceptor),(null),(null),(null),pubmed_11223620
+(M. fascicularis_rod_photoreceptor),(null),(null),(null),pubmed_11223620
+(SumireF),(342),(null),(0.68),pubmed_11223193
+(PA-BFP),(360),(445),(0.71),pubmed_11223193
+(FAST),(471 nm),(510 nm),(2.48),pubmed_11219735
+(HBR-DOM2),(471 nm),(510 nm),(2.33),pubmed_11219735
+(HMBR),(471 nm),(510 nm),(3.55),pubmed_11219735
+(25DOM-HBI-2T),(471 nm),(510 nm),(1.74),pubmed_11219735
+(FAST-F62L),(471 nm),(510 nm),(2.88),pubmed_11219735
+(FAST-R52K),(471 nm),(510 nm),(3.30),pubmed_11219735
+(FAST-P68T),(471 nm),(510 nm),(3.63),pubmed_11219735
+(FAST-P68K),(471 nm),(510 nm),(1.74),pubmed_11219735
+(1),(2350.5),(2366.8),(0.7),chemrxiv_10.26434_SLASH_chemrxiv-2024-r9tgw
+Overall,this study provides valuable insights into the strengths and weaknesses of cDFT and GCMC methods when modeling fluid-structure interactions in amorphous carbon nanoporous materials for carbon capture applications. By comparing the performance of these two methods under various conditions,researchers can gain a better understanding of their applicability and limitations,enabling them to make more informed choices about which method is best suited for specific research questions.,chemrxiv_10.26434_SLASH_chemrxiv-2024-zz89s
+(acetone),(380-395),(460-480),(0.1),chemrxiv_10.26434_SLASH_chemrxiv-2024-7f2l6
+(IPA),(320-370),(380-410),(0.8),chemrxiv_10.26434_SLASH_chemrxiv-2024-7f2l6
+(PF[12]CPP),(3.8-null),(3.9-null),(0.75),chemrxiv_10.26434_SLASH_chemrxiv-2024-kq19w
+(Ag),(null),(null),(null),chemrxiv_10.26434_SLASH_chemrxiv-2024-n35nl
+(Fe),(null),(null),(null),chemrxiv_10.26434_SLASH_chemrxiv-2024-n35nl
+(Mo),(null),(null),(null),chemrxiv_10.26434_SLASH_chemrxiv-2024-n35nl
+(Ru),(null),(null),(null),chemrxiv_10.26434_SLASH_chemrxiv-2024-n35nl
+(Ti),(null),(null),(null),chemrxiv_10.26434_SLASH_chemrxiv-2024-n35nl
+(W),(null),(null),(null),chemrxiv_10.26434_SLASH_chemrxiv-2024-n35nl
+(example_1_1),(350nm),(380nm),(0.62),chemrxiv_10.26434_SLASH_chemrxiv-2024-w1qd6

@@ -1,27 +1,12 @@
-import subprocess
 import sys
-
 import os
 import csv
 import requests
 import json
-from src.document_reader import doc_to_elements
-from src.utils import (load_schema_file, generate_prompt, generate_examples,
-                       parse_llm_response, validate_result, write_to_csv,
-                       truncate_text, select_search_info_file, select_schema_file,
-                       get_out_id, list_files_in_directory, download_ollama)
+from src.utils import (generate_prompt, parse_llm_response, validate_result, write_to_csv,
+                       list_files_in_directory, begin_ollama_server)
 from src.classes import JobSettings,PromptData
 
-def begin_ollama_server():
-    # Check for ollama binary and download if not present
-    if not os.path.isfile('ollama'):
-        print("ollama binary not found. Downloading the latest release...")
-        download_ollama()
-    else:
-        print("ollama binary already exists in the current directory.")
-
-    # Start ollama server
-    subprocess.Popen(["./ollama", "serve"], stdout=subprocess.DEVNULL, stderr=subprocess.STDOUT)
 
 def get_files_to_process(job_settings:JobSettings):
     ## Process "search_info_file" to get list of files to process

@@ -266,7 +266,7 @@ def main():
 
     ################## SAFETY CHECKS! ##################
     ## Check if the model is available, download if not.  If unable, crash out.
-    if check_model_file(job_settings):
+    if check_model_file(job_settings.model_name_version):
         print(f"Unable to find or obtain model file for {job_settings.model_name_version}.  Terminating.")
         AUTO_EPICFAIL = True
 

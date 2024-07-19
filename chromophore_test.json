@@ -3,11 +3,11 @@
     "def_search_terms":"chromophore",
     "maybe_search_terms":"absorption wavelength, emission wavelength, fluorescence quantum yield",
     "auto": true,
-    "model_name_version":"chromophore_schema.pkl",
+    "model_name_version":"mistral:7b-instruct-v0.2-q8_0",
     "concurrent":"y"
   },
   "files":{
-    "schema_file":"./dataModels/chromophore_schema.pkl",
+    "schema_file":"chromophore_schema.pkl",
     "results_csv":"chromophore_results.csv",
     "logfile":"chromophore_output.log"
   },

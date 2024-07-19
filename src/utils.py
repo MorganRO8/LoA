@@ -18,7 +18,6 @@ from tqdm import tqdm
 from datetime import datetime
 import xml.etree.ElementTree as ET
 import requests
-from src.classes import JobSettings
 from pathlib import Path
 import subprocess
 
@@ -1247,12 +1246,26 @@ def get_yn_response(prompt, attempts=5):
             response = input(prompt).lower()
         return response
 
-def check_model_file(job_settings: JobSettings):
-    model_file = os.path.join(str(Path.home()), ".ollama", "models", "manifests", "registry.ollama.ai", "library", job_settings.model_name, job_settings.model_version)
+
+def begin_ollama_server():
+    # Check for ollama binary and download if not present
+    if not os.path.isfile('ollama'):
+        print("ollama binary not found. Downloading the latest release...")
+        download_ollama()
+    else:
+        print("ollama binary already exists in the current directory.")
+
+    # Start ollama server
+    subprocess.Popen(["./ollama", "serve"], stdout=subprocess.DEVNULL, stderr=subprocess.STDOUT)
+
+def check_model_file(model_name_version):
+    model_name,model_version = model_name_version.split(":")
+    model_file = os.path.join(str(Path.home()), ".ollama", "models", "manifests", "registry.ollama.ai", "library", model_name, model_version)
     if not os.path.exists(model_file):
+        begin_ollama_server()
         print(f"Model file {model_file} not found. Pulling the model...")
         try:
-            subprocess.run(["./ollama", "pull", job_settings.model_name_version], check=True)
+            subprocess.run(["./ollama", "pull", model_name_version], check=True)
         except subprocess.CalledProcessError as e:
             print(f"Failed to pull the model: {e}")
             return True

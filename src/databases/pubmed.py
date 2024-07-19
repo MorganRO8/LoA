@@ -4,12 +4,13 @@ import time
 import xml.etree.ElementTree as ET
 from src.extract import extract
 from src.utils import is_file_processed
+from src.classes import JobSettings
 
 # Constants
 ESEARCH_URL = 'https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esearch.fcgi'
 EFETCH_URL = 'https://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch.fcgi'
 
-def pubmed_search(search_terms, retmax, concurrent=False, schema_file=None, user_instructions=None, model_name_version=None):
+def pubmed_search(job_settings: JobSettings, search_terms): # concurrent=False, schema_file=None, user_instructions=None, model_name_version="mistral:7b-instruct-v0.2-q8_0"  ):
     """
     Search and download papers from PubMed Central, with optional concurrent extraction.
 
@@ -24,25 +25,16 @@ def pubmed_search(search_terms, retmax, concurrent=False, schema_file=None, user
     Returns:
     list: List of filenames of downloaded papers (and extracted data if concurrent is True).
     """
-    if concurrent and (schema_file is None or user_instructions is None or model_name_version is None):
+    if job_settings.concurrent and (job_settings.files.schema is None or job_settings.extract.user_instructions is None or job_settings.model_name_version is None):
         raise ValueError("schema_file, user_instructions, and model_name_version must be provided when concurrent is True")
 
-    # Split model name and version
-    try:
-        model_name, model_version = model_name_version.split(':')
-    except ValueError:
-        model_name = model_name_version
-        model_version = 'latest'
-        model_name_version = f"{model_name}:{model_version}"
-
-    csv_file = os.path.join(os.getcwd(), 'results',
-                            f"{model_name}_{model_version}_{os.path.splitext(schema_file)[0].split('/')[-1]}.csv")
+    # csv_file = os.path.join(os.getcwd(), 'results', f"{model_name}_{model_version}_{os.path.splitext(schema_file)[0].split('/')[-1]}.csv")
 
     esearch_params = {
         'db': 'pmc',
         'term': " AND ".join(search_terms),
         'retmode': 'json',
-        'retmax': retmax
+        'retmax': job_settings.scrape.retmax
     }
 
     print("Now performing esearch...")
@@ -77,7 +69,7 @@ def pubmed_search(search_terms, retmax, concurrent=False, schema_file=None, user
             filename = f"pubmed_{uid}.xml"
             file_path = os.path.join(os.getcwd(), 'scraped_docs', filename)
             if uid not in downloaded_files:
-                if num_downloaded >= retmax:
+                if num_downloaded >= job_settings.scrape.retmax:
                     print("Reached maximum number of downloads for this search. Stopping.")
                     return scraped_files
 
@@ -105,9 +97,9 @@ def pubmed_search(search_terms, retmax, concurrent=False, schema_file=None, user
                     num_downloaded += 1
                     scraped_files.append(filename)
 
-                    if concurrent:
+                    if job_settings.concurrent:
                         try:
-                            extracted_data = extract(file_path, schema_file, model_name_version, user_instructions)
+                            extracted_data = extract(file_path, job_settings)
                             if extracted_data:
                                 print(f"Successfully extracted data from {filename}")
                             else:
@@ -119,10 +111,10 @@ def pubmed_search(search_terms, retmax, concurrent=False, schema_file=None, user
 
                 time.sleep(1 / 2)
 
-            elif (not is_file_processed(csv_file, filename)) and concurrent:
+            elif (not is_file_processed(job_settings.files.csv, filename)) and job_settings.concurrent:
                 print(f"{filename} already downloaded, but not extracted from for this task; performing extraction...")
                 try:
-                    extracted_data = extract(file_path, schema_file, model_name_version, user_instructions)
+                    extracted_data = extract(file_path, job_settings)
                     if extracted_data:
                         print(f"Successfully extracted data from {filename}")
                     else:

@@ -6,58 +6,63 @@ from src.extract import extract
 from src.utils import (doi_to_filename, is_file_processed)
 from src.classes import JobSettings
 
-# Constants
-repositories = ['arxiv', 'chemrxiv']  # Decided to remove bio and med, as their api's are not very good
-# I could be convinced to add them back, but because the api doesn't allow for search terms, I would need to write code
-# to build a local database and search that, which would be time-consuming and a hassle for the end user.
 
-def arxiv_search(job_settings:JobSettings, search_terms, repository): # retmax, concurrent=False, schema_file=None, user_instructions=None, model_name_version=None
+def arxiv_search(job_settings: JobSettings, search_terms, repository):
     """
     Search and download papers from arXiv or ChemRxiv repositories, with optional concurrent extraction.
-
-    Args:
-    search_terms (list): List of search terms.
-    retmax (int): Maximum number of results to retrieve.
-    repository (str): Either 'arxiv' or 'chemrxiv'.
-    concurrent (bool): Whether to perform extraction concurrently with downloading.
-    schema_file (str): Path to the schema file for extraction (required if concurrent is True).
-    user_instructions (str): Instructions for the extraction model (required if concurrent is True).
-    model_name_version (str): Name and version of the model to use for extraction (required if concurrent is True).
-
-    Returns:
-    list: List of filenames of downloaded papers.
     """
-    if job_settings.concurrent and (job_settings.files.schema is None or job_settings.extract.user_instructions is None or job_settings.model_name_version is None):
-        raise ValueError("schema_file, user_instructions, and model_name_version must be provided when concurrent is True")
+    if job_settings.concurrent and any([job_settings.files.schema is None,
+                                        job_settings.extract.user_instructions is None,
+                                        job_settings.model_name_version is None]):
+        raise ValueError(
+            "schema_file, user_instructions, and model_name_version must be provided when concurrent is True")
 
     print(f"Starting {repository} search with terms: {search_terms}")
     query = "+AND+".join(search_terms).replace(' ', '%20')
     print(f"Constructed query: {query}")
 
-    BATCH_SIZE = 50
-    skip = 0
     MAX_RETRIES = 3
     SEARCH_MAX_RETRIES = 10
     scraped_files = []
     processed_papers = set()
 
-    while fetched < job_settings.scrape.retmax:
-        current_max = min(50, job_settings.scrape.retmax - fetched)
+    # Initial API call to get total count
+    if repository == 'arxiv':
+        initial_url = f"https://export.arxiv.org/api/query?search_query=all:{query}&start=0&max_results=1"
+    elif repository == 'chemrxiv':
+        initial_url = f"https://chemrxiv.org/engage/chemrxiv/public-api/v1/items?term={query}&skip=0&limit=1"
+    else:
+        print(f"Unsupported repository: {repository}")
+        return []
 
-        # Construct API URL based on repository
-        known_api_urls = {'arxiv': f"https://export.arxiv.org/api/query?search_query=all:{query}&start={fetched}&max_results={current_max}",
-                          'chemrxiv': f"https://chemrxiv.org/engage/chemrxiv/public-api/v1/items?term={query}&skip={fetched}&limit={current_max}",
-                          }
-        if repository not in [x for x in known_api_urls.keys()]:
-            print(f"Unsupported repository: {repository}")
-            return []
-        api_url = known_api_urls[repository]
+    try:
+        response = requests.get(initial_url)
+        response.raise_for_status()
+        if repository == 'arxiv':
+            soup = BeautifulSoup(response.text, "xml")
+            total_results = int(soup.find('opensearch:totalResults').text)
+        elif repository == 'chemrxiv':
+            json_data = response.json()
+            total_results = json_data['totalCount']
+    except Exception as e:
+        print(f"Error fetching initial results: {e}")
+        return []
+
+    print(f"Total results found: {total_results}")
+
+    start = 0
+    while start < min(total_results, job_settings.scrape.retmax):
+        current_max = min(50, job_settings.scrape.retmax - start)
+
+        if repository == 'arxiv':
+            api_url = f"https://export.arxiv.org/api/query?search_query=all:{query}&start={start}&max_results={current_max}"
+        elif repository == 'chemrxiv':
+            api_url = f"https://chemrxiv.org/engage/chemrxiv/public-api/v1/items?term={query}&skip={start}&limit={current_max}"
+
         print(f"Fetching results from: {api_url}")
 
         search_retry_count = 0
-        search_successful = False
-
-        while search_retry_count < SEARCH_MAX_RETRIES and not search_successful:
+        while search_retry_count < SEARCH_MAX_RETRIES:
             try:
                 print(f"Sending request to API... (Retry: {search_retry_count})")
                 response = requests.get(api_url)
@@ -76,7 +81,7 @@ def arxiv_search(job_settings:JobSettings, search_terms, repository): # retmax, 
                     print("No more results found. Exiting.")
                     return scraped_files
 
-                for index, entry in enumerate(entries, start=1):
+                for entry in entries:
                     if repository == 'arxiv':
                         pdf_link = entry.find('link', {'title': 'pdf'})['href']
                         doi = entry.find('id').text.split('/')[-1]
@@ -88,7 +93,6 @@ def arxiv_search(job_settings:JobSettings, search_terms, repository): # retmax, 
                         continue
 
                     processed_papers.add(doi)
-
                     filename = f"{repository}_{doi_to_filename(doi)}.pdf"
                     file_path = os.path.join(os.getcwd(), 'scraped_docs', filename)
 
@@ -107,24 +111,16 @@ def arxiv_search(job_settings:JobSettings, search_terms, repository): # retmax, 
                         continue
 
                     retry_count = 0
-                    download_successful = False
-
-                    while retry_count < MAX_RETRIES and not download_successful:
+                    while retry_count < MAX_RETRIES:
                         try:
                             print(f"PDF link found: {pdf_link}")
-
                             if pdf_link:
                                 pdf_response = requests.get(pdf_link)
                                 pdf_response.raise_for_status()
-                                pdf_content = pdf_response.content
-
                                 with open(file_path, 'wb') as f:
-                                    f.write(pdf_content)
-
+                                    f.write(pdf_response.content)
                                 scraped_files.append(filename)
-                                download_successful = True
-
-                                print(f"Successfully downloaded PDF for entry {index}.")
+                                print(f"Successfully downloaded PDF for {filename}.")
 
                                 if job_settings.concurrent:
                                     try:
@@ -135,37 +131,34 @@ def arxiv_search(job_settings:JobSettings, search_terms, repository): # retmax, 
                                             print(f"Failed to extract data from {filename}")
                                     except Exception as e:
                                         print(f"Error extracting data from {filename}: {e}")
-
+                                break
                             else:
-                                print(f"No PDF link found for entry {index}. Skipping.")
-                                download_successful = True
-
-                        except (requests.exceptions.ConnectionError, requests.exceptions.RequestException) as e:
+                                print(f"No PDF link found for {filename}. Skipping.")
+                                break
+                        except requests.exceptions.RequestException as e:
                             retry_count += 1
-                            print(f"Error downloading PDF for entry {index}. Retry attempt {retry_count}/{MAX_RETRIES}. Error: {e}")
+                            print(f"Error downloading PDF. Retry attempt {retry_count}/{MAX_RETRIES}. Error: {e}")
                             time.sleep(10)
-
-                    if not download_successful:
-                        print(
-                            f"Failed to download entry {index} after {MAX_RETRIES} attempts. Skipping this entry.")
-
-                    if fetched >= job_settings.scrape.retmax:
-                        print(f"Reached retmax of {job_settings.scrape.retmax}. Stopping search.")
-                        break
-
+                    else:
+                        print(f"Failed to download {filename} after {MAX_RETRIES} attempts. Skipping.")
 
                     if len(processed_papers) % 10 == 0:
                         print(f"Progress: Processed {len(processed_papers)} unique papers")
 
-                search_successful = True
+                    if len(scraped_files) >= job_settings.scrape.retmax:
+                        print(f"Reached retmax of {job_settings.scrape.retmax}. Stopping search.")
+                        return scraped_files
 
-            except (requests.exceptions.ConnectionError, requests.exceptions.RequestException) as e:
+                start += len(entries)
+                break  # Break out of the retry loop if successful
+
+            except (requests.exceptions.RequestException, Exception) as e:
                 search_retry_count += 1
-                print(f"Failed to fetch search results. Retry attempt {search_retry_count}/{SEARCH_MAX_RETRIES}. Error: {e}")
+                print(
+                    f"Failed to fetch search results. Retry attempt {search_retry_count}/{SEARCH_MAX_RETRIES}. Error: {e}")
                 time.sleep(10)
-
-        if not search_successful or not entries or fetched >= job_settings.scrape.retmax:
-            break
+        else:
+            print(f"Failed to fetch results after {SEARCH_MAX_RETRIES} attempts. Moving to next batch.")
 
     print(f"{repository} search completed. Total unique papers processed: {len(processed_papers)}")
     print(f"Total files scraped: {len(scraped_files)}")

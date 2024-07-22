@@ -12,6 +12,7 @@ ollama
 directory_structure.txt
 print_all.py
 run_auto.sh
+job_scripts/
 
 # Everythig below is from a python specific template, to help other developers if they would like to get involved
 # Byte-compiled / optimized / DLL files

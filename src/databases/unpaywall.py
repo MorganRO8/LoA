@@ -5,6 +5,7 @@ import json
 from datetime import datetime
 from src.extract import extract
 from src.utils import ( doi_to_filename, is_file_processed)
+from src.classes import JobSettings
 
 def read_api_count():
     """
@@ -79,7 +80,7 @@ def download_pdf(url, doi):
         print(f"PDF download failed: {e}")
         return None
 
-def unpaywall_search(query_chunks, retmax, email, concurrent=False, schema_file=None, user_instructions=None, model_name_version=None):
+def unpaywall_search(job_settings:JobSettings): #, query_chunks, retmax, email, concurrent=False, schema_file=None, user_instructions=None, model_name_version=None
     """
     Search and download papers from Unpaywall API, with optional concurrent extraction.
 
@@ -95,18 +96,8 @@ def unpaywall_search(query_chunks, retmax, email, concurrent=False, schema_file=
     Returns:
     list: List of filenames of downloaded papers and JSON metadata.
     """
-    if concurrent and any([schema_file is None, user_instructions is None, model_name_version is None]):
+    if job_settings.concurrent and any([job_settings.files.schema is None, job_settings.extract.user_instructions is None, job_settings.model_name_version is None]):
         raise ValueError("schema_file, user_instructions, and model_name_version must be provided when concurrent is True")
-
-    # Split model name and version
-    try:
-        model_name, model_version = model_name_version.split(':')
-    except ValueError:
-        model_name = model_name_version
-        model_version = 'latest'
-
-    csv_file = os.path.join(os.getcwd(), 'results',
-                            f"{model_name}_{model_version}_{os.path.splitext(schema_file)[0].split('/')[-1]}.csv")
 
     # Read the last API call count and date
     last_date, api_count = read_api_count()
@@ -130,18 +121,18 @@ def unpaywall_search(query_chunks, retmax, email, concurrent=False, schema_file=
     total_downloaded = 0
 
     # Iterate through search term chunks
-    for chunk in query_chunks:
+    for chunk in job_settings.query_chunks:
         if resume and chunk != last_chunk:
             continue
         query = " AND ".join(chunk)
         page = last_page if resume and chunk == last_chunk else 1
 
         # Continue searching while within limits
-        while total_downloaded <= retmax and api_count < 100000:
+        while total_downloaded <= job_settings.scrape.retmax and api_count < 100000:
             unpaywall_params = {
                 'query': query,
                 'is_oa': 'true',
-                'email': email,
+                'email': job_settings.scrape.email,
                 'page': page
             }
 
@@ -182,8 +173,8 @@ def unpaywall_search(query_chunks, retmax, email, concurrent=False, schema_file=
 
             # Process each DOI
             for doi in doi_list:
-                if total_downloaded >= retmax:
-                    print(f"Reached retmax of {retmax}. Stopping search.")
+                if total_downloaded >= job_settings.scrape.retmax:
+                    print(f"Reached retmax of {job_settings.scrape.retmax}. Stopping search.")
                     return scraped_files
 
                 pdf_filename = f"unpaywall_{doi_to_filename(doi)}.pdf"
@@ -194,10 +185,10 @@ def unpaywall_search(query_chunks, retmax, email, concurrent=False, schema_file=
                 # Check if files already exist
                 if any([os.path.exists(pdf_path),os.path.exists(json_path)]):
                     print(f"Files for DOI {doi} already exist.")
-                    if concurrent and not is_file_processed(csv_file, pdf_filename):
+                    if job_settings.concurrent and not is_file_processed(job_settings.files.csv, pdf_filename):
                         print(f"{pdf_filename} not extracted for this task; performing extraction...")
                         try:
-                            extracted_data = extract(pdf_path, schema_file, model_name_version, user_instructions)
+                            extracted_data = extract(pdf_path, job_settings)
                             if extracted_data:
                                 print(f"Successfully extracted data from {pdf_filename}")
                             else:
@@ -208,7 +199,7 @@ def unpaywall_search(query_chunks, retmax, email, concurrent=False, schema_file=
 
                 print(f"Now fetching data for DOI {doi}...")
                 try:
-                    doi_response = requests.get(f"https://api.unpaywall.org/v2/{doi}?email={email}")
+                    doi_response = requests.get(f"https://api.unpaywall.org/v2/{doi}?email={job_settings.scrape.email}")
                     doi_response.raise_for_status()
                 except requests.exceptions.RequestException as e:
                     print(f"Request failed: {e}")
@@ -236,9 +227,10 @@ def unpaywall_search(query_chunks, retmax, email, concurrent=False, schema_file=
                         if pdf_filename:
                             scraped_files.append(pdf_filename)
                             total_downloaded += 1
-                            if concurrent:
+
+                            if job_settings.concurrent:
                                 try:
-                                    extracted_data = extract(pdf_path, schema_file, model_name_version, user_instructions)
+                                    extracted_data = extract(pdf_path, job_settings)
                                     if extracted_data:
                                         print(f"Successfully extracted data from {pdf_filename}")
                                     else:

@@ -4,19 +4,31 @@ import time
 from bs4 import BeautifulSoup
 from src.extract import extract
 from src.utils import (doi_to_filename, is_file_processed)
+from src.classes import JobSettings
 
-def arxiv_search(search_terms, retmax, repository, concurrent=False, schema_file=None, user_instructions=None, model_name_version=None):
-    if concurrent and any([schema_file is None, user_instructions is None, model_name_version is None]):
+# Constants
+repositories = ['arxiv', 'chemrxiv']  # Decided to remove bio and med, as their api's are not very good
+# I could be convinced to add them back, but because the api doesn't allow for search terms, I would need to write code
+# to build a local database and search that, which would be time-consuming and a hassle for the end user.
+
+def arxiv_search(job_settings:JobSettings, search_terms, repository): # retmax, concurrent=False, schema_file=None, user_instructions=None, model_name_version=None
+    """
+    Search and download papers from arXiv or ChemRxiv repositories, with optional concurrent extraction.
+
+    Args:
+    search_terms (list): List of search terms.
+    retmax (int): Maximum number of results to retrieve.
+    repository (str): Either 'arxiv' or 'chemrxiv'.
+    concurrent (bool): Whether to perform extraction concurrently with downloading.
+    schema_file (str): Path to the schema file for extraction (required if concurrent is True).
+    user_instructions (str): Instructions for the extraction model (required if concurrent is True).
+    model_name_version (str): Name and version of the model to use for extraction (required if concurrent is True).
+
+    Returns:
+    list: List of filenames of downloaded papers.
+    """
+    if job_settings.concurrent and (job_settings.files.schema is None or job_settings.extract.user_instructions is None or job_settings.model_name_version is None):
         raise ValueError("schema_file, user_instructions, and model_name_version must be provided when concurrent is True")
-
-    try:
-        model_name, model_version = model_name_version.split(':')
-    except ValueError:
-        model_name = model_name_version
-        model_version = 'latest'
-
-    csv_file = os.path.join(os.getcwd(), 'results',
-                            f"{model_name}_{model_version}_{os.path.splitext(schema_file)[0].split('/')[-1]}.csv")
 
     print(f"Starting {repository} search with terms: {search_terms}")
     query = "+AND+".join(search_terms).replace(' ', '%20')
@@ -29,15 +41,17 @@ def arxiv_search(search_terms, retmax, repository, concurrent=False, schema_file
     scraped_files = []
     processed_papers = set()
 
-    while skip < retmax:
-        if repository == 'arxiv':
-            api_url = f"https://export.arxiv.org/api/query?search_query=all:{query}&start={skip}&max_results={BATCH_SIZE}"
-        elif repository == 'chemrxiv':
-            api_url = f"https://chemrxiv.org/engage/chemrxiv/public-api/v1/items?term={query}&skip={skip}&limit={BATCH_SIZE}"
-        else:
+    while fetched < job_settings.scrape.retmax:
+        current_max = min(50, job_settings.scrape.retmax - fetched)
+
+        # Construct API URL based on repository
+        known_api_urls = {'arxiv': f"https://export.arxiv.org/api/query?search_query=all:{query}&start={fetched}&max_results={current_max}",
+                          'chemrxiv': f"https://chemrxiv.org/engage/chemrxiv/public-api/v1/items?term={query}&skip={fetched}&limit={current_max}",
+                          }
+        if repository not in [x for x in known_api_urls.keys()]:
             print(f"Unsupported repository: {repository}")
             return []
-
+        api_url = known_api_urls[repository]
         print(f"Fetching results from: {api_url}")
 
         search_retry_count = 0
@@ -80,10 +94,10 @@ def arxiv_search(search_terms, retmax, repository, concurrent=False, schema_file
 
                     if os.path.exists(file_path):
                         print(f"{filename} already downloaded.")
-                        if concurrent and not is_file_processed(csv_file, filename):
+                        if job_settings.concurrent and not is_file_processed(job_settings.files.csv, filename):
                             print(f"{filename} not extracted for this task; performing extraction...")
                             try:
-                                extracted_data = extract(file_path, schema_file, model_name_version, user_instructions)
+                                extracted_data = extract(file_path, job_settings)
                                 if extracted_data:
                                     print(f"Successfully extracted data from {filename}")
                                 else:
@@ -112,9 +126,9 @@ def arxiv_search(search_terms, retmax, repository, concurrent=False, schema_file
 
                                 print(f"Successfully downloaded PDF for entry {index}.")
 
-                                if concurrent:
+                                if job_settings.concurrent:
                                     try:
-                                        extracted_data = extract(file_path, schema_file, model_name_version, user_instructions)
+                                        extracted_data = extract(file_path, job_settings)
                                         if extracted_data:
                                             print(f"Successfully extracted data from {filename}")
                                         else:
@@ -132,7 +146,13 @@ def arxiv_search(search_terms, retmax, repository, concurrent=False, schema_file
                             time.sleep(10)
 
                     if not download_successful:
-                        print(f"Failed to download entry {index} after {MAX_RETRIES} attempts. Skipping this entry.")
+                        print(
+                            f"Failed to download entry {index} after {MAX_RETRIES} attempts. Skipping this entry.")
+
+                    if fetched >= job_settings.scrape.retmax:
+                        print(f"Reached retmax of {job_settings.scrape.retmax}. Stopping search.")
+                        break
+
 
                     if len(processed_papers) % 10 == 0:
                         print(f"Progress: Processed {len(processed_papers)} unique papers")
@@ -144,14 +164,7 @@ def arxiv_search(search_terms, retmax, repository, concurrent=False, schema_file
                 print(f"Failed to fetch search results. Retry attempt {search_retry_count}/{SEARCH_MAX_RETRIES}. Error: {e}")
                 time.sleep(10)
 
-        if not search_successful:
-            print(f"Failed to fetch search results after {SEARCH_MAX_RETRIES} attempts. Exiting.")
-            return scraped_files
-
-        skip += BATCH_SIZE
-
-        if skip >= retmax:
-            print(f"Reached retmax of {retmax}. Stopping search.")
+        if not search_successful or not entries or fetched >= job_settings.scrape.retmax:
             break
 
     print(f"{repository} search completed. Total unique papers processed: {len(processed_papers)}")

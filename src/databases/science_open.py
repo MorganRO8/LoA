@@ -13,8 +13,9 @@ from selenium.webdriver.support import expected_conditions as EC
 from selenium.webdriver.support.ui import WebDriverWait
 from src.extract import extract
 from src.utils import (get_chrome_driver, is_file_processed)
+from src.classes import JobSettings
 
-def scrape_scienceopen(search_terms, retmax, concurrent=False, schema_file=None, user_instructions=None, model_name_version=None):
+def scrape_scienceopen(job_settings:JobSettings, search_terms):  # retmax, concurrent=False, schema_file=None, user_instructions=None, model_name_version=None
     """
     Scrape articles from ScienceOpen based on search terms, with optional concurrent extraction.
 
@@ -29,18 +30,14 @@ def scrape_scienceopen(search_terms, retmax, concurrent=False, schema_file=None,
     Returns:
     list: A list of filenames of the scraped PDFs.
     """
-    if concurrent and (schema_file is None or user_instructions is None or model_name_version is None):
+
+    # First things first, if this whole function is dependent on Chrome being installed, we have to make sure it's installed and bail out if not.
+    if os.popen("which google-chrome").read().strip() == "":
+        print("Google Chrome is not installed on this system.  Aborting use of ScienceOpen database.")
+        return []
+
+    if job_settings.concurrent and (job_settings.files.schema is None or job_settings.extract.user_instructions is None or job_settings.model_name_version is None):
         raise ValueError("schema_file, user_instructions, and model_name_version must be provided when concurrent is True")
-
-    # Split model name and version
-    try:
-        model_name, model_version = model_name_version.split(':')
-    except ValueError:
-        model_name = model_name_version
-        model_version = 'latest'
-
-    csv_file = os.path.join(os.getcwd(), 'results',
-                            f"{model_name}_{model_version}_{os.path.splitext(schema_file)[0].split('/')[-1]}.csv")
 
     LOGGER = logging.getLogger()
     LOGGER.setLevel(logging.WARNING)
@@ -83,7 +80,7 @@ def scrape_scienceopen(search_terms, retmax, concurrent=False, schema_file=None,
             scraped_links = []
 
         article_links = []
-        while len(article_links) < retmax:
+        while len(article_links) < job_settings.scrape.retmax:
             new_links = driver.find_elements(By.CSS_SELECTOR, 'div.so-article-list-item > div > h3 > a')
             new_links = [link.get_attribute('href') for link in new_links if
                          link.get_attribute('href') not in scraped_links]
@@ -107,13 +104,13 @@ def scrape_scienceopen(search_terms, retmax, concurrent=False, schema_file=None,
                 break
 
         start_time = time.time()
-        pbar = tqdm(total=retmax, dynamic_ncols=True)
+        pbar = tqdm(total=job_settings.scrape.retmax, dynamic_ncols=True)
         count = 0
         scraped_files = []
         failed_articles = []
 
         for link in article_links:
-            if count >= retmax:
+            if count >= job_settings.scrape.retmax:
                 break
 
             driver.execute_script("window.open('');")
@@ -153,10 +150,10 @@ def scrape_scienceopen(search_terms, retmax, concurrent=False, schema_file=None,
 
                 if os.path.exists(file_path):
                     print(f"{filename} already exists.")
-                    if concurrent and not is_file_processed(csv_file, filename):
+                    if job_settings.concurrent and not is_file_processed(job_settings.files.csv, filename):
                         print(f"{filename} not extracted for this task; performing extraction...")
                         try:
-                            extracted_data = extract(file_path, schema_file, model_name_version, user_instructions)
+                            extracted_data = extract(file_path, job_settings)
                             if extracted_data:
                                 print(f"Successfully extracted data from {filename}")
                             else:
@@ -173,9 +170,9 @@ def scrape_scienceopen(search_terms, retmax, concurrent=False, schema_file=None,
                     count += 1
                     elapsed_time = time.time() - start_time
                     avg_time_per_pdf = elapsed_time / count
-                    est_time_remaining = avg_time_per_pdf * (retmax - count)
+                    est_time_remaining = avg_time_per_pdf * (job_settings.scrape.retmax - count)
                     pbar.set_description(
-                        f"DOI: {doi}, Count: {count}/{retmax}, Avg time per PDF: {avg_time_per_pdf:.2f}s, Est. time remaining: {est_time_remaining:.2f}s")
+                        f"DOI: {doi}, Count: {count}/{job_settings.scrape.retmax}, Avg time per PDF: {avg_time_per_pdf:.2f}s, Est. time remaining: {est_time_remaining:.2f}s")
                     pbar.update(1)
 
                     scraped_files.append(filename)
@@ -183,9 +180,9 @@ def scrape_scienceopen(search_terms, retmax, concurrent=False, schema_file=None,
                     with open(scraped_links_file_path, 'a') as file:
                         file.write(f"{link}\n")
 
-                    if concurrent:
+                    if job_settings.concurrent:
                         try:
-                            extracted_data = extract(file_path, schema_file, model_name_version, user_instructions)
+                            extracted_data = extract(file_path, job_settings)
                             if extracted_data:
                                 print(f"Successfully extracted data from {filename}")
                             else:

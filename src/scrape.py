@@ -4,119 +4,53 @@ import os
 import requests
 from urllib.parse import quote
 from bs4 import BeautifulSoup
-from src.utils import get_out_id
-from src.utils import print  # Custom print function for logging
+from src.classes import JobSettings
 
 # Constants
 ESEARCH_URL = 'https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esearch.fcgi'
 EFETCH_URL = 'https://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch.fcgi'
-repositories = ['arxiv', 'chemrxiv']  # Decided to remove bio and med, as their api's are not very good
-# I could be convinced to add them back, but because the api doesn't allow for search terms, I would need to write code
-# to build a local database and search that, which would be time-consuming and a hassle for the end user.
 
-class ScrapeParams():
-    def __init__(self,args):
-        self.auto = args.get('auto')
-        self.def_search_terms = args.get('def_search_terms')
-        self.maybe_search_terms = args.get('maybe_search_terms')
-        self.pubmedyn = args.get('pubmedyn')
-        self.arxivyn = args.get('arxivyn')
-        self.soyn = args.get('ScienceOpenyn')
-        self.customdb = args.get('customdb')
-        self.retmax = args.get('retmax')
-        self.base_url = args.get('base_url')
-        self.upwyn = args.get('Unpaywallyn')
-        self.email = args.get('Email')
-        if self.auto is None:
-            # Get 'definitely contains' search terms from user
-            self.def_search_terms = input(
-                "Enter 'definitely contains' search terms (comma separated) or type 'None' to only use maybe search terms: ").lower().split(
-                ',')
-
-            # Get 'maybe contains' search terms from user
-            self.maybe_search_terms = input(
-                "Enter 'maybe contains' search terms (comma separated) or type 'None' to only use definite search terms: ").lower().split(
-                ',')
-
-            # Define maximum returned papers per search term
-            self.retmax = int(input("Set the maximum number of papers to fetch per search:"))
-            attempt_count = 0
-            while self.retmax < 1:
-                print("Please enter a positive integer.")
-                self.retmax = int(input("Set the maximum number of papers to fetch per search:"))
-                attempt_count+=1
-                if attempt_count == 5:
-                    print("Sorry you're having difficulty. Setting max fetch to 10.")
-                    self.retmax = 10 ## Prevent user from being stuck in an eternal loop if they don't know what a positive integer is after five tries.
-
-            ## PubMed
-            self.pubmedyn = self.get_yn_response("Would you like to search PubMed?(y/n): ",attempts=5)
-
-            ## ArXiv
-            self.arxivyn = self.get_yn_response("Would you like to search through the ArXivs?(y/n): ",attempts=5)
-            
-            ## ScienceOpen
-            self.soyn = self.get_yn_response("Would you like to scrape ScienceOpen?(y/n): ",attempts=5)
-
-            ## Unpaywall
-            self.upwyn = self.get_yn_response("Would you like to scrape Unpaywall?(y/n): ",attempts=5)
-            if self.upwyn == 'y':
-                self.email = input("Enter email for use with Unpaywall:").lower()
-
-            ## Custom Database
-            self.customdb = self.get_yn_response("Would you like to search and download from a custom database?(y/n): ",attempts=5)
-            if self.customdb == 'y':
-                self.base_url = input("Enter base url:")
-
-    def get_yn_response(prompt,attempts=5):
-        response = input(prompt).lower()
-        attempt_count = 0
-        while response not in ["y","n"]:
-            if attempt_count >4:
-                print("Sorry you're having difficulty.  Setting response to 'n' and continuing onward.")
-                return "n"
-            print("Please enter either 'y' or 'n'. ")
-            attempt_count += 1
-            response = input(prompt).lower()
-        return response
-
-def main_scrape_pubmed(scrape_params,query_chunks,search_info_file):
-    if scrape_params.pubmedyn == "y":
+def main_scrape_pubmed(job_settings: JobSettings):
+    if job_settings.scrape.scrape_pubmed:
         from src.databases.pubmed import pubmed_search
-        for chunk in query_chunks:
+        for chunk in job_settings.query_chunks:
             print("Current search: " + str(chunk))
-            scraped_files = pubmed_search(chunk, scrape_params.retmax)
-            with open(search_info_file, 'a') as f:
+            scraped_files = pubmed_search(job_settings, chunk)
+            with open(job_settings.files.search_info_file, 'a') as f:
                 f.write('\n'.join(scraped_files) + '\n')
 
-def main_scrape_arxiv(scrape_params,query_chunks,search_info_file):
-    if scrape_params.arxivyn == "y":
+def main_scrape_arxiv(job_settings: JobSettings):
+    if job_settings.scrape.scrape_arxiv:
         from src.databases.arxiv import arxiv_search
+        repositories = ['arxiv', 'chemrxiv']  # Decided to remove bio and med, as their api's are not very good
+        # I could be convinced to add them back, but because the api doesn't allow for search terms, I would need to write code
+        # to build a local database and search that, which would be time-consuming and a hassle for the end user.
         for repository in repositories:
-            for chunk in query_chunks:
+            for chunk in job_settings.query_chunks:
                 print("Current search: " + str(chunk))
-                scraped_files = arxiv_search(chunk, scrape_params.retmax, repository)
-                with open(search_info_file, 'a') as f:
-                    f.write('\n'.join(scraped_files) + '\n')
+                scraped_files = arxiv_search(job_settings, chunk, repository)
+                if scraped_files is not None:
+                    with open(job_settings.files.search_info_file, 'a') as f:
+                        f.write('\n'.join(scraped_files) + '\n')
 
-def main_scrape_science_open(scrape_params,query_chunks,search_info_file):
-    if scrape_params.soyn == "y":
+def main_scrape_science_open(job_settings: JobSettings):
+    if job_settings.scrape.scrape_scienceopen:
         from src.databases.science_open import scrape_scienceopen
-        for chunk in query_chunks:
+        for chunk in job_settings.query_chunks:
             print(f"Now running ScienceOpen scrape for {chunk}")
-            scraped_files = scrape_scienceopen(chunk, scrape_params.retmax)
-            with open(search_info_file, 'a') as f:
+            scraped_files = scrape_scienceopen(job_settings, chunk)
+            with open(job_settings.files.search_info_file, 'a') as f:
                 f.write('\n'.join(scraped_files) + '\n')
 
-def main_scrape_unpaywall(scrape_params,query_chunks,search_info_file):
-    if scrape_params.upwyn == "y":
+def main_scrape_unpaywall(job_settings: JobSettings):
+    if job_settings.scrape.scrape_unpaywall:
         from src.databases.unpaywall import unpaywall_search
-        scraped_files = unpaywall_search(query_chunks, scrape_params.retmax, scrape_params.email)
-        with open(search_info_file, 'a') as f:
+        scraped_files = unpaywall_search(job_settings)
+        with open(job_settings.files.search_info_file, 'a') as f:
             f.write('\n'.join(scraped_files) + '\n')
 
-def main_scrape_custom_db(scrape_params,query_chunks,search_info_file):
-    if scrape_params.customdb == "y":
+def main_scrape_custom_db(job_settings: JobSettings):
+    if job_settings.scrape.scrape_custom_db:
         # Create a connection to the SQLite database
         conn = sqlite3.connect(str(os.getcwd()) + '/customdb/metadata.db')
         c = conn.cursor()
@@ -124,7 +58,7 @@ def main_scrape_custom_db(scrape_params,query_chunks,search_info_file):
         scraped_files = []
 
         # Iterate over all search terms
-        for chunk in query_chunks:
+        for chunk in job_settings.query_chunks:
             print(f"Current search: {chunk}")
 
             # Create the SQL query
@@ -133,7 +67,7 @@ def main_scrape_custom_db(scrape_params,query_chunks,search_info_file):
             query += ' ORDER BY title LIMIT ?'
 
             # Create the parameters for the SQL query
-            params = tuple([f'%{term}%' for term in chunk] + [scrape_params.retmax])
+            params = tuple([f'%{term}%' for term in chunk] + [job_settings.scrape.retmax])
 
             # Execute the SQL query
             c.execute(query, params)
@@ -150,7 +84,7 @@ def main_scrape_custom_db(scrape_params,query_chunks,search_info_file):
                 print(f"Processing DOI: {doi}")
 
                 # Create the URL for the paper
-                url = scrape_params.base_url + quote(doi)
+                url = job_settings.scrape.base_url + quote(doi)
                 print(f"URL: {url}")
 
                 # Get the webpage content
@@ -215,13 +149,13 @@ def main_scrape_custom_db(scrape_params,query_chunks,search_info_file):
                     print(f"Failed to access the webpage. Status code: {response.status_code}")
 
         # Write the scraped files to the search info file
-        with open(search_info_file, 'a') as f:
+        with open(job_settings.files.search_info_file, 'a') as f:
             f.write('\n'.join(scraped_files) + '\n')
 
         # Close the connection to the database
         conn.close()
 
-def scrape(args):
+def scrape(job_settings: JobSettings):
     """
     Main function to scrape papers from various sources based on user input or provided arguments.
 
@@ -236,35 +170,23 @@ def scrape(args):
     None: The function writes scraped file information to a text file and doesn't return any value.
     """
 
-    scrape_params = ScrapeParams(args)
-
-    # Generate output directory ID and query chunks
-    output_directory_id, query_chunks = get_out_id(scrape_params.def_search_terms, scrape_params.maybe_search_terms)
-
-    # Create necessary directories
-    os.makedirs(os.path.join(os.getcwd(), 'scraped_docs'), exist_ok=True)
-    os.makedirs(os.path.join(os.getcwd(), 'search_info'), exist_ok=True)
-
-    # Define the search info file path
-    search_info_file = os.path.join(os.getcwd(), 'search_info', f"{output_directory_id}.txt")
-
     # Scrape from PubMed if selected
-    main_scrape_pubmed(scrape_params,query_chunks,search_info_file)
+    main_scrape_pubmed(job_settings)
 
     # Scrape from arXiv and ChemRxiv if selected
-    main_scrape_arxiv(scrape_params,query_chunks,search_info_file)
+    main_scrape_arxiv(job_settings)
 
     # Scrape from ScienceOpen if selected
-    main_scrape_science_open(scrape_params,query_chunks,search_info_file)
+    main_scrape_science_open(job_settings)
 
     # Scrape from Unpaywall if selected
-    main_scrape_unpaywall(scrape_params,query_chunks,search_info_file)
+    main_scrape_unpaywall(job_settings)
 
     # Scrape from custom database if selected
-    main_scrape_custom_db(scrape_params,query_chunks,search_info_file)
+    main_scrape_custom_db(job_settings)
 
     # If not in automatic mode, restart the script
-    if scrape_params.auto is None:
+    if job_settings.auto is None:
         python = sys.executable
         os.execl(python, python, *sys.argv)
 

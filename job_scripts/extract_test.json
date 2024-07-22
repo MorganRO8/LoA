@@ -2,7 +2,7 @@
   "extract": {
     "def_search_terms": ["chromophore"],
     "maybe_search_terms": ["absorption wavelength", "emission wavelength", "quantum yield"],
-    "schema_file": "testBool.pkl",
+    "schema_file": "pka-extraction-schema.pkl",
 	"user_instructions": "Please extract any molecules or proteins mentioned in the paper, along with a boolean assessment of each's quality as a chromophore based on the context of the paper.",
 	"model_name_version": "mistral:7b-instruct-v0.2-q8_0",
     "auto": true

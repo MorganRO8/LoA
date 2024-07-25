@@ -149,6 +149,8 @@ def batch_extract(job_settings: JobSettings):
 
         if not success:
             print(f"Failed to extract data from {file} after {job_settings.extract.max_retries} retries.")
+            failed_result = ", ".join(["failed" for n in range(job_settings.extract.num_columns)])
+            write_to_csv(failed_result, job_settings.extract.headers, filename=job_settings.files.csv)
 
     # If not in auto mode, restart the script
     if job_settings.auto is None:
@@ -235,9 +237,12 @@ def single_file_extract(job_settings:JobSettings, data:PromptData, file_path):
                         key_value = row[key_column - 1]
                         if key_value not in key_values:
                             key_values.add(key_value)
-                            row.append(os.path.splitext(os.path.basename(file_path))[0]) ## paper_filename # Add paper filename to each row if validated
                             filtered_result.append(row)
                     validated_result = filtered_result
+
+                # Add paper filename to each row
+                for row in validated_result:
+                    row.append(os.path.splitext(os.path.basename(file_path))[0])
 
                 # Write results to CSV
                 write_to_csv(validated_result, job_settings.extract.headers, filename=job_settings.files.csv)

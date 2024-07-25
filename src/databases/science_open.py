@@ -12,7 +12,7 @@ from selenium.webdriver.common.by import By
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.webdriver.support.ui import WebDriverWait
 from src.extract import extract
-from src.utils import (get_chrome_driver, is_file_processed)
+from src.utils import (get_chrome_driver, is_file_processed, write_to_csv)
 from src.classes import JobSettings
 
 def scrape_scienceopen(job_settings:JobSettings, search_terms):  # retmax, concurrent=False, schema_file=None, user_instructions=None, model_name_version=None
@@ -158,6 +158,10 @@ def scrape_scienceopen(job_settings:JobSettings, search_terms):  # retmax, concu
                                 print(f"Successfully extracted data from {filename}")
                             else:
                                 print(f"Failed to extract data from {filename}")
+                                failed_result = [["failed" for _ in range(job_settings.extract.num_columns)] + [
+                                    os.path.splitext(os.path.basename(file_path))[0]]]
+                                write_to_csv(failed_result, job_settings.extract.headers,
+                                             filename=job_settings.files.csv)
                         except Exception as e:
                             print(f"Error extracting data from {filename}: {e}")
                     continue
@@ -187,6 +191,10 @@ def scrape_scienceopen(job_settings:JobSettings, search_terms):  # retmax, concu
                                 print(f"Successfully extracted data from {filename}")
                             else:
                                 print(f"Failed to extract data from {filename}")
+                                failed_result = [["failed" for _ in range(job_settings.extract.num_columns)] + [
+                                    os.path.splitext(os.path.basename(file_path))[0]]]
+                                write_to_csv(failed_result, job_settings.extract.headers,
+                                             filename=job_settings.files.csv)
                         except Exception as e:
                             print(f"Error extracting data from {filename}: {e}")
 

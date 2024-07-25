@@ -4,7 +4,7 @@ import time
 import json
 from datetime import datetime
 from src.extract import extract
-from src.utils import ( doi_to_filename, is_file_processed)
+from src.utils import (doi_to_filename, is_file_processed, write_to_csv)
 from src.classes import JobSettings
 
 def read_api_count():
@@ -193,6 +193,10 @@ def unpaywall_search(job_settings:JobSettings): #, query_chunks, retmax, email, 
                                 print(f"Successfully extracted data from {pdf_filename}")
                             else:
                                 print(f"Failed to extract data from {pdf_filename}")
+                                failed_result = [["failed" for _ in range(job_settings.extract.num_columns)] + [
+                                    os.path.splitext(os.path.basename(pdf_path))[0]]]
+                                write_to_csv(failed_result, job_settings.extract.headers,
+                                             filename=job_settings.files.csv)
                         except Exception as e:
                             print(f"Error extracting data from {pdf_filename}: {e}")
                     continue
@@ -235,6 +239,11 @@ def unpaywall_search(job_settings:JobSettings): #, query_chunks, retmax, email, 
                                         print(f"Successfully extracted data from {pdf_filename}")
                                     else:
                                         print(f"Failed to extract data from {pdf_filename}")
+                                        failed_result = [
+                                            ["failed" for _ in range(job_settings.extract.num_columns)] + [
+                                                os.path.splitext(os.path.basename(pdf_path))[0]]]
+                                        write_to_csv(failed_result, job_settings.extract.headers,
+                                                     filename=job_settings.files.csv)
                                 except Exception as e:
                                     print(f"Error extracting data from {pdf_filename}: {e}")
 

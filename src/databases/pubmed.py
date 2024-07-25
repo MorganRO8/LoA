@@ -3,7 +3,7 @@ import requests
 import time
 import xml.etree.ElementTree as ET
 from src.extract import extract
-from src.utils import is_file_processed
+from src.utils import (is_file_processed, write_to_csv)
 from src.classes import JobSettings
 
 # Constants
@@ -104,6 +104,10 @@ def pubmed_search(job_settings: JobSettings, search_terms): # concurrent=False, 
                                 print(f"Successfully extracted data from {filename}")
                             else:
                                 print(f"Failed to extract data from {filename}")
+                                failed_result = [["failed" for _ in range(job_settings.extract.num_columns)] + [
+                                    os.path.splitext(os.path.basename(file_path))[0]]]
+                                write_to_csv(failed_result, job_settings.extract.headers,
+                                             filename=job_settings.files.csv)
                         except Exception as e:
                             print(f"Error extracting data from {filename}: {e}")
                 else:
@@ -119,6 +123,9 @@ def pubmed_search(job_settings: JobSettings, search_terms): # concurrent=False, 
                         print(f"Successfully extracted data from {filename}")
                     else:
                         print(f"Failed to extract data from {filename}")
+                        failed_result = [["failed" for _ in range(job_settings.extract.num_columns)] + [
+                            os.path.splitext(os.path.basename(file_path))[0]]]
+                        write_to_csv(failed_result, job_settings.extract.headers, filename=job_settings.files.csv)
                 except Exception as e:
                     print(f"Error extracting data from {filename}: {e}")
 

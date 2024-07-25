@@ -3,7 +3,7 @@ import requests
 import time
 from bs4 import BeautifulSoup
 from src.extract import extract
-from src.utils import (doi_to_filename, is_file_processed)
+from src.utils import (doi_to_filename, is_file_processed, write_to_csv)
 from src.classes import JobSettings
 
 
@@ -106,6 +106,10 @@ def arxiv_search(job_settings: JobSettings, search_terms, repository):
                                     print(f"Successfully extracted data from {filename}")
                                 else:
                                     print(f"Failed to extract data from {filename}")
+                                    failed_result = [["failed" for _ in range(job_settings.extract.num_columns)] + [
+                                        os.path.splitext(os.path.basename(file_path))[0]]]
+                                    write_to_csv(failed_result, job_settings.extract.headers,
+                                                 filename=job_settings.files.csv)
                             except Exception as e:
                                 print(f"Error extracting data from {filename}: {e}")
                         continue
@@ -129,6 +133,11 @@ def arxiv_search(job_settings: JobSettings, search_terms, repository):
                                             print(f"Successfully extracted data from {filename}")
                                         else:
                                             print(f"Failed to extract data from {filename}")
+                                            failed_result = [
+                                                ["failed" for _ in range(job_settings.extract.num_columns)] + [
+                                                    os.path.splitext(os.path.basename(file_path))[0]]]
+                                            write_to_csv(failed_result, job_settings.extract.headers,
+                                                         filename=job_settings.files.csv)
                                     except Exception as e:
                                         print(f"Error extracting data from {filename}: {e}")
                                 break

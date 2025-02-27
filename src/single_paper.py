@@ -10,12 +10,12 @@ from src.classes import JobSettings
 ESEARCH_URL = 'https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esearch.fcgi'
 EFETCH_URL = 'https://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch.fcgi'
 
-def scrape_and_extract_concurrent(job_settings:JobSettings):
+def scrape_and_extract_concurrent(job_settings: JobSettings):
     """
     Concurrently scrape papers from multiple sources and extract information based on a given schema.
 
     Args:
-    job_settings (JobSettings class): A class containing all configuration parameters.
+    job_settings (JobSettings): A class containing all configuration parameters.
 
     Returns:
     None
@@ -29,12 +29,12 @@ def scrape_and_extract_concurrent(job_settings:JobSettings):
     output_dir = os.path.join(os.getcwd(), 'results')
     os.makedirs(output_dir, exist_ok=True)
 
-    # Check for ollama binary and download if not present
+    # Check for Ollama binary and start server
     if not os.path.isfile('ollama'):
         print("ollama binary not found. Downloading the latest release...")
         download_ollama()
 
-    # Start ollama server
+    # Start Ollama server
     subprocess.Popen(["./ollama", "serve"], stdout=subprocess.DEVNULL, stderr=subprocess.STDOUT)
 
     # Count processed papers for each source

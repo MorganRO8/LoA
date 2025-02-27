@@ -1,5 +1,5 @@
 import os
-from src.utils import load_schema_file, generate_examples, generate_prompt, truncate_text, get_out_id
+from src.utils import load_schema_file, generate_examples, generate_prompt, generate_check_prompt, truncate_text, get_out_id
 from src.document_reader import doc_to_elements
 
 
@@ -86,16 +86,31 @@ class JobSettings(): ## Contains subsettings as well for each of the job types.
         self.def_search_terms = []
         self.maybe_search_terms = []
         self.query_chunks = []
-        self.model_name_version = "mistral:7b-instruct-v0.2-q8_0"
-        self.model_name = "mistral"
-        self.model_version = "7b-instruct-v0.2-q8_0"
+        self.model_name_version = "nemotron:latest"
+        self.model_name = "nemotron"
+        self.model_version = "latest"
+        self.check_model_name_version = "nemotron:latest"
+        self.check_model_name = "nemotron"
+        self.check_model_version = "latest"
+        self.use_openai = False
+        self.api_key = None
+        self.check_prompt = ""
 
 
-    def _update_model_name_version(self,model_name_version):
+    def _update_model_name_version(self, model_name_version):
         if ":" not in model_name_version:
             model_name_version += ":latest"
-        self.model_name,self.model_version = model_name_version.split(":")
+        self.model_name, self.model_version = model_name_version.split(":", 1)
         self.model_name_version = f"{self.model_name}:{self.model_version}"
+
+        # Check if model_name indicates OpenAI API usage
+        if self.model_name.startswith("o1-") or self.model_name.startswith("gpt-"):
+            self.use_openai = True
+            self.api_key = self.model_version  # The part after the first colon is the API key
+            os.environ["OPENAI_API_KEY"] = self.api_key # To use the current version of openai api, must set as environment variable
+        else:
+            self.use_openai = False
+            self.api_key = None
 
     def _parse_from_json(self,json):
         for key,val in json.items():
@@ -111,6 +126,11 @@ class JobSettings(): ## Contains subsettings as well for each of the job types.
                     self.maybe_search_terms = val.split(",")
             elif key.lower() == "model_name_version":
                 self._update_model_name_version(val)
+            elif key.lower() == "check_model_name_version":
+                if ":" not in val:
+                    val += ":latest"
+                self.check_model_name, self.check_model_version = val.split(":", 1)
+                self.check_model_name_version = f"{self.check_model_name}:{self.check_model_version}"
             elif key.lower() == "concurrent":
                 self.concurrent = bool(val.lower() == "y")
             else:
@@ -128,6 +148,8 @@ class JobSettings(): ## Contains subsettings as well for each of the job types.
         self.extract.headers = [self.extract.schema_data[column_number]['name'] for column_number in range(1, self.extract.num_columns + 1)] + ['paper']
         self.extract.prompt = generate_prompt(self.extract.schema_data, self.extract.user_instructions, self.extract.key_columns)
         self.extract.examples = generate_examples(self.extract.schema_data)
+        # Generate check prompt to reduce cost
+        self.check_prompt = generate_check_prompt(self.extract.schema_data, self.extract.user_instructions)
         
         # Generate output directory ID and query chunks
         output_directory_id, self.query_chunks = get_out_id(self.def_search_terms, self.maybe_search_terms)
@@ -136,8 +158,10 @@ class JobSettings(): ## Contains subsettings as well for each of the job types.
 
 
 class PromptData():
-    def __init__(self,model_name_version):
+    def __init__(self, model_name_version, check_model_name_version, use_openai=False):
         self.model = model_name_version
+        self.check_model_name_version = check_model_name_version
+        self.use_openai = use_openai  # Track if using OpenAI API
         self.stream = False
         self.options = {
                         "num_ctx": 32768,
@@ -149,32 +173,57 @@ class PromptData():
                         "top_p": 1,
                         "top_k": 5,
                         "stop": ["|||"],
+                        "temperature": 0.7,
                         }
         self.prompt = ""
+        self.paper_content = ""
+        self.check_prompt = ""
 
-    def _refresh_paper_content(self,file,prompt):
+    def _refresh_paper_content(self,file,prompt,check_prompt):
         file_path = os.path.join(os.getcwd(), 'scraped_docs', file)
         processed_file_path = os.path.join(os.getcwd(), 'processed_docs', os.path.splitext(file)[0] + '.txt')
 
         # Load paper content
         if os.path.exists(processed_file_path):
             with open(processed_file_path, 'r') as f:
-                paper_content = truncate_text(f.read())
+                self.paper_content = truncate_text(f.read())
         else:
             try:
-                paper_content = truncate_text(doc_to_elements(file_path))
+                self.paper_content = truncate_text(doc_to_elements(file_path))
             except Exception as err:
                 print(f"Unable to process {file} into plaintext due to {err}")
                 return True
-        self.prompt = f"{prompt}\n\n{paper_content}\n\nAgain, please make sure to respond only in the specified format exactly as described, or you will cause errors.\nResponse:"
+        self.prompt = f"{prompt}\n\n{self.paper_content}\n\nAgain, please make sure to respond only in the specified format exactly as described, or you will cause errors.\nResponse:"
+        self.check_prompt = f"{check_prompt}\n\n{self.paper_content}\n\nAgain, please only answer 'yes' or 'no' (without quotes) to let me know if we should extract information from this paper using the costly api call"
         return False
     
-    def _refresh_data(self,retry_count):
-        self.options["temperature"] = (0.35 * retry_count)
-        self.options["repeat_penalty"] = (1.1 + (0.1 * retry_count))
+    def _refresh_data(self, retry_count):
+        if self.use_openai:
+            self.options["temperature"] = min(0.7 + 0.1 * retry_count, 1.0)
+        else:
+            self.options["temperature"] = 0.35 * retry_count
+            self.options["repeat_penalty"] = 1.1 + 0.1 * retry_count
 
     def __dict__(self):
         return {"model": self.model,
                 "stream": self.stream,
                 "options":self.options,
                 "prompt":self.prompt}
+                
+    def __check__(self):
+        return {"model": self.check_model_name_version,
+                "stream": self.stream,
+                "options": {
+                        "num_ctx": 32768,
+                        "num_predict": 1,
+                        "mirostat": 0,
+                        "mirostat_tau": 0.5,
+                        "mirostat_eta": 1,
+                        "tfs_z": 1,
+                        "top_p": 1,
+                        "top_k": 5,
+                        "stop": ["|||"],
+                        "temperature": 0,
+                        },
+                "prompt": self.check_prompt}
+

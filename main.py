@@ -263,11 +263,17 @@ def main():
     os.makedirs(os.path.join(os.getcwd(), 'search_info'), exist_ok=True)
     os.makedirs(os.path.join(os.getcwd(), 'results'), exist_ok=True)
 
-
+    if not job_settings.use_openai:
+        ################## SAFETY CHECKS! ##################
+        ## Check if the model is available, download if not.  If unable, crash out.
+        if check_model_file(job_settings.model_name_version):
+            print(f"Unable to find or obtain primary model file for {job_settings.model_name_version}.  Terminating.")
+            AUTO_EPICFAIL = True
+    
     ################## SAFETY CHECKS! ##################
-    ## Check if the model is available, download if not.  If unable, crash out.
-    if check_model_file(job_settings.model_name_version):
-        print(f"Unable to find or obtain model file for {job_settings.model_name_version}.  Terminating.")
+    ## Check if the check model is available, download if not.  If unable, crash out.
+    if check_model_file(job_settings.check_model_name_version):
+        print(f"Unable to find or obtain check model file for {job_settings.model_name_version}.  Terminating.")
         AUTO_EPICFAIL = True
 
     # Verify filenames exist or can be created.

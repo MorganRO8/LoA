@@ -20,6 +20,8 @@ import xml.etree.ElementTree as ET
 import requests
 from pathlib import Path
 import subprocess
+import tarfile
+
 
 CONVERT_URL = "https://www.ncbi.nlm.nih.gov/pmc/utils/idconv/v1.0/?ids={}&format=json"
 EUTILS_URL = "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch.fcgi?db=pmc&id={}"
@@ -332,17 +334,16 @@ def has_multiple_columns(pdf_path):
     # If no tall line of white pixels was found, return False
     return False
 
-
 def xml_to_string(xml_string):
     """
     Convert an XML string to a formatted string representation. This is what we use to get the XML documents into a
-    format the LLM will be able to interpret better, with less artifacts.
+    format the LLM will be able to interpret better, with fewer artifacts.
 
     Args:
-    xml_string (str): The XML content as a string.
+        xml_string (str): The XML content as a string.
 
     Returns:
-    str: A formatted string representation of the XML content.
+        str: A formatted string representation of the XML content.
     """
     formatted_output = ""
     root = ET.fromstring(xml_string)
@@ -350,7 +351,7 @@ def xml_to_string(xml_string):
     def process_element(element, level=0):
         nonlocal formatted_output
         tag = element.tag.split('}')[-1]  # Remove namespace prefix
-        text = element.text.strip() if element.text else ""
+        text = (element.text or "").strip()
 
         # Format different types of elements
         if tag == "article-title":
@@ -367,16 +368,25 @@ def xml_to_string(xml_string):
             formatted_output += f"Caption: {text}\n\n"
         elif tag == "table":
             formatted_output += f"Table: {text}\n\n"
-        elif tag not in ["ref", "element-citation", "person-group", "name", "surname", "given-names", "article-title",
-                         "source", "year", "volume", "fpage", "lpage", "pub-id"]:
-            formatted_output += f"{text}"
+        elif tag not in [
+            "ref", "element-citation", "person-group", "name", "surname",
+            "given-names", "article-title", "source", "year", "volume",
+            "fpage", "lpage", "pub-id"
+        ]:
+            # For other tags, just append the text
+            formatted_output += text
 
-        # Process child elements
+        # Process each child element recursively
         for child in element:
             process_element(child, level + 1)
+            # IMPORTANT: capture tail text (the text after the child's closing tag)
+            tail_text = (child.tail or "").strip()
+            if tail_text:
+                formatted_output += tail_text + " "
 
     process_element(root)
     return formatted_output
+
 
 
 def elements_to_string(elements_list):
@@ -569,16 +579,15 @@ Please extract information from the provided research paper that fits into the f
 
 Instructions:
 - Extract relevant information and provide it as comma-separated values.
+- This paper has been flagged as containing relevant information, and should have data to be extracted.
 - Each line should contain {num_columns} values, corresponding to the {num_columns} columns in the schema.
 - If information is missing for a column, use 'null' as a placeholder.
 - Do not use anything other than 'null' as a placeholder.
 - Enclose all string values in double-quotes.
 - Never use natural language outside of a string enclosed in double-quotes.
-- For range values, use the format "min-max".
+- For range values, use the format "min-max", do not use this format for field expecting integer or float values, if a range is expected it will be labelled explicitly as a range.
 - Do not include headers, explanations, summaries, or any additional formatting.
-- Invalid responses will result in retries, thus causing significant time loss per paper.
-- If no relevant information is found at all, respond only with 'no information found' or do not respond at all.
-- A response of only 'no information found' will signal to skip the paper, but only if that's the entire response.
+- Invalid responses will result in retries, thus causing significant time and money loss per paper.
 - Ignore any information in references that may be included at the end of the paper.
 
 Below I shall provide a few examples to help you understand the desired output format.
@@ -586,8 +595,8 @@ Below I shall provide a few examples to help you understand the desired output f
 Here is an example with just the names of the columns instead of actual values, and just a single entry:
 {schema_diagram}
 
-Here are a few examples with randomly generated values where appropriate (be sure to note these values mean nothing, 
-and should be ignored, this is just to show the proper structure):
+Here are a few examples with randomly generated values where appropriate (be sure to recognize that these values mean nothing, 
+should be ignored, and definitely not included in your output, this is just to show the proper structure):
 
 Example where the paper contains a single piece of information to extract:
 {generate_examples(schema_data, 1)}
@@ -600,19 +609,60 @@ Example where the paper contains three pieces of information to extract:
 
 Hopefully that is enough examples for you to see the desired output format.
 
-User Instructions: {user_instructions}
+User Instructions:
+{user_instructions}
 
 Paper Contents:
     """
 
     return prompt
+    
 
+def generate_check_prompt(schema_data, user_instructions):
+    """
+    Generates a prompt for the AI model to check if the paper is relevant and contains extractable information.
+    
+    Args:
+    schema_data (dict): Dictionary containing the schema information.
+    user_instructions (str): Instructions on what information to look for.
+    
+    Returns:
+    str: A formatted prompt for the AI model.
+    """
+    # Generate schema information
+    schema_info = ""
+    for column_number, column_data in schema_data.items():
+        schema_info += f"- {column_data['name']}: {column_data['description']}\n"
+    
+    # Construct the prompt
+    prompt = f"""
+Please read the following paper and determine whether it contains information relevant to the following schema and instructions:
+
+Schema:
+{schema_info}
+
+User Instructions:
+{user_instructions}
+
+Answer "yes" if the paper contains information that can be extracted according to the schema and instructions.
+Answer "no" if the paper does not contain enough relevant information to fill out a single row of the defined schema.
+
+Your answer should be only "yes" or "no".
+
+Understand that if you answer "yes" a somewhat costly call will be made to an api to extract relevant information. 
+So, it is important to only answer "yes" if the paper contains enough relevant information to fill out at least one row of the defined schema.
+Otherwise, answering "yes" when the paper does not contain the needed information will result in wasted money.
+
+Paper Contents:
+    """
+    return prompt
+    
 
 def parse_llm_response(response, num_columns):
     """
-    Parse the response from a language model into structured data.
+    Parse the response from a language model into structured data, filtering out thought sections.
 
-    This function takes the raw text response from a language model and converts it
+    This function removes any lines between <think> and </think>, then converts the remaining text
     into a list of rows, where each row represents a set of extracted information.
 
     Args:
@@ -622,23 +672,35 @@ def parse_llm_response(response, num_columns):
     Returns:
     list: A list of unique rows, where each row is a list of column values.
     """
-    # Split the response into lines
-    lines = response.strip().split('\n')
+    filtered_lines = []
+    in_think_section = False
+    
+    # Process response line by line, removing <think> sections
+    for line in response.strip().split('\n'):
+        if "<think>" in line:
+            in_think_section = True
+        elif "</think>" in line:
+            in_think_section = False
+            continue
+        
+        if not in_think_section:
+            filtered_lines.append(line)
+    
     parsed_data = []
-
+    
     # Use csv reader to properly handle quoted values and commas within fields
-    reader = csv.reader(lines, quotechar='"', skipinitialspace=True)
+    reader = csv.reader(filtered_lines, quotechar='"', skipinitialspace=True)
     for row in reader:
         # Only include rows that have the correct number of columns
         if len(row) == num_columns:
             parsed_data.append(row)
-
+    
     # Remove duplicate entries to ensure uniqueness
     unique_data = []
     for row in parsed_data:
         if row not in unique_data:
             unique_data.append(row)
-
+    
     return unique_data
 
 
@@ -898,7 +960,7 @@ def write_to_csv(data, headers, filename="extracted_data.csv"):
     """
     file_exists = os.path.isfile(filename)
     with open(filename, mode='a', newline='') as csv_file:
-        writer = csv.writer(csv_file)
+        writer = csv.writer(csv_file, quoting=csv.QUOTE_MINIMAL, quotechar='"')
         if not file_exists:
             writer.writerow(headers)
         writer.writerows(data)
@@ -1056,15 +1118,16 @@ def get_processed_pmids(csv_file):
             no_fulltext_pmids = set(f.read().splitlines())
 
     return processed_pmids, no_fulltext_pmids
-
+    
 
 def download_ollama():
     """
     Download the latest release of the Ollama binary for AMD64 architecture.
 
     This function fetches the latest release information from GitHub,
-    downloads the AMD64 binary, and saves it with execute permissions.
-    It provides a progress bar during download and handles interruptions.
+    downloads the AMD64 binary in a .tgz file, extracts the 'ollama' binary,
+    makes it executable, and deletes the .tgz file. It provides a progress bar
+    during download and handles interruptions.
     """
     # GitHub API URL for the latest releases of ollama
     url = "https://api.github.com/repos/ollama/ollama/releases/latest"
@@ -1074,26 +1137,26 @@ def download_ollama():
         response.raise_for_status()
         data = response.json()
 
-        # Find the download URL for the amd64 binary
+        # Find the download URL for the amd64 .tgz file
         download_url = None
         for asset in data['assets']:
-            if re.search(r'amd64', asset['name'], re.IGNORECASE):
+            if re.search(r'amd64\.tgz$', asset['name'], re.IGNORECASE):
                 download_url = asset['browser_download_url']
-                break
+                break  # Found the desired asset
 
         if not download_url:
-            print("No amd64 binary found in the latest release.")
+            print("No amd64 .tgz file found in the latest release.")
             return
 
-        # Download the binary with progress bar
-        print(f"Downloading ollama binary from {download_url}")
+        # Download the .tgz file with progress bar
+        print(f"Downloading ollama .tgz from {download_url}")
         binary_response = requests.get(download_url, stream=True)
         binary_response.raise_for_status()
 
         total_size = int(binary_response.headers.get('content-length', 0))
         block_size = 8192  # 8 KB
 
-        with open('ollama', 'wb') as f, tqdm(
+        with open('ollama.tgz', 'wb') as f, tqdm(
                 total=total_size, unit='iB', unit_scale=True, desc='ollama'
         ) as progress_bar:
             for chunk in binary_response.iter_content(chunk_size=block_size):
@@ -1101,20 +1164,33 @@ def download_ollama():
                     f.write(chunk)
                     progress_bar.update(len(chunk))
 
+        # Extract the 'ollama' binary from the .tgz file
+        with tarfile.open('ollama.tgz', 'r:gz') as tar:
+            member = tar.getmember('./bin/ollama')
+            member.name = os.path.basename(member.name)  # Rename to 'ollama'
+            tar.extract(member, path='.')
+
+        # Delete the .tgz file
+        os.remove('ollama.tgz')
+
         # Make the binary executable
         os.chmod('ollama', 0o755)
 
-        print("ollama binary downloaded and saved successfully.")
+        print("ollama binary downloaded, extracted, and saved successfully.")
 
     except requests.RequestException as e:
         print(f"Failed to download the binary: {e}")
     except KeyboardInterrupt:
-        print("You interrupted before ollama finished downloading, cleaning up file...")
-        if os.path.isfile(os.path.join(os.getcwd(), 'ollama')):
-            os.remove(os.path.join(os.getcwd(), 'ollama'))
-            print("Ollama file deleted, next time please let the download finish!")
-        else:
-            print("Ollama file not found... weird...")
+        print("You interrupted before ollama finished downloading, cleaning up files...")
+        if os.path.isfile('ollama.tgz'):
+            os.remove('ollama.tgz')
+            print("ollama.tgz file deleted.")
+        if os.path.isfile('ollama'):
+            os.remove('ollama')
+            print("ollama binary deleted.")
+        print("Cleanup completed. Next time, please let the download finish!")
+    except Exception as e:
+        print(f"An unexpected error occurred: {e}")
 
 
 def get_chrome_driver():
@@ -1252,22 +1328,50 @@ def get_yn_response(prompt, attempts=5):
 
 
 def begin_ollama_server():
-    # Check for ollama binary and download if not present
-    if not os.path.isfile('ollama'):
-        print("ollama binary not found. Downloading the latest release...")
-        download_ollama()
+    # Ping ollama port to see if it is running
+    try:
+        response = requests.get("http://localhost:11434")
+    except:
+        response.status_code = 404
+        
+    # If so, cool, if not, start it!
+    if response.status_code == 200:
+        is_ollama_running = True
     else:
-        print("ollama binary already exists in the current directory.")
+        is_ollama_running = False
 
-    # Start ollama server
-    subprocess.Popen(["./ollama", "serve"], stdout=subprocess.DEVNULL, stderr=subprocess.STDOUT)
+    if is_ollama_running:
+        print("Ollama is running.")
+    else:
+        print("Ollama is not running, starting...")
+    
+        # Check for ollama binary and download if not present
+        if not os.path.isfile('ollama'):
+            print("ollama binary not found. Downloading the latest release...")
+            download_ollama()
+        else:
+            print("ollama binary already exists in the current directory.")
+
+        # Start ollama server
+        subprocess.Popen(["./ollama", "serve"], stdout=subprocess.DEVNULL, stderr=subprocess.STDOUT)
 
 def check_model_file(model_name_version):
-    model_name,model_version = model_name_version.split(":")
-    model_file = os.path.join(str(Path.home()), ".ollama", "models", "manifests", "registry.ollama.ai", "library", model_name, model_version)
-    if not os.path.exists(model_file):
+    model_name, model_version = model_name_version.split(":")
+    model_file = os.path.join("/", str(Path.home()), ".ollama", "models", "manifests", "registry.ollama.ai", "library", model_name, model_version)
+    model_file_installed = os.path.join("/usr", "share", "ollama", ".ollama", "models", "manifests", "registry.ollama.ai", "library", model_name, model_version)
+    print(f"Checking for model {model_name_version} in both:")
+    print(model_file)
+    print(model_file_installed)
+    if os.path.isfile(model_file):
+        print("Portable install version found for model")
         begin_ollama_server()
-        print(f"Model file {model_file} not found. Pulling the model...")
+        return False
+    elif os.path.isfile(model_file_installed):
+        print("Fully installed ollama model file found, nice!")
+        return False
+    else:
+        begin_ollama_server()
+        print(f"Model file not found. Pulling the model...")
         try:
             subprocess.run(["./ollama", "pull", model_name_version], check=True)
         except subprocess.CalledProcessError as e:

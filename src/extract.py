@@ -6,6 +6,7 @@ import json
 from src.utils import (generate_prompt, parse_llm_response, validate_result, write_to_csv,
                        list_files_in_directory, begin_ollama_server)
 from src.classes import JobSettings,PromptData
+from openai import OpenAI
 
 
 def get_files_to_process(job_settings:JobSettings):
@@ -42,47 +43,66 @@ def batch_extract(job_settings: JobSettings):
     a specific file structure.
 
     Args:
-    args (dict): A dictionary containing configuration parameters.
+    job_settings (JobSettings): A JobSettings object containing configuration parameters.
 
     Returns:
     None: Results are written to a CSV file.
     '''
 
-    ## Check for ollama binary and download if not present
+    # Check for Ollama binary and start server
     begin_ollama_server()
 
-    data = PromptData(job_settings.model_name_version)
+    data = PromptData(model_name_version=job_settings.model_name_version, check_model_name_version=job_settings.check_model_name_version, use_openai=job_settings.use_openai)
 
-    ## Determine which files to process
-    files_to_process = get_files_to_process(job_settings) 
+    # Determine which files to process
+    files_to_process = get_files_to_process(job_settings)
 
     print(f"Found {len(files_to_process)} files to process, starting!")
 
     # Process each file
     for file in files_to_process:
         print(f"Now processing {file}")
-        if data._refresh_paper_content(file,job_settings.extract.prompt): 
+        if data._refresh_paper_content(file, job_settings.extract.prompt, job_settings.check_prompt):
             continue
 
         retry_count = 0
         success = False
+        
+        # Use a check prompt to lower cost
+        check_response = requests.post(f"{job_settings.extract.ollama_url}/api/generate", json=data.__check__())
+        check_response.raise_for_status()
+        result = check_response.json()["response"]
+        print(f"Check result was '{check_result}'")
 
         # Attempt extraction with retries
         while retry_count < job_settings.extract.max_retries and not success:
             data._refresh_data(retry_count)
             try:
-                response = requests.post(f"{job_settings.extract.ollama_url}/api/generate", json=data.__dict__())
-                response.raise_for_status()
-                result = response.json()["response"]
+                if check_result == "yes":
+                    if job_settings.use_openai:
+                        client = OpenAI()
+
+                        completion = client.chat.completions.create(
+                            model=job_settings.model_name,
+                            messages=[
+                                {
+                                    "role": "user",
+                                    "content": data.prompt
+                                }
+                            ]
+                        )
+
+                        result = completion.choices[0].message.content
+                    else:
+                        # Use Ollama API
+                        response = requests.post(f"{job_settings.extract.ollama_url}/api/generate", json=data.__dict__())
+                        response.raise_for_status()
+                        result = response.json()["response"]
+                else:
+                    result = ", ".join(["null" for _ in range(job_settings.extract.num_columns)])
 
                 print("Unparsed result:")
                 print(result)
-
-                # Check if the model is trying to tell us there are no results
-                if result.strip().lower().replace("'", "").replace('"',
-                                                                   '') == 'no information found' or result.strip() == '':
-                    print(f"Got signal from model that the information is not present")
-                    result = ", ".join(["null" for n in range(job_settings.extract.num_columns)])
 
                 # Parse and validate the result
                 parsed_result = parse_llm_response(result, job_settings.extract.num_columns)
@@ -96,12 +116,10 @@ def batch_extract(job_settings: JobSettings):
 
                 # Clean up 'null' values
                 for row in parsed_result:
-                    for item in row:
+                    for idx, item in enumerate(row):
                         try:
-                            if item.lower().replace(" ",
-                                                    "") == 'null' or item == '' or item == '""' or item == "''" or item.strip().lower().replace(
-                                    '"', '').replace("'", "") == 'no information found':
-                                parsed_result[row][item] = 'null'
+                            if item.lower().replace(" ", "") == 'null' or item == '' or item == '""' or item == "''" or item.strip().lower().replace('"', '').replace("'", "") == 'no information found':
+                                row[idx] = 'null'
                         except:
                             pass
 
@@ -149,14 +167,15 @@ def batch_extract(job_settings: JobSettings):
 
         if not success:
             print(f"Failed to extract data from {file} after {job_settings.extract.max_retries} retries.")
-            failed_result = ", ".join(["failed" for n in range(job_settings.extract.num_columns)])
-            write_to_csv(failed_result, job_settings.extract.headers, filename=job_settings.files.csv)
+            failed_result = ["failed" for _ in range(job_settings.extract.num_columns)]
+            failed_result.append(os.path.splitext(os.path.basename(file))[0])
+            write_to_csv([failed_result], job_settings.extract.headers, filename=job_settings.files.csv)
 
     # If not in auto mode, restart the script
-    if job_settings.auto is None:
+    if not job_settings.auto:
         python = sys.executable
         os.execl(python, python, *sys.argv)
-
+        
 
 def extract(file_path, job_settings:JobSettings):
     '''
@@ -164,20 +183,17 @@ def extract(file_path, job_settings:JobSettings):
 
     Args:
     file_path (str): Path to the file to be processed.
-    schema_file (str): Path to the schema file.
-    model_name_version (str): Name and version of the model to use.
-    user_instructions (str): Instructions for the model on what to extract.
+    job_settings (JobSettings): Job settings object containing configuration.
 
     Returns:
     list or None: Validated results if successful, None if extraction fails.
     '''
-    data = PromptData(job_settings.model_name_version)
+    data = PromptData(model_name_version=job_settings.model_name_version, check_model_name_version=job_settings.check_model_name_version, use_openai=job_settings.use_openai)
 
     # Prepare prompt data
-    data._refresh_paper_content(file_path,generate_prompt(job_settings.extract.schema_data, job_settings.extract.user_instructions, job_settings.extract.key_columns))
+    data._refresh_paper_content(file_path, generate_prompt(job_settings.extract.schema_data, job_settings.extract.user_instructions, job_settings.extract.key_columns), check_prompt = job_settings.check_prompt)
 
-    
-    validated_result = single_file_extract(job_settings,data,file_path)
+    validated_result = single_file_extract(job_settings, data, file_path)
     if not validated_result:
         print(f"Failed to extract data from {file_path} after {job_settings.extract.max_retries} retries.")
         return None
@@ -185,20 +201,43 @@ def extract(file_path, job_settings:JobSettings):
         return validated_result
 
 
-def single_file_extract(job_settings:JobSettings, data:PromptData, file_path):
+def single_file_extract(job_settings: JobSettings, data: PromptData, file_path):
     retry_count = 0
+    success = False
+    
+    # Use a check prompt to lower cost
+    check_response = requests.post(f"{job_settings.extract.ollama_url}/api/generate", json=data.__check__())
+    check_response.raise_for_status()
+    check_result = check_response.json()["response"]
+    print(f"Check result was '{check_result}'")
+    
     while retry_count < job_settings.extract.max_retries:
         data._refresh_data(retry_count)
         try:
-            response = requests.post(f"{job_settings.extract.ollama_url}/api/generate", json=data.__dict__())
-            response.raise_for_status()
-            result = response.json()["response"]
-            print(f"Unparsed Result:\n{result}")
+            if check_result == "yes":
+                if job_settings.use_openai:
+                    client = OpenAI()
 
-            # Check if the model is trying to tell us there are no results
-            if result.strip().lower().replace("'", "").replace('"', '') == 'no information found' or result.strip() == '':
-                print(f"Got signal from model that the information is not present")
-                result = ", ".join(["null" for n in range(job_settings.extract.num_columns)])
+                    completion = client.chat.completions.create(
+                        model=job_settings.model_name,
+                        messages=[
+                            {
+                                "role": "user",
+                                "content": data.prompt
+                            }
+                        ]
+                    )
+
+                    result = completion.choices[0].message.content
+                else:
+                    # Use Ollama API
+                    response = requests.post(f"{job_settings.extract.ollama_url}/api/generate", json=data.__dict__())
+                    response.raise_for_status()
+                    result = response.json()["response"]
+            else:
+                result = ", ".join(["null" for _ in range(job_settings.extract.num_columns)])
+
+            print(f"Unparsed Result:\n{result}")
 
             # Parse and validate the result
             parsed_result = parse_llm_response(result, job_settings.extract.num_columns)
@@ -210,12 +249,14 @@ def single_file_extract(job_settings:JobSettings, data:PromptData, file_path):
 
             # Clean up 'null' values
             for row in parsed_result:
-                for item in row:
+                for idx, item in enumerate(row):
                     try:
-                        if any([item.lower().replace(" ","") == 'null',
-                                item in ['','""',"''"], 
-                                item.strip().lower().replace('"', '').replace("'", "") == 'no information found']):
-                            parsed_result[row][item] = 'null'
+                        if any([
+                            item.lower().replace(" ", "") == 'null',
+                            item in ['', '""', "''"],
+                            item.strip().lower().replace('"', '').replace("'", "") == 'no information found'
+                        ]):
+                            row[idx] = 'null'
                     except:
                         pass
 

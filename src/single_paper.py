@@ -39,14 +39,27 @@ def scrape_and_extract_concurrent(job_settings: JobSettings):
     # Set up output directory
     output_dir = os.path.join(os.getcwd(), 'results')
     os.makedirs(output_dir, exist_ok=True)
+    
+    # Ping ollama port to see if it is running
+    try:
+        response = requests.get("http://localhost:11434")
+    except:
+        response.status_code = 404
+        
+    # If so, cool, if not, start it!
+    if response.status_code == 200:
+        is_ollama_running = True
+    else:
+        is_ollama_running = False
 
-    # Check for Ollama binary and start server
-    if not os.path.isfile('ollama'):
-        print("ollama binary not found. Downloading the latest release...")
-        download_ollama()
+    # Check for Ollama binary and start server if not running
+    if not is_ollama_running:
+        if not os.path.isfile('ollama'):
+            print("ollama binary not found. Downloading the latest release...")
+            download_ollama()
 
-    # Start Ollama server
-    subprocess.Popen(["./ollama", "serve"], stdout=subprocess.DEVNULL, stderr=subprocess.STDOUT)
+        # Start Ollama server
+        subprocess.Popen(["./ollama", "serve"], stdout=subprocess.DEVNULL, stderr=subprocess.STDOUT)
 
     # Count processed papers for each source
     source_counts = {

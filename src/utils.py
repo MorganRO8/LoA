@@ -1373,8 +1373,13 @@ def check_model_file(model_name_version):
         begin_ollama_server()
         print(f"Model file not found. Pulling the model...")
         try:
-            subprocess.run(["ollama", "pull", model_name_version], check=True)
+            subprocess.run(["./ollama", "pull", model_name_version], check=True)
         except subprocess.CalledProcessError as e:
-            print(f"Failed to pull the model: {e}")
-            return True
+            print(f"Failed to pull the model using local install: {e}")
+            print("Trying using global install...")
+            try: 
+                subprocess.run(["./ollama", "pull", model_name_version], check=True)
+            except subprocess.CalledProcessError as e:
+                print(f"Global install failed: {e}")
+                return True
         return False

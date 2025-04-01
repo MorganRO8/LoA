@@ -1373,7 +1373,7 @@ def check_model_file(model_name_version):
         begin_ollama_server()
         print(f"Model file not found. Pulling the model...")
         try:
-            subprocess.run(["./ollama", "pull", model_name_version], check=True)
+            subprocess.run(["ollama", "pull", model_name_version], check=True)
         except subprocess.CalledProcessError as e:
             print(f"Failed to pull the model: {e}")
             return True

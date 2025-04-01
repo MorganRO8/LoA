@@ -1374,12 +1374,12 @@ def check_model_file(model_name_version):
         print(f"Model file not found. Pulling the model...")
         try:
             subprocess.run(["./ollama", "pull", model_name_version], check=True)
-        except subprocess.CalledProcessError as e:
+        except Exception as e:
             print(f"Failed to pull the model using local install: {e}")
             print("Trying using global install...")
             try: 
                 subprocess.run(["./ollama", "pull", model_name_version], check=True)
-            except subprocess.CalledProcessError as e:
+            except Exception as e:
                 print(f"Global install failed: {e}")
                 return True
         return False

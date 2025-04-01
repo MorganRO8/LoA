@@ -52,7 +52,7 @@ def batch_extract(job_settings: JobSettings):
     # Check for Ollama binary and start server
     begin_ollama_server()
 
-    data = PromptData(model_name_version=job_settings.model_name_version, check_model_name_version=job_settings.check_model_name_version, use_openai=job_settings.use_openai)
+    data = PromptData(model_name_version=job_settings.model_name_version, check_model_name_version=job_settings.check_model_name_version, use_openai=job_settings.use_openai, use_hi_res=job_settings.use_hi_res)
 
     # Determine which files to process
     files_to_process = get_files_to_process(job_settings)
@@ -71,14 +71,14 @@ def batch_extract(job_settings: JobSettings):
         # Use a check prompt to lower cost
         check_response = requests.post(f"{job_settings.extract.ollama_url}/api/generate", json=data.__check__())
         check_response.raise_for_status()
-        result = check_response.json()["response"]
+        check_result = check_response.json()["response"]
         print(f"Check result was '{check_result}'")
 
         # Attempt extraction with retries
         while retry_count < job_settings.extract.max_retries and not success:
             data._refresh_data(retry_count)
             try:
-                if check_result == "yes":
+                if check_result == "yes" or check_result == "Yes":
                     if job_settings.use_openai:
                         client = OpenAI()
 
@@ -188,7 +188,7 @@ def extract(file_path, job_settings:JobSettings):
     Returns:
     list or None: Validated results if successful, None if extraction fails.
     '''
-    data = PromptData(model_name_version=job_settings.model_name_version, check_model_name_version=job_settings.check_model_name_version, use_openai=job_settings.use_openai)
+    data = PromptData(model_name_version=job_settings.model_name_version, check_model_name_version=job_settings.check_model_name_version, use_openai=job_settings.use_openai, use_hi_res=job_settings.use_hi_res)
 
     # Prepare prompt data
     data._refresh_paper_content(file_path, generate_prompt(job_settings.extract.schema_data, job_settings.extract.user_instructions, job_settings.extract.key_columns), check_prompt = job_settings.check_prompt)
@@ -214,7 +214,7 @@ def single_file_extract(job_settings: JobSettings, data: PromptData, file_path):
     while retry_count < job_settings.extract.max_retries:
         data._refresh_data(retry_count)
         try:
-            if check_result == "yes":
+            if check_result == "yes" or check_result == "Yes":
                 if job_settings.use_openai:
                     client = OpenAI()
 

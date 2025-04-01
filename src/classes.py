@@ -83,6 +83,7 @@ class JobSettings(): ## Contains subsettings as well for each of the job types.
         self.run_scrape = False
         self.run_extract= False
         self.concurrent = False
+        self.use_hi_res = False
         self.def_search_terms = []
         self.maybe_search_terms = []
         self.query_chunks = []
@@ -133,6 +134,8 @@ class JobSettings(): ## Contains subsettings as well for each of the job types.
                 self.check_model_name_version = f"{self.check_model_name}:{self.check_model_version}"
             elif key.lower() == "concurrent":
                 self.concurrent = bool(val.lower() == "y")
+            elif key.lower() == "use_hi_res":
+                self.use_hi_res = bool(val.lower() == "y")
             else:
                 print(f"JSON key '{key}' not recognized.")
     
@@ -158,7 +161,7 @@ class JobSettings(): ## Contains subsettings as well for each of the job types.
 
 
 class PromptData():
-    def __init__(self, model_name_version, check_model_name_version, use_openai=False):
+    def __init__(self, model_name_version, check_model_name_version, use_openai=False, use_hi_res=False):
         self.model = model_name_version
         self.check_model_name_version = check_model_name_version
         self.use_openai = use_openai  # Track if using OpenAI API
@@ -178,10 +181,19 @@ class PromptData():
         self.prompt = ""
         self.paper_content = ""
         self.check_prompt = ""
+        self.use_hi_res = use_hi_res
+        self.first_print = True
 
     def _refresh_paper_content(self,file,prompt,check_prompt):
         file_path = os.path.join(os.getcwd(), 'scraped_docs', file)
         processed_file_path = os.path.join(os.getcwd(), 'processed_docs', os.path.splitext(file)[0] + '.txt')
+        
+        """ Supposed to only go once, doesn't...
+        if self.first_print:
+            print("Base prompt:")
+            print(prompt)
+            self.first_print = False
+        """
 
         # Load paper content
         if os.path.exists(processed_file_path):
@@ -189,7 +201,7 @@ class PromptData():
                 self.paper_content = truncate_text(f.read())
         else:
             try:
-                self.paper_content = truncate_text(doc_to_elements(file_path))
+                self.paper_content = truncate_text(doc_to_elements(file_path), self.use_hi_res)
             except Exception as err:
                 print(f"Unable to process {file} into plaintext due to {err}")
                 return True

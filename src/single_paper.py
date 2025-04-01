@@ -4,7 +4,7 @@ import os
 import csv
 from src.utils import download_ollama
 from src.classes import JobSettings
-
+from itertools import combinations
 
 # URLs for PubMed Central API
 ESEARCH_URL = 'https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esearch.fcgi'
@@ -22,8 +22,19 @@ def scrape_and_extract_concurrent(job_settings: JobSettings):
     """
 
     # Prepare search terms
-    search_terms = [term for term in job_settings.def_search_terms if term.lower() != 'none']
-    search_terms.extend([term for term in job_settings.maybe_search_terms if term.lower() != 'none'])
+    # Filter out 'none' from the definite search terms
+    def_terms = [term for term in job_settings.def_search_terms if term.lower() != 'none']
+    # Filter out 'none' from the maybe search terms
+    maybe_terms = [term for term in job_settings.maybe_search_terms if term.lower() != 'none']
+
+    # This will hold a list of lists (each sub-list is one combination of terms)
+    all_search_terms = []
+
+    # Generate every possible combination of the maybe-terms (including the empty subset)
+    # and prepend the definite terms to that subset
+    for r in range(len(maybe_terms) + 1):
+        for combo in combinations(maybe_terms, r):
+            all_search_terms.append(def_terms + list(combo))
 
     # Set up output directory
     output_dir = os.path.join(os.getcwd(), 'results')
@@ -72,45 +83,46 @@ def scrape_and_extract_concurrent(job_settings: JobSettings):
     scienceopen_retmax = max(0, original_retmax - source_counts['SO'])
     unpaywall_retmax = max(0, original_retmax - source_counts['unpaywall'])
 
-    # Perform searches and extractions
-    if job_settings.scrape.scrape_pubmed and pubmed_retmax > 0:
-        job_settings.scrape.retmax = pubmed_retmax
-        print(f"Searching PubMed for {pubmed_retmax} papers...")
-        from src.databases.pubmed import pubmed_search
-        pubmed_search(job_settings, search_terms)
-        job_settings.scrape.retmax = original_retmax
+    for search_terms in all_search_terms:
+        # Perform searches and extractions
+        if job_settings.scrape.scrape_pubmed and pubmed_retmax > 0:
+            job_settings.scrape.retmax = pubmed_retmax
+            print(f"Searching PubMed for {pubmed_retmax} papers...")
+            from src.databases.pubmed import pubmed_search
+            pubmed_search(job_settings, search_terms)
+            job_settings.scrape.retmax = original_retmax
 
-    if job_settings.scrape.scrape_arxiv and arxiv_retmax > 0:
-        job_settings.scrape.retmax = arxiv_retmax
-        print(f"Searching arXiv for {arxiv_retmax} papers...")
-        from src.databases.arxiv import arxiv_search
-        arxiv_search(job_settings, search_terms, 'arxiv')
-        job_settings.scrape.retmax = original_retmax
+        if job_settings.scrape.scrape_arxiv and arxiv_retmax > 0:
+            job_settings.scrape.retmax = arxiv_retmax
+            print(f"Searching arXiv for {arxiv_retmax} papers...")
+            from src.databases.arxiv import arxiv_search
+            arxiv_search(job_settings, search_terms, 'arxiv')
+            job_settings.scrape.retmax = original_retmax
 
-    if job_settings.scrape.scrape_arxiv and chemrxiv_retmax > 0:
-        job_settings.scrape.retmax = chemrxiv_retmax
-        print(f"Searching ChemRxiv for {chemrxiv_retmax} papers...")
-        from src.databases.arxiv import arxiv_search
-        arxiv_search(job_settings, search_terms, 'chemrxiv')
-        job_settings.scrape.retmax = original_retmax
+        if job_settings.scrape.scrape_arxiv and chemrxiv_retmax > 0:
+            job_settings.scrape.retmax = chemrxiv_retmax
+            print(f"Searching ChemRxiv for {chemrxiv_retmax} papers...")
+            from src.databases.arxiv import arxiv_search
+            arxiv_search(job_settings, search_terms, 'chemrxiv')
+            job_settings.scrape.retmax = original_retmax
 
-    if job_settings.scrape.scrape_scienceopen and scienceopen_retmax > 0:
-        job_settings.scrape.retmax = scienceopen_retmax
-        print(f"Searching ScienceOpen for {scienceopen_retmax} papers...")
-        from src.databases.science_open import scrape_scienceopen
-        scrape_scienceopen(job_settings, search_terms)
-        job_settings.scrape.retmax = original_retmax
+        if job_settings.scrape.scrape_scienceopen and scienceopen_retmax > 0:
+            job_settings.scrape.retmax = scienceopen_retmax
+            print(f"Searching ScienceOpen for {scienceopen_retmax} papers...")
+            from src.databases.science_open import scrape_scienceopen
+            scrape_scienceopen(job_settings, search_terms)
+            job_settings.scrape.retmax = original_retmax
 
-    if job_settings.scrape.scrape_unpaywall and unpaywall_retmax > 0:
-        job_settings.scrape.retmax = unpaywall_retmax
-        if job_settings.scrape.email is None:
-            print("Email is required for Unpaywall search. Skipping Unpaywall.")
-        else:
-            print(f"Searching Unpaywall for {unpaywall_retmax} papers...")
-            from src.databases.unpaywall import unpaywall_search
-            job_settings.query_chunks = [search_terms]
-            unpaywall_search(job_settings)
-        job_settings.scrape.retmax = original_retmax
+        if job_settings.scrape.scrape_unpaywall and unpaywall_retmax > 0:
+            job_settings.scrape.retmax = unpaywall_retmax
+            if job_settings.scrape.email is None:
+                print("Email is required for Unpaywall search. Skipping Unpaywall.")
+            else:
+                print(f"Searching Unpaywall for {unpaywall_retmax} papers...")
+                from src.databases.unpaywall import unpaywall_search
+                job_settings.query_chunks = [search_terms]
+                unpaywall_search(job_settings)
+            job_settings.scrape.retmax = original_retmax
 
     print("Concurrent scraping and extraction completed.")
 

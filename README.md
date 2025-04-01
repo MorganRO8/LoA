@@ -19,7 +19,7 @@ LoA (Librarian of Alexandria) is a comprehensive tool designed for researchers, 
 
 1. Clone the repository:
    ```
-   git clone https://github.com/yourusername/LoA.git
+   git clone https://github.com/MorganRO8/LoA.git
    cd LoA
    ```
 

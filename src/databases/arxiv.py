@@ -1,9 +1,10 @@
 import os
 import requests
 import time
+import subprocess
 from bs4 import BeautifulSoup
 from src.extract import extract
-from src.utils import (doi_to_filename, is_file_processed, write_to_csv)
+from src.utils import (doi_to_filename, is_file_processed, write_to_csv, begin_ollama_server)
 from src.classes import JobSettings
 
 
@@ -100,18 +101,30 @@ def arxiv_search(job_settings: JobSettings, search_terms, repository):
                         print(f"{filename} already downloaded.")
                         if job_settings.concurrent and not is_file_processed(job_settings.files.csv, filename):
                             print(f"{filename} not extracted for this task; performing extraction...")
-                            try:
-                                extracted_data = extract(file_path, job_settings)
-                                if extracted_data:
-                                    print(f"Successfully extracted data from {filename}")
-                                else:
-                                    print(f"Failed to extract data from {filename}")
-                                    failed_result = [["failed" for _ in range(job_settings.extract.num_columns)] + [
-                                        os.path.splitext(os.path.basename(file_path))[0]]]
-                                    write_to_csv(failed_result, job_settings.extract.headers,
-                                                 filename=job_settings.files.csv)
-                            except Exception as e:
-                                print(f"Error extracting data from {filename}: {e}")
+                            restart_tries = 0
+                            while restart_tries < 2:
+                                try:
+                                    extracted_data = extract(file_path, job_settings)
+                                    if extracted_data:
+                                        print(f"Successfully extracted data from {filename}")
+                                    else:
+                                        print(f"Failed to extract data from {filename}")
+                                        failed_result = [["failed" for _ in range(job_settings.extract.num_columns)] + [
+                                            os.path.splitext(os.path.basename(file_path))[0]]]
+                                        write_to_csv(failed_result, job_settings.extract.headers,
+                                                     filename=job_settings.files.csv)
+                                except Exception as e:
+                                    if '500' in str(e):
+                                        restart_tries += 1
+                                        
+                                        print("Ollama either crashed, or the model you are trying to use is too large, trying to restart...")
+                                        
+                                        # Start ollama server
+                                        begin_ollama_server()
+                                        
+                                    else:
+                                        print(f"Error extracting data from {filename}: {e}")
+                                        break
                         continue
 
                     retry_count = 0
@@ -127,19 +140,31 @@ def arxiv_search(job_settings: JobSettings, search_terms, repository):
                                 print(f"Successfully downloaded PDF for {filename}.")
 
                                 if job_settings.concurrent:
-                                    try:
-                                        extracted_data = extract(file_path, job_settings)
-                                        if extracted_data:
-                                            print(f"Successfully extracted data from {filename}")
-                                        else:
-                                            print(f"Failed to extract data from {filename}")
-                                            failed_result = [
-                                                ["failed" for _ in range(job_settings.extract.num_columns)] + [
-                                                    os.path.splitext(os.path.basename(file_path))[0]]]
-                                            write_to_csv(failed_result, job_settings.extract.headers,
-                                                         filename=job_settings.files.csv)
-                                    except Exception as e:
-                                        print(f"Error extracting data from {filename}: {e}")
+                                    concurrent_tries = 0
+                                    while concurrent_tries < 2:
+                                        try:
+                                            extracted_data = extract(file_path, job_settings)
+                                            if extracted_data:
+                                                print(f"Successfully extracted data from {filename}")
+                                            else:
+                                                print(f"Failed to extract data from {filename}")
+                                                failed_result = [
+                                                    ["failed" for _ in range(job_settings.extract.num_columns)] + [
+                                                        os.path.splitext(os.path.basename(file_path))[0]]]
+                                                write_to_csv(failed_result, job_settings.extract.headers,
+                                                             filename=job_settings.files.csv)
+                                        except Exception as e:
+                                            if '500' in str(e):
+                                                print("Ollama either crashed, or the model you are trying to use is too large, trying to restart...")
+                                                
+                                                # Start ollama server
+                                                begin_ollama_server()
+                                                
+                                                concurrent_tries += 1
+                                                
+                                            else:
+                                                print(f"Error extracting data from {filename}: {e}")
+                                                break
                                 break
                             else:
                                 print(f"No PDF link found for {filename}. Skipping.")

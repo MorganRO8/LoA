@@ -2,6 +2,7 @@ import subprocess
 import sys
 import os
 import csv
+import requests
 from src.utils import download_ollama
 from src.classes import JobSettings
 from itertools import combinations
@@ -43,13 +44,20 @@ def scrape_and_extract_concurrent(job_settings: JobSettings):
     # Ping ollama port to see if it is running
     try:
         response = requests.get("http://localhost:11434")
+    
     except:
-        response.status_code = 404
+        try:
+            response.status_code = 404
+        except:
+            is_ollama_running = False
         
     # If so, cool, if not, start it!
-    if response.status_code == 200:
-        is_ollama_running = True
-    else:
+    try:
+        if response.status_code == 200:
+            is_ollama_running = True
+        else:
+            is_ollama_running = False
+    except:
         is_ollama_running = False
 
     # Check for Ollama binary and start server if not running

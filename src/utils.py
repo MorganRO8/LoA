@@ -1166,7 +1166,7 @@ def download_ollama():
 
         # Extract the 'ollama' binary from the .tgz file
         with tarfile.open('ollama.tgz', 'r:gz') as tar:
-            member = tar.getmember('./bin/ollama')
+            member = tar.getmember('bin/ollama')
             member.name = os.path.basename(member.name)  # Rename to 'ollama'
             tar.extract(member, path='.')
 
@@ -1331,29 +1331,41 @@ def begin_ollama_server():
     # Ping ollama port to see if it is running
     try:
         response = requests.get("http://localhost:11434")
+    
     except:
-        response.status_code = 404
+        try:
+            response.status_code = 404
+        except:
+            is_ollama_running = False
         
     # If so, cool, if not, start it!
-    if response.status_code == 200:
-        is_ollama_running = True
-    else:
+    try:
+        if response.status_code == 200:
+            is_ollama_running = True
+        else:
+            is_ollama_running = False
+    except:
         is_ollama_running = False
 
     if is_ollama_running:
         print("Ollama is running.")
     else:
-        print("Ollama is not running, starting...")
+        # print("Ollama is not running, starting...")
     
         # Check for ollama binary and download if not present
         if not os.path.isfile('ollama'):
             print("ollama binary not found. Downloading the latest release...")
             download_ollama()
         else:
-            print("ollama binary already exists in the current directory.")
-
-        # Start ollama server
-        subprocess.Popen(["./ollama", "serve"], stdout=subprocess.DEVNULL, stderr=subprocess.STDOUT)
+            # print("ollama binary already exists in the current directory.")
+            None
+        
+        try:
+            # Start ollama server
+            subprocess.Popen(["./ollama", "serve"], stdout=subprocess.DEVNULL, stderr=subprocess.STDOUT)
+        except:
+            # print("Failed to start ollama using portable install, trying with full install")
+            subprocess.Popen(["ollama", "serve"], stdout=subprocess.DEVNULL, stderr=subprocess.STDOUT)
 
 def check_model_file(model_name_version):
     model_name, model_version = model_name_version.split(":")

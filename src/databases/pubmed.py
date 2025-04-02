@@ -105,12 +105,16 @@ def pubmed_search(job_settings: JobSettings, search_terms): # concurrent=False, 
                                 extracted_data = extract(file_path, job_settings)
                                 if extracted_data:
                                     print(f"Successfully extracted data from {filename}")
+                                    concurrent_tries = 2
+                                    break
                                 else:
                                     print(f"Failed to extract data from {filename}")
                                     failed_result = [["failed" for _ in range(job_settings.extract.num_columns)] + [
                                         os.path.splitext(os.path.basename(file_path))[0]]]
                                     write_to_csv(failed_result, job_settings.extract.headers,
                                                  filename=job_settings.files.csv)
+                                    concurrent_tries = 2
+                                    break
                             except Exception as e:
                                 if '500' in str(e):
                                     print("Ollama either crashed, or the model you are trying to use is too large, trying to restart...")
@@ -136,11 +140,15 @@ def pubmed_search(job_settings: JobSettings, search_terms): # concurrent=False, 
                         extracted_data = extract(file_path, job_settings)
                         if extracted_data:
                             print(f"Successfully extracted data from {filename}")
+                            restart_tries = 2
+                            break
                         else:
                             print(f"Failed to extract data from {filename}")
                             failed_result = [["failed" for _ in range(job_settings.extract.num_columns)] + [
                                 os.path.splitext(os.path.basename(file_path))[0]]]
                             write_to_csv(failed_result, job_settings.extract.headers, filename=job_settings.files.csv)
+                            restart_tries = 2
+                            break
                     except Exception as e:
                         if '500' in str(e):
                             restart_tries += 1

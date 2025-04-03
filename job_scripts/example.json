@@ -4,14 +4,7 @@
       "melting point",
       "boiling point"
     ],
-    "maybe_search_terms": [
-	  "synthesis",
-      "thermal property",
-      "physical property",
-      "small molecule",
-      "organic compound",
-      "phase transition"
-    ],
+    "maybe_search_terms": [""],
     "model_name_version": "deepseek-r1:8b",
     "check_model_name_version": "falcon3:10b",
     "concurrent": "y",

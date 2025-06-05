@@ -18,7 +18,7 @@ import requests
 import tarfile
 import io
 import re
-
+from PIL import Image
 
 def extract_images_from_pdf(pdf_path, output_dir):
     """Extract images from a PDF using pdfminer if available."""
@@ -89,12 +89,36 @@ def extract_images_from_pubmed_xml(xml_string, output_dir):
             for member in tar.getmembers():
                 if not member.isfile():
                     continue
-                if not re.search(r"\.(jpg|jpeg|png|gif|tif|tiff)$", member.name, re.IGNORECASE):
+                if not re.search(r"\.(jpg|jpeg|png|gif|tif|tiff)$",
+                                 member.name, re.IGNORECASE):
                     continue
+
                 extracted = tar.extractfile(member)
-                if extracted:
-                    with open(os.path.join(output_dir, os.path.basename(member.name)), "wb") as f:
-                        f.write(extracted.read())
+                if extracted is None:
+                    continue
+
+                # ── read the raw bytes once ───────────────────────────────────────────
+                img_bytes = extracted.read()
+
+                # ── probe the image size in memory (no temp file needed) ─────────────
+                try:
+                    with Image.open(io.BytesIO(img_bytes)) as im:
+                        w, h = im.size
+                except Exception as err:
+                    print(f"Skipped {member.name}: could not read image ({err})")
+                    continue
+
+                # ── keep only “real” figures ─────────────────────────────────────────
+                if min(w, h) < 150:
+                    # optionally: also check area, dpi, or aspect ratio here
+                    # e.g. if w * h < 40_000:  continue
+                    print(f"Skipped {member.name}: {w}×{h} < 150 px threshold")
+                    continue
+
+                # ── write out the image; naming is unchanged ─────────────────────────
+                out_path = os.path.join(output_dir, os.path.basename(member.name))
+                with open(out_path, "wb") as f:
+                    f.write(img_bytes)
     except Exception as err:
         print(f"Failed to extract images from OA package for {pmcid}: {err}")
 

@@ -219,6 +219,7 @@ class PromptData():
         return {"model": self.model,
                 "stream": self.stream,
                 "options":self.options,
+                "think": True,
                 "prompt":self.prompt}
                 
     def __check__(self):
@@ -236,5 +237,6 @@ class PromptData():
                         "stop": ["|||"],
                         "temperature": 0,
                         },
+                "think": False,
                 "prompt": self.check_prompt}
 

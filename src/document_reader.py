@@ -15,6 +15,9 @@ LOGGER.setLevel(logging.CRITICAL)
 
 from xml.etree import ElementTree as ET
 import requests
+import tarfile
+import io
+import re
 
 
 def extract_images_from_pdf(pdf_path, output_dir):
@@ -42,28 +45,58 @@ def extract_images_from_pdf(pdf_path, output_dir):
 
 
 def extract_images_from_pubmed_xml(xml_string, output_dir):
-    """Download images referenced in a PubMed XML document."""
+    """Download images for a PubMed Central article using the OA package."""
     os.makedirs(output_dir, exist_ok=True)
+
     try:
         root = ET.fromstring(xml_string)
     except Exception as err:
         print(f"Unable to parse XML for image extraction: {err}")
         return
 
-    ns = {"xlink": "http://www.w3.org/1999/xlink"}
-    for graphic in root.findall(".//graphic", ns):
-        href = graphic.attrib.get("{http://www.w3.org/1999/xlink}href")
-        if not href:
-            continue
-        url = href
-        try:
-            r = requests.get(url)
-            if r.status_code == 200:
-                filename = os.path.basename(url)
-                with open(os.path.join(output_dir, filename), "wb") as f:
-                    f.write(r.content)
-        except Exception as err:
-            print(f"Failed to download image {url} due to {err}")
+    pmcid_elem = root.find(".//article-id[@pub-id-type='pmcid']")
+    if pmcid_elem is None or not pmcid_elem.text:
+        print("PMCID not found in XML; cannot download images")
+        return
+
+    pmcid = pmcid_elem.text.strip()
+    oa_url = f"https://www.ncbi.nlm.nih.gov/pmc/utils/oa/oa.fcgi?id={pmcid}"
+    try:
+        response = requests.get(oa_url)
+        response.raise_for_status()
+        oa_root = ET.fromstring(response.text)
+    except Exception as err:
+        print(f"Failed to fetch OA package link for {pmcid}: {err}")
+        return
+
+    link_elem = oa_root.find(".//record/link[@format='tgz']")
+    if link_elem is None:
+        link_elem = oa_root.find(".//record/link[@format='tar.gz']")
+    if link_elem is None or not link_elem.attrib.get("href"):
+        print(f"No OA package available for {pmcid}")
+        return
+
+    tar_url = link_elem.attrib["href"].replace("ftp://", "https://")
+    try:
+        tar_resp = requests.get(tar_url)
+        tar_resp.raise_for_status()
+    except Exception as err:
+        print(f"Failed to download OA package for {pmcid}: {err}")
+        return
+
+    try:
+        with tarfile.open(fileobj=io.BytesIO(tar_resp.content), mode="r:gz") as tar:
+            for member in tar.getmembers():
+                if not member.isfile():
+                    continue
+                if not re.search(r"\.(jpg|jpeg|png|gif|tif|tiff)$", member.name, re.IGNORECASE):
+                    continue
+                extracted = tar.extractfile(member)
+                if extracted:
+                    with open(os.path.join(output_dir, os.path.basename(member.name)), "wb") as f:
+                        f.write(extracted.read())
+    except Exception as err:
+        print(f"Failed to extract images from OA package for {pmcid}: {err}")
 
 
 def doc_to_elements(file, use_hi_res=False, use_multimodal=False):

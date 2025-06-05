@@ -8,7 +8,8 @@
     "model_name_version": "deepseek-r1:8b",
     "check_model_name_version": "falcon3:10b",
     "concurrent": "y",
-    "use_hi_res": "y"
+    "use_hi_res": "y",
+    "use_multimodal": "n"
   },
   "files": {
     "schema_file": "example.pkl",

@@ -84,6 +84,7 @@ class JobSettings(): ## Contains subsettings as well for each of the job types.
         self.run_extract= False
         self.concurrent = False
         self.use_hi_res = False
+        self.use_multimodal = False
         self.def_search_terms = []
         self.maybe_search_terms = []
         self.query_chunks = []
@@ -136,6 +137,8 @@ class JobSettings(): ## Contains subsettings as well for each of the job types.
                 self.concurrent = bool(val.lower() == "y")
             elif key.lower() == "use_hi_res":
                 self.use_hi_res = bool(val.lower() == "y")
+            elif key.lower() == "use_multimodal":
+                self.use_multimodal = bool(val.lower() == "y")
             else:
                 print(f"JSON key '{key}' not recognized.")
     
@@ -161,7 +164,7 @@ class JobSettings(): ## Contains subsettings as well for each of the job types.
 
 
 class PromptData():
-    def __init__(self, model_name_version, check_model_name_version, use_openai=False, use_hi_res=False):
+    def __init__(self, model_name_version, check_model_name_version, use_openai=False, use_hi_res=False, use_multimodal=False):
         self.model = model_name_version
         self.check_model_name_version = check_model_name_version
         self.use_openai = use_openai  # Track if using OpenAI API
@@ -182,11 +185,11 @@ class PromptData():
         self.paper_content = ""
         self.check_prompt = ""
         self.use_hi_res = use_hi_res
+        self.use_multimodal = use_multimodal
         self.first_print = True
 
     def _refresh_paper_content(self,file,prompt,check_prompt):
         file_path = os.path.join(os.getcwd(), 'scraped_docs', file)
-        processed_file_path = os.path.join(os.getcwd(), 'processed_docs', os.path.splitext(file)[0] + '.txt')
         
         """ Supposed to only go once, doesn't...
         if self.first_print:
@@ -195,16 +198,12 @@ class PromptData():
             self.first_print = False
         """
 
-        # Load paper content
-        if os.path.exists(processed_file_path):
-            with open(processed_file_path, 'r') as f:
-                self.paper_content = truncate_text(f.read())
-        else:
-            try:
-                self.paper_content = truncate_text(doc_to_elements(file_path), self.use_hi_res)
-            except Exception as err:
-                print(f"Unable to process {file} into plaintext due to {err}")
-                return True
+        # Always run doc_to_elements to ensure images are captured when needed
+        try:
+            self.paper_content = truncate_text(doc_to_elements(file_path, self.use_hi_res, self.use_multimodal))
+        except Exception as err:
+            print(f"Unable to process {file} into plaintext due to {err}")
+            return True
         self.prompt = f"{prompt}\n\n{self.paper_content}\n\nAgain, please make sure to respond only in the specified format exactly as described, or you will cause errors.\nResponse:"
         self.check_prompt = f"{check_prompt}\n\n{self.paper_content}\n\nAgain, please only answer 'yes' or 'no' (without quotes) to let me know if we should extract information from this paper using the costly api call"
         return False

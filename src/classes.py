@@ -6,7 +6,7 @@ from src.utils import (
     generate_check_prompt,
     truncate_text,
     get_out_id,
-    get_model_context_length,
+    get_model_info,
 )
 from src.document_reader import doc_to_elements
 
@@ -177,7 +177,13 @@ class PromptData():
         self.check_model_name_version = check_model_name_version
         self.use_openai = use_openai  # Track if using OpenAI API
         self.stream = False
-        ctx_len = get_model_context_length(model_name_version)
+        info = get_model_info(model_name_version)
+        ctx_len = info["context_length"]
+        self.supports_thinking = "thinking" in info["capabilities"]
+        self.supports_vision = any(cap in info["capabilities"] for cap in ["vision", "images"])
+        if use_multimodal and not self.supports_vision:
+            print("Model does not support vision; disabling multimodal features.")
+            use_multimodal = False
         self.options = {
                         "num_ctx": ctx_len,
                         "num_predict": 2048,
@@ -228,11 +234,13 @@ class PromptData():
             self.options["repeat_penalty"] = 1.1 + 0.1 * retry_count
 
     def __dict__(self):
-        return {"model": self.model,
-                "stream": self.stream,
-                "options":self.options,
-                "think": True,
-                "prompt":self.prompt}
+        return {
+            "model": self.model,
+            "stream": self.stream,
+            "options": self.options,
+            "think": self.supports_thinking,
+            "prompt": self.prompt,
+        }
                 
     def __check__(self):
         ctx_len = self.options.get("num_ctx", 32768)

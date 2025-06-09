@@ -193,7 +193,6 @@ class PromptData():
                         "tfs_z": 1,
                         "top_p": 0.1,
                         "top_k": 5,
-                        "stop": ["|||"],
                         "temperature": 0.2,
                         }
         self.prompt = ""
@@ -256,7 +255,6 @@ class PromptData():
                 "tfs_z": 1,
                 "top_p": 0.1,
                 "top_k": 5,
-                "stop": ["|||"],
                 "temperature": 0,
             },
             "think": False,

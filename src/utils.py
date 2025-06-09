@@ -1048,6 +1048,77 @@ def estimate_tokens(text):
     return estimated_tokens
 
 
+def get_model_info(model_name_version, ollama_url="http://localhost:11434"):
+    """Return context length and capabilities for a model.
+
+    Attempts to run ``ollama show`` via subprocess. If that fails or the needed
+    information cannot be parsed, this function falls back to the Ollama HTTP
+    API. The result is a dictionary with ``context_length`` and ``capabilities``
+    (a set of capability strings). If the context length cannot be determined,
+    a default of 32768 is used.
+    """
+
+    output = ""
+
+    try:
+        result = subprocess.run(
+            ["ollama", "show", model_name_version], capture_output=True, text=True, check=True
+        )
+        output = result.stdout
+    except Exception as e:
+        print(f"Subprocess call failed: {e}. Trying API fallback...")
+
+    ctx = None
+    capabilities = set()
+
+    if output:
+        match = re.search(r"context length\s+(\d+)", output, re.IGNORECASE)
+        if match:
+            ctx = int(match.group(1))
+
+        cap_match = re.search(r"Capabilities\s+([\s\S]+?)\n\s*\n", output, re.IGNORECASE)
+        if cap_match:
+            for line in cap_match.group(1).splitlines():
+                line = line.strip().lower()
+                if line:
+                    capabilities.add(line)
+
+    if ctx is None or not capabilities:
+        try:
+            response = requests.post(
+                f"{ollama_url}/api/show", json={"model": model_name_version, "verbose": True}
+            )
+            response.raise_for_status()
+            data = response.json()
+            if ctx is None:
+                info = data.get("model_info", {})
+                for key in [
+                    "llama.context_length",
+                    "qwen.context_length",
+                    "general.context_length",
+                ]:
+                    if key in info:
+                        ctx = int(info[key])
+                        break
+            if not capabilities:
+                caps = data.get("capabilities", [])
+                if isinstance(caps, list):
+                    capabilities.update([c.lower() for c in caps])
+        except Exception as api_err:
+            print(f"Failed to query Ollama API for model info: {api_err}")
+
+    if ctx is None:
+        print("Unable to determine context length. Using default of 32768.")
+        ctx = 32768
+
+    if ctx < 32000:
+        print(
+            f"WARNING: Model context length {ctx} is below the recommended 32000 tokens."
+        )
+
+    return {"context_length": ctx, "capabilities": capabilities}
+
+
 def truncate_text(text, max_tokens=32000, buffer=3500):
     """
     Truncate text to fit within a specified token limit.

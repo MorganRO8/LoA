@@ -1,5 +1,13 @@
 import os
-from src.utils import load_schema_file, generate_examples, generate_prompt, generate_check_prompt, truncate_text, get_out_id
+from src.utils import (
+    load_schema_file,
+    generate_examples,
+    generate_prompt,
+    generate_check_prompt,
+    truncate_text,
+    get_out_id,
+    get_model_info,
+)
 from src.document_reader import doc_to_elements
 
 
@@ -169,17 +177,23 @@ class PromptData():
         self.check_model_name_version = check_model_name_version
         self.use_openai = use_openai  # Track if using OpenAI API
         self.stream = False
+        info = get_model_info(model_name_version)
+        ctx_len = info["context_length"]
+        self.supports_thinking = "thinking" in info["capabilities"]
+        self.supports_vision = any(cap in info["capabilities"] for cap in ["vision", "images"])
+        if use_multimodal and not self.supports_vision:
+            print("Model does not support vision; disabling multimodal features.")
+            use_multimodal = False
         self.options = {
-                        "num_ctx": 32768,
+                        "num_ctx": ctx_len,
                         "num_predict": 2048,
                         "mirostat": 0,
                         "mirostat_tau": 0.5,
                         "mirostat_eta": 1,
                         "tfs_z": 1,
-                        "top_p": 1,
+                        "top_p": 0.1,
                         "top_k": 5,
-                        "stop": ["|||"],
-                        "temperature": 0.7,
+                        "temperature": 0.2,
                         }
         self.prompt = ""
         self.paper_content = ""
@@ -200,7 +214,10 @@ class PromptData():
 
         # Always run doc_to_elements to ensure images are captured when needed
         try:
-            self.paper_content = truncate_text(doc_to_elements(file_path, self.use_hi_res, self.use_multimodal))
+            self.paper_content = truncate_text(
+                doc_to_elements(file_path, self.use_hi_res, self.use_multimodal),
+                max_tokens=self.options["num_ctx"],
+            )
         except Exception as err:
             print(f"Unable to process {file} into plaintext due to {err}")
             return True
@@ -216,27 +233,31 @@ class PromptData():
             self.options["repeat_penalty"] = 1.1 + 0.1 * retry_count
 
     def __dict__(self):
-        return {"model": self.model,
-                "stream": self.stream,
-                "options":self.options,
-                "think": True,
-                "prompt":self.prompt}
+        return {
+            "model": self.model,
+            "stream": self.stream,
+            "options": self.options,
+            "think": self.supports_thinking,
+            "prompt": self.prompt,
+        }
                 
     def __check__(self):
-        return {"model": self.check_model_name_version,
-                "stream": self.stream,
-                "options": {
-                        "num_ctx": 32768,
-                        "num_predict": 1,
-                        "mirostat": 0,
-                        "mirostat_tau": 0.5,
-                        "mirostat_eta": 1,
-                        "tfs_z": 1,
-                        "top_p": 1,
-                        "top_k": 5,
-                        "stop": ["|||"],
-                        "temperature": 0,
-                        },
-                "think": False,
-                "prompt": self.check_prompt}
+        ctx_len = self.options.get("num_ctx", 32768)
+        return {
+            "model": self.check_model_name_version,
+            "stream": self.stream,
+            "options": {
+                "num_ctx": ctx_len,
+                "num_predict": 1,
+                "mirostat": 0,
+                "mirostat_tau": 0.5,
+                "mirostat_eta": 1,
+                "tfs_z": 1,
+                "top_p": 0.1,
+                "top_k": 5,
+                "temperature": 0,
+            },
+            "think": False,
+            "prompt": self.check_prompt,
+        }
 

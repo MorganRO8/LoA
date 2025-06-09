@@ -4,7 +4,13 @@ import time
 import subprocess
 from bs4 import BeautifulSoup
 from src.extract import extract
-from src.utils import (doi_to_filename, is_file_processed, write_to_csv, begin_ollama_server)
+from src.utils import (
+    doi_to_filename,
+    is_file_processed,
+    write_to_csv,
+    begin_ollama_server,
+    download_supplementary_material,
+)
 from src.classes import JobSettings
 
 
@@ -86,9 +92,15 @@ def arxiv_search(job_settings: JobSettings, search_terms, repository):
                     if repository == 'arxiv':
                         pdf_link = entry.find('link', {'title': 'pdf'})['href']
                         doi = entry.find('id').text.split('/')[-1]
+                        landing_page = entry.find('id').text
                     elif repository == 'chemrxiv':
                         pdf_link = entry['item']['asset']['original']['url']
                         doi = entry['item'].get('doi', '')
+                        landing_page = None
+                        for wl in entry['item'].get('webLinks', []):
+                            if wl.get('type', '').lower() == 'entry page':
+                                landing_page = wl.get('url')
+                                break
 
                     if doi in processed_papers:
                         continue
@@ -142,6 +154,13 @@ def arxiv_search(job_settings: JobSettings, search_terms, repository):
                                     f.write(pdf_response.content)
                                 scraped_files.append(filename)
                                 print(f"Successfully downloaded PDF for {filename}.")
+
+                                if repository == 'arxiv' and landing_page:
+                                    download_supplementary_material(landing_page, f"{repository}_{doi}")
+                                if repository == 'chemrxiv':
+                                    for supp in entry['item'].get('suppItems', []):
+                                        url = supp['asset']['original']['url']
+                                        download_supplementary_material(url, f"{repository}_{doi}")
 
                                 if job_settings.concurrent:
                                     concurrent_tries = 0

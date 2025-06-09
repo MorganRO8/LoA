@@ -4,7 +4,12 @@ import time
 import json
 from datetime import datetime
 from src.extract import extract
-from src.utils import (doi_to_filename, is_file_processed, write_to_csv)
+from src.utils import (
+    doi_to_filename,
+    is_file_processed,
+    write_to_csv,
+    download_supplementary_material,
+)
 from src.classes import JobSettings
 
 def read_api_count():
@@ -231,6 +236,9 @@ def unpaywall_search(job_settings:JobSettings): #, query_chunks, retmax, email, 
                         if pdf_filename:
                             scraped_files.append(pdf_filename)
                             total_downloaded += 1
+                            landing = doi_data['best_oa_location'].get('url')
+                            if landing:
+                                download_supplementary_material(landing, f"unpaywall_{doi}")
 
                             if job_settings.concurrent:
                                 try:

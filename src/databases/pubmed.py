@@ -4,7 +4,12 @@ import time
 import subprocess
 import xml.etree.ElementTree as ET
 from src.extract import extract
-from src.utils import (is_file_processed, write_to_csv, begin_ollama_server)
+from src.utils import (
+    is_file_processed,
+    write_to_csv,
+    begin_ollama_server,
+    download_supplementary_material,
+)
 from src.classes import JobSettings
 
 # Constants
@@ -95,6 +100,12 @@ def pubmed_search(job_settings: JobSettings, search_terms): # concurrent=False, 
                 if root.find(".//body"):
                     with open(file_path, 'w') as f:
                         f.write(xml_data)
+
+                    # Download supplementary materials if available
+                    for supp in root.findall('.//supplementary-material'):
+                        href = supp.attrib.get('{http://www.w3.org/1999/xlink}href')
+                        if href:
+                            download_supplementary_material(href, f"pubmed_{uid}")
                     num_downloaded += 1
                     scraped_files.append(filename)
 

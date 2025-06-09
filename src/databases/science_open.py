@@ -12,7 +12,12 @@ from selenium.webdriver.common.by import By
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.webdriver.support.ui import WebDriverWait
 from src.extract import extract
-from src.utils import (get_chrome_driver, is_file_processed, write_to_csv)
+from src.utils import (
+    get_chrome_driver,
+    is_file_processed,
+    write_to_csv,
+    download_supplementary_material,
+)
 from src.classes import JobSettings
 
 def scrape_scienceopen(job_settings:JobSettings, search_terms):  # retmax, concurrent=False, schema_file=None, user_instructions=None, model_name_version=None
@@ -170,6 +175,12 @@ def scrape_scienceopen(job_settings:JobSettings, search_terms):  # retmax, concu
                     pdf_response = requests.get(pdf_link)
                     with open(file_path, 'wb') as f:
                         f.write(pdf_response.content)
+
+                    # Attempt to download supplementary material from the page
+                    for a in soup.find_all('a', href=True):
+                        text = (a.get_text() or '').lower()
+                        if 'supplement' in text or 'supporting' in text:
+                            download_supplementary_material(a['href'], f"SO_{encoded_doi}")
 
                     count += 1
                     elapsed_time = time.time() - start_time

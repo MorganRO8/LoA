@@ -54,6 +54,8 @@ def batch_extract(job_settings: JobSettings):
 
     data = PromptData(model_name_version=job_settings.model_name_version,
                       check_model_name_version=job_settings.check_model_name_version,
+                      context_length=job_settings.context_length,
+                      buffer_tokens=job_settings.context_buffer,
                       use_openai=job_settings.use_openai,
                       use_hi_res=job_settings.use_hi_res,
                       use_multimodal=job_settings.use_multimodal)
@@ -194,6 +196,8 @@ def extract(file_path, job_settings:JobSettings):
     '''
     data = PromptData(model_name_version=job_settings.model_name_version,
                       check_model_name_version=job_settings.check_model_name_version,
+                      context_length=job_settings.context_length,
+                      buffer_tokens=job_settings.context_buffer,
                       use_openai=job_settings.use_openai,
                       use_hi_res=job_settings.use_hi_res,
                       use_multimodal=job_settings.use_multimodal)

@@ -1048,6 +1048,43 @@ def estimate_tokens(text):
     return estimated_tokens
 
 
+def get_model_context_length(model_name_version):
+    """Return the context window size for a given model.
+
+    This function calls ``ollama show`` using subprocess and parses the
+    ``context length`` from the output. If the context length cannot be
+    determined, a default of 32768 is returned.
+    """
+    try:
+        result = subprocess.run([
+            "ollama",
+            "show",
+            model_name_version
+        ], capture_output=True, text=True, check=True)
+    except Exception:
+        try:
+            result = subprocess.run([
+                "./ollama",
+                "show",
+                model_name_version
+            ], capture_output=True, text=True, check=True)
+        except Exception as e:
+            print(f"Failed to run 'ollama show {model_name_version}': {e}")
+            return 32768
+
+    match = re.search(r"context length\s+(\d+)", result.stdout)
+    if match:
+        ctx = int(match.group(1))
+        if ctx < 32000:
+            print(
+                f"WARNING: Model context length {ctx} is below the recommended 32000 tokens."
+            )
+        return ctx
+
+    print("Unable to parse context length from 'ollama show' output.")
+    return 32768
+
+
 def truncate_text(text, max_tokens=32000, buffer=3500):
     """
     Truncate text to fit within a specified token limit.

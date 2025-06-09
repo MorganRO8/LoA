@@ -1,5 +1,14 @@
 import os
-from src.utils import load_schema_file, generate_examples, generate_prompt, generate_check_prompt, truncate_text, get_out_id
+from src.utils import (
+    load_schema_file,
+    generate_examples,
+    generate_prompt,
+    generate_check_prompt,
+    truncate_text,
+    get_out_id,
+    get_model_context,
+    estimate_tokens,
+)
 from src.document_reader import doc_to_elements
 
 
@@ -97,6 +106,8 @@ class JobSettings(): ## Contains subsettings as well for each of the job types.
         self.use_openai = False
         self.api_key = None
         self.check_prompt = ""
+        self.context_length = 32768
+        self.context_buffer = 3500
 
 
     def _update_model_name_version(self, model_name_version):
@@ -162,24 +173,33 @@ class JobSettings(): ## Contains subsettings as well for each of the job types.
         # Define the search info file path
         self.files.search_info_file = os.path.join(os.getcwd(), 'search_info', f"{output_directory_id}.txt")
 
+        # Determine model context length
+        self.context_length = get_model_context(self.model_name_version)
+        if self.context_length < 32768:
+            print(
+                f"Warning: context length for {self.model_name_version} is {self.context_length}, which is below 32k"
+            )
+        self.context_buffer = max(3500, int(self.context_length * 0.1))
+
 
 class PromptData():
-    def __init__(self, model_name_version, check_model_name_version, use_openai=False, use_hi_res=False, use_multimodal=False):
+    def __init__(self, model_name_version, check_model_name_version, context_length=32768, buffer_tokens=3500, use_openai=False, use_hi_res=False, use_multimodal=False):
         self.model = model_name_version
         self.check_model_name_version = check_model_name_version
         self.use_openai = use_openai  # Track if using OpenAI API
         self.stream = False
+        self.buffer_tokens = buffer_tokens
         self.options = {
-                        "num_ctx": 32768,
+                        "num_ctx": context_length,
                         "num_predict": 2048,
                         "mirostat": 0,
                         "mirostat_tau": 0.5,
                         "mirostat_eta": 1,
                         "tfs_z": 1,
-                        "top_p": 1,
+                        "top_p": 0.1,
                         "top_k": 5,
                         "stop": ["|||"],
-                        "temperature": 0.7,
+                        "temperature": 0.1,
                         }
         self.prompt = ""
         self.paper_content = ""
@@ -198,22 +218,44 @@ class PromptData():
             self.first_print = False
         """
 
-        # Always run doc_to_elements to ensure images are captured when needed
+        max_ctx = self.options.get("num_ctx", 32768)
+        buffer = getattr(self, "buffer_tokens", 3500)
+
         try:
-            self.paper_content = truncate_text(doc_to_elements(file_path, self.use_hi_res, self.use_multimodal))
+            main_text = doc_to_elements(file_path, self.use_hi_res, self.use_multimodal)
         except Exception as err:
             print(f"Unable to process {file} into plaintext due to {err}")
             return True
+
+        texts = [main_text]
+
+        base = os.path.splitext(os.path.basename(file))[0]
+        si_files = sorted(
+            [f for f in os.listdir(os.path.join(os.getcwd(), "scraped_docs")) if f.startswith(base + "_SI")]
+        )
+        for si_file in si_files:
+            path = os.path.join(os.getcwd(), "scraped_docs", si_file)
+            try:
+                si_text = doc_to_elements(path, self.use_hi_res, self.use_multimodal)
+                combined = " ".join(texts + [si_text])
+                if estimate_tokens(combined) < max_ctx - buffer:
+                    texts.append(si_text)
+                else:
+                    break
+            except Exception as err:
+                print(f"Unable to process {si_file} due to {err}")
+
+        self.paper_content = truncate_text("\n\n".join(texts), max_tokens=max_ctx, buffer=buffer)
         self.prompt = f"{prompt}\n\n{self.paper_content}\n\nAgain, please make sure to respond only in the specified format exactly as described, or you will cause errors.\nResponse:"
         self.check_prompt = f"{check_prompt}\n\n{self.paper_content}\n\nAgain, please only answer 'yes' or 'no' (without quotes) to let me know if we should extract information from this paper using the costly api call"
         return False
     
     def _refresh_data(self, retry_count):
         if self.use_openai:
-            self.options["temperature"] = min(0.7 + 0.1 * retry_count, 1.0)
+            self.options["temperature"] = min(0.1 + 0.05 * retry_count, 1.0)
         else:
-            self.options["temperature"] = 0.35 * retry_count
-            self.options["repeat_penalty"] = 1.1 + 0.1 * retry_count
+            self.options["temperature"] = 0.1 * retry_count
+            self.options["repeat_penalty"] = 1.1 + 0.05 * retry_count
 
     def __dict__(self):
         return {"model": self.model,
@@ -226,13 +268,13 @@ class PromptData():
         return {"model": self.check_model_name_version,
                 "stream": self.stream,
                 "options": {
-                        "num_ctx": 32768,
+                        "num_ctx": self.options.get("num_ctx", 32768),
                         "num_predict": 1,
                         "mirostat": 0,
                         "mirostat_tau": 0.5,
                         "mirostat_eta": 1,
                         "tfs_z": 1,
-                        "top_p": 1,
+                        "top_p": 0.1,
                         "top_k": 5,
                         "stop": ["|||"],
                         "temperature": 0,

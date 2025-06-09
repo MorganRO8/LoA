@@ -1395,3 +1395,44 @@ def check_model_file(model_name_version):
                 print(f"Global install failed: {e}")
                 return True
         return False
+
+def get_model_context(model_name_version):
+    """Return context length for the model using ``ollama show``."""
+    try:
+        output = subprocess.check_output(["ollama", "show", model_name_version], text=True)
+        match = re.search(r"context length\s+(\d+)", output)
+        if match:
+            return int(match.group(1))
+    except Exception as err:
+        print(f"Failed to obtain context length for {model_name_version}: {err}. Using default 32768")
+    return 32768
+
+
+def download_supplementary_material(landing_url, prefix):
+    """Download supplementary materials from a landing page if present."""
+    files = []
+    try:
+        resp = requests.get(landing_url)
+        resp.raise_for_status()
+    except Exception as err:
+        print(f"Unable to fetch landing page {landing_url}: {err}")
+        return files
+
+    soup = BeautifulSoup(resp.text, "html.parser")
+    for link in soup.find_all("a", href=True):
+        text = (link.get_text() or "").lower()
+        href = link["href"]
+        if any(k in text for k in ["supplement", "supporting", "si "]) or any(k in href.lower() for k in ["supplement", "supporting", "si"]):
+            full_url = urljoin(landing_url, href)
+            ext = os.path.splitext(full_url.split("?")[0])[1] or ".pdf"
+            fname = f"{prefix}_SI{len(files)+1}{ext}"
+            path = os.path.join(os.getcwd(), "scraped_docs", fname)
+            try:
+                f_resp = requests.get(full_url)
+                f_resp.raise_for_status()
+                with open(path, "wb") as f:
+                    f.write(f_resp.content)
+                files.append(fname)
+            except Exception as err:
+                print(f"Failed to download supplementary file {full_url}: {err}")
+    return files

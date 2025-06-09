@@ -165,6 +165,8 @@ def batch_extract(job_settings: JobSettings):
                 print(f"Retrying ({retry_count}/{job_settings.extract.max_retries})...")
 
             except (requests.exceptions.RequestException, json.JSONDecodeError, KeyError) as e:
+                if isinstance(e, requests.exceptions.RequestException) and hasattr(e, "response") and e.response is not None:
+                    print(f"Ollama response:\n{e.response.text}")
                 print(f"Error processing {file}: {type(e).__name__} - {str(e)}")
                 retry_count += 1
                 print(f"Retrying ({retry_count}/{job_settings.extract.max_retries})...")
@@ -298,6 +300,8 @@ def single_file_extract(job_settings: JobSettings, data: PromptData, file_path):
                 return validated_result
 
         except Exception as e:
+            if isinstance(e, requests.exceptions.RequestException) and hasattr(e, "response") and e.response is not None:
+                print(f"Ollama response:\n{e.response.text}")
             print(f"Error processing {file_path}: {type(e).__name__} - {str(e)}")
             retry_count += 1
             print(f"Retrying ({retry_count}/{job_settings.extract.max_retries})...")

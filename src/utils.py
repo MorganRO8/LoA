@@ -1048,41 +1048,62 @@ def estimate_tokens(text):
     return estimated_tokens
 
 
-def get_model_context_length(model_name_version):
+def get_model_context_length(model_name_version, ollama_url="http://localhost:11434"):
     """Return the context window size for a given model.
 
-    This function calls ``ollama show`` using subprocess and parses the
-    ``context length`` from the output. If the context length cannot be
-    determined, a default of 32768 is returned.
+    Attempts to run ``ollama show`` via subprocess. If that fails or the
+    context length cannot be parsed (for example, due to colored output), the
+    function falls back to querying the Ollama HTTP API.
+
+    If all methods fail, a default of ``32768`` is returned.
     """
+
+    output = ""
+
     try:
-        result = subprocess.run([
-            "ollama",
-            "show",
-            model_name_version
-        ], capture_output=True, text=True, check=True)
-    except Exception:
+        result = subprocess.run(
+            ["ollama", "show", model_name_version], capture_output=True, text=True, check=True
+        )
+        output = result.stdout
+    except Exception as e:
+        print(f"Subprocess call failed: {e}. Trying API fallback...")
+
+    ctx = None
+
+    if output:
+        match = re.search(r"context length\s+(\d+)", output)
+        if match:
+            ctx = int(match.group(1))
+
+    if ctx is None:
         try:
-            result = subprocess.run([
-                "./ollama",
-                "show",
-                model_name_version
-            ], capture_output=True, text=True, check=True)
-        except Exception as e:
-            print(f"Failed to run 'ollama show {model_name_version}': {e}")
-            return 32768
-
-    match = re.search(r"context length\s+(\d+)", result.stdout)
-    if match:
-        ctx = int(match.group(1))
-        if ctx < 32000:
-            print(
-                f"WARNING: Model context length {ctx} is below the recommended 32000 tokens."
+            response = requests.post(
+                f"{ollama_url}/api/show", json={"model": model_name_version, "verbose": True}
             )
-        return ctx
+            response.raise_for_status()
+            data = response.json()
+            info = data.get("model_info", {})
+            for key in [
+                "llama.context_length",
+                "qwen.context_length",
+                "general.context_length",
+            ]:
+                if key in info:
+                    ctx = int(info[key])
+                    break
+        except Exception as api_err:
+            print(f"Failed to query Ollama API for context length: {api_err}")
 
-    print("Unable to parse context length from 'ollama show' output.")
-    return 32768
+    if ctx is None:
+        print("Unable to determine context length. Using default of 32768.")
+        ctx = 32768
+
+    if ctx < 32000:
+        print(
+            f"WARNING: Model context length {ctx} is below the recommended 32000 tokens."
+        )
+
+    return ctx
 
 
 def truncate_text(text, max_tokens=32000, buffer=3500):

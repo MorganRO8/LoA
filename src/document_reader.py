@@ -1,12 +1,10 @@
 # Import necessary libraries and modules
 from unstructured.staging.base import convert_to_dict
 from unstructured.partition.auto import partition
-from unstructured.partition.pdf import partition_pdf
-from pdf2image.exceptions import PDFSyntaxError
 import logging
 import os
 import subprocess
-from src.utils import has_multiple_columns, xml_to_string, elements_to_string
+from src.utils import xml_to_string, elements_to_string
 from src.utils import print  # Custom print function for logging
 
 # Configure logging to minimize output from the 'unstructured' library
@@ -19,16 +17,30 @@ import requests
 import tarfile
 import io
 import re
+from html import unescape
 from PIL import Image
 
 
-def extract_images_with_pdf2txt(pdf_path, output_dir):
-    """Run pdf2txt.py to extract images from a PDF and filter out small ones."""
+def pdf2txt_extract(pdf_path, output_dir):
+    """Run pdf2txt.py in HTML mode, returning text and filtering out small images."""
     os.makedirs(output_dir, exist_ok=True)
+
+    html_file = os.path.join(
+        output_dir, os.path.splitext(os.path.basename(pdf_path))[0] + ".html"
+    )
 
     try:
         result = subprocess.run(
-            ["pdf2txt.py", pdf_path, "--output-dir", output_dir],
+            [
+                "pdf2txt.py",
+                pdf_path,
+                "--output-dir",
+                output_dir,
+                "--output_type",
+                "html",
+                "--outfile",
+                html_file,
+            ],
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
             text=True,
@@ -37,15 +49,15 @@ def extract_images_with_pdf2txt(pdf_path, output_dir):
             print(f"pdf2txt.py failed for {pdf_path}: {result.stderr.strip()}")
     except FileNotFoundError:
         print("pdf2txt.py not found; ensure pdfminer.six is installed.")
-        return 0
+        return ""
     except Exception as err:
         print(f"Error running pdf2txt.py on {pdf_path}: {err}")
-        return 0
+        return ""
 
-    img_count = 0
+    # Filter images by size
     for fname in os.listdir(output_dir):
         fpath = os.path.join(output_dir, fname)
-        if not os.path.isfile(fpath):
+        if not os.path.isfile(fpath) or fname.endswith(".html"):
             continue
         try:
             with Image.open(fpath) as im:
@@ -57,14 +69,18 @@ def extract_images_with_pdf2txt(pdf_path, output_dir):
         if min(w, h) < 150:
             print(f"Deleting {fname}: {w}x{h} < 150px threshold")
             os.remove(fpath)
-            continue
-        img_count += 1
 
-    if img_count == 0:
-        print(f"No images extracted from {pdf_path}")
-    else:
-        print(f"Extracted {img_count} images from {pdf_path}")
-    return img_count
+    text_content = ""
+    if os.path.exists(html_file):
+        with open(html_file, "r") as hf:
+            html_data = hf.read()
+        # Replace image tags with file names
+        html_data = re.sub(r'<img[^>]*src="([^">]+)"[^>]*>', r' [\1] ', html_data)
+        html_data = re.sub(r"<[^>]+>", " ", html_data)
+        text_content = unescape(re.sub(r"\s+", " ", html_data)).strip()
+        os.remove(html_file)
+
+    return text_content
 
 
 def extract_images_from_pubmed_xml(xml_string, output_dir):
@@ -195,27 +211,7 @@ def doc_to_elements(file, use_hi_res=False, use_multimodal=False):
 
         # Process PDF files
         if file.endswith('.pdf'):
-            if not use_hi_res:
-                try:
-                    elements = partition_pdf(filename=file, strategy='auto')
-                except (PDFSyntaxError, TypeError) as er:
-                    print(f"Failed to process {file} due to '{er}'.")
-                    return None
-            else:
-                if has_multiple_columns(file):
-                    print("Multiple columns detected, running default strategy")
-                    try:
-                        elements = partition_pdf(filename=file, strategy='auto')
-                    except (PDFSyntaxError, TypeError) as er:
-                        print(f"Failed to process {file} due to '{er}'.")
-                        return None
-                else:
-                    print("Multiple columns not detected, running advanced strategy")
-                    try:
-                        elements = partition_pdf(filename=file, strategy='hi_res', infer_table_structure=True)
-                    except (PDFSyntaxError, TypeError) as er:
-                        print(f"Failed to process {file} due to '{er}'.")
-                        return None
+            formatted_output = pdf2txt_extract(file, images_dir)
 
         # Process XML files
         elif file.endswith('.xml'):
@@ -238,12 +234,9 @@ def doc_to_elements(file, use_hi_res=False, use_multimodal=False):
             with open(processed_file_path, 'w') as f:
                 f.write(formatted_output)
 
-    # If multimodal, extract images
+    # If multimodal, ensure images are available
     if use_multimodal:
-        if file.endswith('.pdf'):
-            count = extract_images_with_pdf2txt(file, images_dir)
-            print(f"Image extraction complete for {file}: {count} images saved to {images_dir}")
-        elif file.endswith('.xml'):
+        if file.endswith('.xml'):
             if xml_content is None:
                 with open(file, 'r') as f:
                     xml_content = f.read()

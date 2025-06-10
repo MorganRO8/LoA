@@ -23,8 +23,9 @@ from PIL import Image
 
 
 def extract_images_with_pdf2txt(pdf_path, output_dir):
-    """Run pdf2txt.py to extract images from a PDF."""
+    """Run pdf2txt.py to extract images from a PDF and filter out small ones."""
     os.makedirs(output_dir, exist_ok=True)
+
     try:
         result = subprocess.run(
             ["pdf2txt.py", pdf_path, "--output-dir", output_dir],
@@ -41,11 +42,24 @@ def extract_images_with_pdf2txt(pdf_path, output_dir):
         print(f"Error running pdf2txt.py on {pdf_path}: {err}")
         return 0
 
-    img_count = len([
-        f
-        for f in os.listdir(output_dir)
-        if os.path.isfile(os.path.join(output_dir, f))
-    ])
+    img_count = 0
+    for fname in os.listdir(output_dir):
+        fpath = os.path.join(output_dir, fname)
+        if not os.path.isfile(fpath):
+            continue
+        try:
+            with Image.open(fpath) as im:
+                w, h = im.size
+        except Exception as err:
+            print(f"Failed to read {fpath}: {err}; deleting")
+            os.remove(fpath)
+            continue
+        if min(w, h) < 150:
+            print(f"Deleting {fname}: {w}x{h} < 150px threshold")
+            os.remove(fpath)
+            continue
+        img_count += 1
+
     if img_count == 0:
         print(f"No images extracted from {pdf_path}")
     else:

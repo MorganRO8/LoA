@@ -5,6 +5,7 @@ from unstructured.partition.pdf import partition_pdf
 from pdf2image.exceptions import PDFSyntaxError
 import logging
 import os
+import subprocess
 from src.utils import has_multiple_columns, xml_to_string, elements_to_string
 from src.utils import print  # Custom print function for logging
 
@@ -20,33 +21,31 @@ import io
 import re
 from PIL import Image
 
-def extract_images_from_pdf(pdf_path, output_dir):
-    """Extract images from a PDF using pdfminer if available.
 
-    Returns the number of images extracted so callers can verify success.
-    """
+def extract_images_with_pdf2txt(pdf_path, output_dir):
+    """Run pdf2txt.py to extract images from a PDF."""
+    os.makedirs(output_dir, exist_ok=True)
     try:
-        from pdfminer.high_level import extract_pages
-        from pdfminer.layout import LTImage
-    except Exception:
-        print("pdfminer.six not installed; skipping image extraction")
+        result = subprocess.run(
+            ["pdf2txt.py", pdf_path, "--output-dir", output_dir],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+        )
+        if result.returncode != 0:
+            print(f"pdf2txt.py failed for {pdf_path}: {result.stderr.strip()}")
+    except FileNotFoundError:
+        print("pdf2txt.py not found; ensure pdfminer.six is installed.")
+        return 0
+    except Exception as err:
+        print(f"Error running pdf2txt.py on {pdf_path}: {err}")
         return 0
 
-    os.makedirs(output_dir, exist_ok=True)
-    img_count = 0
-    try:
-        for page_layout in extract_pages(pdf_path):
-            for element in page_layout:
-                if isinstance(element, LTImage) and hasattr(element, "stream"):
-                    img_count += 1
-                    img_data = element.stream.get_data()
-                    img_path = os.path.join(output_dir, f"image_{img_count}.bin")
-                    with open(img_path, "wb") as img_file:
-                        img_file.write(img_data)
-    except Exception as err:
-        print(f"Failed to extract images from {pdf_path} due to {err}")
-        return img_count
-
+    img_count = len([
+        f
+        for f in os.listdir(output_dir)
+        if os.path.isfile(os.path.join(output_dir, f))
+    ])
     if img_count == 0:
         print(f"No images extracted from {pdf_path}")
     else:
@@ -228,7 +227,7 @@ def doc_to_elements(file, use_hi_res=False, use_multimodal=False):
     # If multimodal, extract images
     if use_multimodal:
         if file.endswith('.pdf'):
-            count = extract_images_from_pdf(file, images_dir)
+            count = extract_images_with_pdf2txt(file, images_dir)
             print(f"Image extraction complete for {file}: {count} images saved to {images_dir}")
         elif file.endswith('.xml'):
             if xml_content is None:

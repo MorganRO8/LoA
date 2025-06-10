@@ -56,7 +56,8 @@ def batch_extract(job_settings: JobSettings):
                       check_model_name_version=job_settings.check_model_name_version,
                       use_openai=job_settings.use_openai,
                       use_hi_res=job_settings.use_hi_res,
-                      use_multimodal=job_settings.use_multimodal)
+                      use_multimodal=job_settings.use_multimodal,
+                      use_thinking=job_settings.use_thinking)
 
     # Determine which files to process
     files_to_process = get_files_to_process(job_settings)
@@ -198,7 +199,8 @@ def extract(file_path, job_settings:JobSettings):
                       check_model_name_version=job_settings.check_model_name_version,
                       use_openai=job_settings.use_openai,
                       use_hi_res=job_settings.use_hi_res,
-                      use_multimodal=job_settings.use_multimodal)
+                      use_multimodal=job_settings.use_multimodal,
+                      use_thinking=job_settings.use_thinking)
 
     # Prepare prompt data
     data._refresh_paper_content(file_path, generate_prompt(job_settings.extract.schema_data, job_settings.extract.user_instructions, job_settings.extract.key_columns), check_prompt = job_settings.check_prompt)

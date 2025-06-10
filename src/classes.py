@@ -1,4 +1,6 @@
 import os
+import base64
+import glob
 from src.utils import (
     load_schema_file,
     generate_examples,
@@ -93,6 +95,7 @@ class JobSettings(): ## Contains subsettings as well for each of the job types.
         self.concurrent = False
         self.use_hi_res = False
         self.use_multimodal = False
+        self.use_thinking = False
         self.def_search_terms = []
         self.maybe_search_terms = []
         self.query_chunks = []
@@ -147,6 +150,8 @@ class JobSettings(): ## Contains subsettings as well for each of the job types.
                 self.use_hi_res = bool(val.lower() == "y")
             elif key.lower() == "use_multimodal":
                 self.use_multimodal = bool(val.lower() == "y")
+            elif key.lower() == "use_thinking":
+                self.use_thinking = bool(val.lower() == "y")
             else:
                 print(f"JSON key '{key}' not recognized.")
     
@@ -172,7 +177,7 @@ class JobSettings(): ## Contains subsettings as well for each of the job types.
 
 
 class PromptData():
-    def __init__(self, model_name_version, check_model_name_version, use_openai=False, use_hi_res=False, use_multimodal=False):
+    def __init__(self, model_name_version, check_model_name_version, use_openai=False, use_hi_res=False, use_multimodal=False, use_thinking=False):
         self.model = model_name_version
         self.check_model_name_version = check_model_name_version
         self.use_openai = use_openai  # Track if using OpenAI API
@@ -200,7 +205,22 @@ class PromptData():
         self.check_prompt = ""
         self.use_hi_res = use_hi_res
         self.use_multimodal = use_multimodal
+        self.use_thinking = use_thinking
         self.first_print = True
+        self.images = []
+        self.si_images = []
+
+    def _load_images_from_dir(self, directory):
+        imgs = []
+        for img_file in sorted(glob.glob(os.path.join(directory, '*'))):
+            if os.path.isfile(img_file):
+                with open(img_file, 'rb') as img_f:
+                    imgs.append(base64.b64encode(img_f.read()).decode('utf-8'))
+        if not imgs:
+            print(f"No images found in {directory}")
+        else:
+            print(f"Found {len(imgs)} images in {directory}")
+        return imgs
 
     def _refresh_paper_content(self,file,prompt,check_prompt):
         file_path = os.path.join(os.getcwd(), 'scraped_docs', file)
@@ -221,6 +241,29 @@ class PromptData():
         except Exception as err:
             print(f"Unable to process {file} into plaintext due to {err}")
             return True
+
+        if self.use_multimodal and self.supports_vision:
+            paper_id = os.path.splitext(os.path.basename(file))[0]
+            main_img_dir = os.path.join(os.getcwd(), 'images', paper_id)
+            self.images = self._load_images_from_dir(main_img_dir)
+            print(f"Loaded {len(self.images)} images from {main_img_dir}")
+
+            si_files = sorted(glob.glob(os.path.join(os.getcwd(), 'scraped_docs', f"{paper_id}_SI*")))
+            self.si_images = []
+            for si_file in si_files:
+                try:
+                    doc_to_elements(si_file, self.use_hi_res, self.use_multimodal)
+                except Exception as err:
+                    print(f"Unable to process {si_file} for images due to {err}")
+                    continue
+                si_id = os.path.splitext(os.path.basename(si_file))[0]
+                si_dir = os.path.join(os.getcwd(), 'images', si_id)
+                self.si_images.extend(self._load_images_from_dir(si_dir))
+            if si_files:
+                print(f"Loaded {len(self.si_images)} images from {len(si_files)} SI files")
+        else:
+            self.images = []
+            self.si_images = []
         self.prompt = f"{prompt}\n\n{self.paper_content}\n\nAgain, please make sure to respond only in the specified format exactly as described, or you will cause errors.\nResponse:"
         self.check_prompt = f"{check_prompt}\n\n{self.paper_content}\n\nAgain, please only answer 'yes' or 'no' (without quotes) to let me know if we should extract information from this paper using the costly api call"
         return False
@@ -233,17 +276,20 @@ class PromptData():
             self.options["repeat_penalty"] = 1.1 + 0.1 * retry_count
 
     def __dict__(self):
-        return {
+        data = {
             "model": self.model,
             "stream": self.stream,
             "options": self.options,
-            "think": self.supports_thinking,
+            "think": self.use_thinking and self.supports_thinking,
             "prompt": self.prompt,
         }
+        if self.use_multimodal and self.supports_vision:
+            data["images"] = self.images + self.si_images
+        return data
                 
     def __check__(self):
         ctx_len = self.options.get("num_ctx", 32768)
-        return {
+        data = {
             "model": self.check_model_name_version,
             "stream": self.stream,
             "options": {
@@ -260,4 +306,7 @@ class PromptData():
             "think": False,
             "prompt": self.check_prompt,
         }
+        if self.use_multimodal and self.supports_vision:
+            data["images"] = self.images
+        return data
 

@@ -368,6 +368,12 @@ def xml_to_string(xml_string):
             formatted_output += f"Caption: {text}\n\n"
         elif tag == "table":
             formatted_output += f"Table: {text}\n\n"
+        elif tag in ["graphic", "media"]:
+            href = element.attrib.get('{http://www.w3.org/1999/xlink}href') or element.attrib.get('href')
+            if href:
+                formatted_output += f"[{href}]"
+            else:
+                formatted_output += "[Image]"
         elif tag not in [
             "ref", "element-citation", "person-group", "name", "surname",
             "given-names", "article-title", "source", "year", "volume",

@@ -216,6 +216,10 @@ class PromptData():
             if os.path.isfile(img_file):
                 with open(img_file, 'rb') as img_f:
                     imgs.append(base64.b64encode(img_f.read()).decode('utf-8'))
+        if not imgs:
+            print(f"No images found in {directory}")
+        else:
+            print(f"Found {len(imgs)} images in {directory}")
         return imgs
 
     def _refresh_paper_content(self,file,prompt,check_prompt):
@@ -242,6 +246,7 @@ class PromptData():
             paper_id = os.path.splitext(os.path.basename(file))[0]
             main_img_dir = os.path.join(os.getcwd(), 'images', paper_id)
             self.images = self._load_images_from_dir(main_img_dir)
+            print(f"Loaded {len(self.images)} images from {main_img_dir}")
 
             si_files = sorted(glob.glob(os.path.join(os.getcwd(), 'scraped_docs', f"{paper_id}_SI*")))
             self.si_images = []
@@ -254,6 +259,8 @@ class PromptData():
                 si_id = os.path.splitext(os.path.basename(si_file))[0]
                 si_dir = os.path.join(os.getcwd(), 'images', si_id)
                 self.si_images.extend(self._load_images_from_dir(si_dir))
+            if si_files:
+                print(f"Loaded {len(self.si_images)} images from {len(si_files)} SI files")
         else:
             self.images = []
             self.si_images = []

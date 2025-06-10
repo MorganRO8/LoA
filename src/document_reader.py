@@ -21,13 +21,16 @@ import re
 from PIL import Image
 
 def extract_images_from_pdf(pdf_path, output_dir):
-    """Extract images from a PDF using pdfminer if available."""
+    """Extract images from a PDF using pdfminer if available.
+
+    Returns the number of images extracted so callers can verify success.
+    """
     try:
         from pdfminer.high_level import extract_pages
         from pdfminer.layout import LTImage
     except Exception:
         print("pdfminer.six not installed; skipping image extraction")
-        return
+        return 0
 
     os.makedirs(output_dir, exist_ok=True)
     img_count = 0
@@ -42,22 +45,32 @@ def extract_images_from_pdf(pdf_path, output_dir):
                         img_file.write(img_data)
     except Exception as err:
         print(f"Failed to extract images from {pdf_path} due to {err}")
+        return img_count
+
+    if img_count == 0:
+        print(f"No images extracted from {pdf_path}")
+    else:
+        print(f"Extracted {img_count} images from {pdf_path}")
+    return img_count
 
 
 def extract_images_from_pubmed_xml(xml_string, output_dir):
-    """Download images for a PubMed Central article using the OA package."""
+    """Download images for a PubMed Central article using the OA package.
+
+    Returns the number of images downloaded.
+    """
     os.makedirs(output_dir, exist_ok=True)
 
     try:
         root = ET.fromstring(xml_string)
     except Exception as err:
         print(f"Unable to parse XML for image extraction: {err}")
-        return
+        return 0
 
     pmcid_elem = root.find(".//article-id[@pub-id-type='pmcid']")
     if pmcid_elem is None or not pmcid_elem.text:
         print("PMCID not found in XML; cannot download images")
-        return
+        return 0
 
     pmcid = pmcid_elem.text.strip()
     oa_url = f"https://www.ncbi.nlm.nih.gov/pmc/utils/oa/oa.fcgi?id={pmcid}"
@@ -67,14 +80,14 @@ def extract_images_from_pubmed_xml(xml_string, output_dir):
         oa_root = ET.fromstring(response.text)
     except Exception as err:
         print(f"Failed to fetch OA package link for {pmcid}: {err}")
-        return
+        return 0
 
     link_elem = oa_root.find(".//record/link[@format='tgz']")
     if link_elem is None:
         link_elem = oa_root.find(".//record/link[@format='tar.gz']")
     if link_elem is None or not link_elem.attrib.get("href"):
         print(f"No OA package available for {pmcid}")
-        return
+        return 0
 
     tar_url = link_elem.attrib["href"].replace("ftp://", "https://")
     try:
@@ -82,8 +95,9 @@ def extract_images_from_pubmed_xml(xml_string, output_dir):
         tar_resp.raise_for_status()
     except Exception as err:
         print(f"Failed to download OA package for {pmcid}: {err}")
-        return
+        return 0
 
+    img_count = 0
     try:
         with tarfile.open(fileobj=io.BytesIO(tar_resp.content), mode="r:gz") as tar:
             for member in tar.getmembers():
@@ -119,8 +133,16 @@ def extract_images_from_pubmed_xml(xml_string, output_dir):
                 out_path = os.path.join(output_dir, os.path.basename(member.name))
                 with open(out_path, "wb") as f:
                     f.write(img_bytes)
+                img_count += 1
     except Exception as err:
         print(f"Failed to extract images from OA package for {pmcid}: {err}")
+        return img_count
+
+    if img_count == 0:
+        print(f"No images extracted from OA package for {pmcid}")
+    else:
+        print(f"Extracted {img_count} images from OA package for {pmcid}")
+    return img_count
 
 
 def doc_to_elements(file, use_hi_res=False, use_multimodal=False):
@@ -204,7 +226,8 @@ def doc_to_elements(file, use_hi_res=False, use_multimodal=False):
     # If multimodal, extract images
     if use_multimodal:
         if file.endswith('.pdf'):
-            extract_images_from_pdf(file, images_dir)
+            count = extract_images_from_pdf(file, images_dir)
+            print(f"Image extraction complete for {file}: {count} images saved to {images_dir}")
         elif file.endswith('.xml'):
             if formatted_output is None:
                 with open(file, 'r') as f:
@@ -212,6 +235,7 @@ def doc_to_elements(file, use_hi_res=False, use_multimodal=False):
             else:
                 with open(file, 'r') as f:
                     xml_content = f.read()
-            extract_images_from_pubmed_xml(xml_content, images_dir)
+            count = extract_images_from_pubmed_xml(xml_content, images_dir)
+            print(f"Image extraction complete for {file}: {count} images saved to {images_dir}")
 
     return formatted_output

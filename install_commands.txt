@@ -19,5 +19,6 @@ pip install webdriver_manager
 
 pip install "unstructured[all-docs]"
 pip install "unstructured[local-inference]"
+pip install pdfminer.six
 pip install libmagic poppler-utils pytesseract
 conda install -y tesseract

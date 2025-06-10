@@ -174,6 +174,8 @@ def doc_to_elements(file, use_hi_res=False, use_multimodal=False):
         with open(processed_file_path, 'r') as f:
             formatted_output = f.read()
 
+    xml_content = None
+
     if formatted_output is None:
         print(f"Now processing {file}")
         elements = None
@@ -229,10 +231,7 @@ def doc_to_elements(file, use_hi_res=False, use_multimodal=False):
             count = extract_images_from_pdf(file, images_dir)
             print(f"Image extraction complete for {file}: {count} images saved to {images_dir}")
         elif file.endswith('.xml'):
-            if formatted_output is None:
-                with open(file, 'r') as f:
-                    xml_content = f.read()
-            else:
+            if xml_content is None:
                 with open(file, 'r') as f:
                     xml_content = f.read()
             count = extract_images_from_pubmed_xml(xml_content, images_dir)

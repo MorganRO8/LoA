@@ -3,7 +3,11 @@
     "def_search_terms": ["pKa", "values"],
     "maybe_search_terms": ["none"],
     "model_name_version": "nemotron:latest",
-    "concurrent":"y"
+    "check_model_name_version": "nemotron:latest",
+    "concurrent":"y",
+    "use_hi_res": "y",
+    "use_multimodal": "n",
+    "use_thinking": "y"
   },
   "files": {
     "schema_file": "pka-extraction-schema.pkl",

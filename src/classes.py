@@ -95,6 +95,7 @@ class JobSettings(): ## Contains subsettings as well for each of the job types.
         self.concurrent = False
         self.use_hi_res = False
         self.use_multimodal = False
+        self.use_thinking = False
         self.def_search_terms = []
         self.maybe_search_terms = []
         self.query_chunks = []
@@ -149,6 +150,8 @@ class JobSettings(): ## Contains subsettings as well for each of the job types.
                 self.use_hi_res = bool(val.lower() == "y")
             elif key.lower() == "use_multimodal":
                 self.use_multimodal = bool(val.lower() == "y")
+            elif key.lower() == "use_thinking":
+                self.use_thinking = bool(val.lower() == "y")
             else:
                 print(f"JSON key '{key}' not recognized.")
     
@@ -174,7 +177,7 @@ class JobSettings(): ## Contains subsettings as well for each of the job types.
 
 
 class PromptData():
-    def __init__(self, model_name_version, check_model_name_version, use_openai=False, use_hi_res=False, use_multimodal=False):
+    def __init__(self, model_name_version, check_model_name_version, use_openai=False, use_hi_res=False, use_multimodal=False, use_thinking=False):
         self.model = model_name_version
         self.check_model_name_version = check_model_name_version
         self.use_openai = use_openai  # Track if using OpenAI API
@@ -202,6 +205,7 @@ class PromptData():
         self.check_prompt = ""
         self.use_hi_res = use_hi_res
         self.use_multimodal = use_multimodal
+        self.use_thinking = use_thinking
         self.first_print = True
         self.images = []
         self.si_images = []
@@ -269,7 +273,7 @@ class PromptData():
             "model": self.model,
             "stream": self.stream,
             "options": self.options,
-            "think": self.supports_thinking,
+            "think": self.use_thinking and self.supports_thinking,
             "prompt": self.prompt,
         }
         if self.use_multimodal and self.supports_vision:

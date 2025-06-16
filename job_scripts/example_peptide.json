@@ -5,10 +5,11 @@
       "IC50"
     ],
     "maybe_search_terms": [""],
-    "model_name_version": "deepseek-r1:8b",
-    "check_model_name_version": "falcon3:10b",
+    "model_name_version": "gemma3:4b-it-fp16",
+    "check_model_name_version": "gemma3:4b-it-fp16",
     "concurrent": "y",
     "use_hi_res": "y",
+    "use_multimodal": "y",
     "target_type": "peptide"
   },
   "files": {

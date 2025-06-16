@@ -21,6 +21,9 @@ import requests
 from pathlib import Path
 import subprocess
 import tarfile
+from rdkit import Chem
+import cirpy
+import pubchempy as pcp
 
 
 CONVERT_URL = "https://www.ncbi.nlm.nih.gov/pmc/utils/idconv/v1.0/?ids={}&format=json"
@@ -880,7 +883,133 @@ def process_value(value, column_data):
         return value
 
 
-def validate_result(parsed_result, schema_data, examples, key_columns=None):
+def _is_fasta_sequence(seq):
+    """Check if a string is a valid FASTA-style amino acid sequence."""
+    return re.fullmatch(r"[A-Za-z*]+", seq.strip()) is not None
+
+
+def _try_pypept(seq):
+    """Attempt to generate a peptide structure using pypept."""
+    try:
+        from pypept import Peptide
+        Peptide(seq)
+        return True
+    except Exception:
+        return False
+
+
+def _fetch_uniprot_sequence(name):
+    """Fetch a protein sequence from UniProt using the REST API."""
+    try:
+        search_url = (
+            "https://rest.uniprot.org/uniprotkb/search?query="
+            f"{requests.utils.quote(name)}&format=json&size=1"
+        )
+        r = requests.get(search_url, timeout=10)
+        if r.status_code == 200:
+            data = r.json()
+            results = data.get("results", [])
+            if results:
+                acc = results[0].get("primaryAccession")
+                if acc:
+                    fasta = requests.get(
+                        f"https://rest.uniprot.org/uniprotkb/{acc}.fasta",
+                        timeout=10,
+                    )
+                    if fasta.status_code == 200:
+                        seq = "".join(
+                            line.strip()
+                            for line in fasta.text.splitlines()
+                            if not line.startswith(">")
+                        )
+                        if seq:
+                            return seq
+    except Exception:
+        pass
+    return None
+
+
+def _fetch_pdb_sequence(name):
+    """Fetch a protein sequence from the RCSB PDB Data API."""
+    try:
+        query = {
+            "query": {
+                "type": "terminal",
+                "service": "text",
+                "parameters": {"value": name},
+            },
+            "return_type": "polymer_entity",
+            "request_options": {"pager": {"start": 0, "rows": 1}},
+        }
+        r = requests.post(
+            "https://search.rcsb.org/rcsbsearch/v2/query", json=query, timeout=10
+        )
+        if r.status_code == 200:
+            results = r.json().get("result_set", [])
+            if results:
+                identifier = results[0].get("identifier")
+                if identifier:
+                    r2 = requests.get(
+                        f"https://data.rcsb.org/rest/v1/core/polymer_entity/{identifier}",
+                        timeout=10,
+                    )
+                    if r2.status_code == 200:
+                        seq = (
+                            r2.json()
+                            .get("entity_poly", {})
+                            .get("pdbx_seq_one_letter_code_can")
+                        )
+                        if seq:
+                            return seq.replace("\n", "").strip()
+    except Exception:
+        pass
+    return None
+
+
+def _smiles_from_string(value):
+    """Return a canonical SMILES string from input using RDKit, cirpy or PubChem."""
+    try:
+        mol = Chem.MolFromSmiles(value)
+        if mol:
+            return Chem.MolToSmiles(mol)
+    except Exception:
+        pass
+    try:
+        res = cirpy.resolve(value, "smiles")
+        if res:
+            return res
+    except Exception:
+        pass
+    try:
+        compounds = pcp.get_compounds(value, "name")
+        if compounds:
+            return compounds[0].canonical_smiles
+    except Exception:
+        pass
+    return None
+
+
+def _sequence_from_string(value):
+    """Return a valid amino acid sequence given a name or sequence."""
+    seq = value.strip()
+    if _is_fasta_sequence(seq) and _try_pypept(seq):
+        return seq
+    seq2 = _fetch_uniprot_sequence(value)
+    if seq2:
+        return seq2
+    seq3 = _fetch_pdb_sequence(value)
+    return seq3
+
+
+def validate_target_value(value, target_type):
+    """Validate and normalize the first column based on the target type."""
+    if target_type.lower() in ["protein", "peptide"]:
+        return _sequence_from_string(value)
+    else:
+        return _smiles_from_string(value)
+
+
+def validate_result(parsed_result, schema_data, examples, key_columns=None, target_type="small_molecule"):
     """
     Validate the parsed result against the schema and remove any invalid or example rows.
 
@@ -950,6 +1079,14 @@ def validate_result(parsed_result, schema_data, examples, key_columns=None):
             if all(value.lower() == 'null' for value in key_values):
                 print(f"Skipping row with all null key columns: {row}")
                 row_valid = False
+
+        if row_valid:
+            canonical = validate_target_value(validated_row[0], target_type)
+            if canonical is None:
+                print(f"Unable to verify target value '{validated_row[0]}'.")
+                row_valid = False
+            else:
+                validated_row[0] = canonical
 
         if row_valid:
             validated_result.append(validated_row)

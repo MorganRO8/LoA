@@ -1136,9 +1136,6 @@ def validate_result(parsed_result, schema_data, examples, key_columns=None, targ
                     row_valid = False
                 else:
                     validated_row[0] = canonical
-        elif row_valid and validated_row[0].lower() == 'null':
-            # Skip rows that provide no identifier in the first column
-            row_valid = False
 
         if row_valid:
             validated_result.append(validated_row)

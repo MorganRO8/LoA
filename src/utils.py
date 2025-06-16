@@ -508,32 +508,6 @@ BUILTIN_TARGET_COLUMNS = {
     },
 }
 
-# Mapping of common amino acid names to their one-letter codes
-AMINO_ACID_MAP = {
-    "alanine": "A",
-    "arginine": "R",
-    "asparagine": "N",
-    "aspartic acid": "D",
-    "aspartate": "D",
-    "cysteine": "C",
-    "glutamine": "Q",
-    "glutamic acid": "E",
-    "glutamate": "E",
-    "glycine": "G",
-    "histidine": "H",
-    "isoleucine": "I",
-    "leucine": "L",
-    "lysine": "K",
-    "methionine": "M",
-    "phenylalanine": "F",
-    "proline": "P",
-    "serine": "S",
-    "threonine": "T",
-    "tryptophan": "W",
-    "tyrosine": "Y",
-    "valine": "V",
-}
-
 
 def _target_descriptor(target_type: str) -> str:
     """Return a simplified descriptor for the target type."""
@@ -1058,12 +1032,9 @@ def _smiles_from_string(value):
     return None
 
 
-def _sequence_from_string(value):
-    """Return a valid amino acid sequence given a name or sequence."""
+def _protein_sequence_from_string(value):
+    """Resolve a protein name or sequence to a valid amino acid sequence."""
     seq = value.strip()
-    name_key = seq.lower().strip()
-    if name_key in AMINO_ACID_MAP:
-        return AMINO_ACID_MAP[name_key]
     if _is_fasta_sequence(seq) and _try_pypept(seq):
         return seq
     seq2 = _fetch_uniprot_sequence(value)
@@ -1073,12 +1044,46 @@ def _sequence_from_string(value):
     return seq3
 
 
+def _fetch_pubchem_sequence(name):
+    """Retrieve a peptide sequence from PubChem given a compound name."""
+    try:
+        compounds = pcp.get_compounds(name, "name")
+        if compounds:
+            comp = compounds[0]
+            seq = getattr(comp, "peptide_sequence", None)
+            if seq:
+                return seq
+            smiles = getattr(comp, "canonical_smiles", None)
+            if smiles:
+                try:
+                    mol = Chem.MolFromSmiles(smiles)
+                    if mol:
+                        seq = Chem.MolToFASTA(mol)
+                        if seq:
+                            return seq.strip()
+                except Exception:
+                    pass
+    except Exception:
+        pass
+    return None
+
+
+def _peptide_sequence_from_string(value):
+    """Resolve a peptide name or sequence to a valid amino acid sequence."""
+    seq = value.strip()
+    if _is_fasta_sequence(seq) and _try_pypept(seq):
+        return seq
+    return _fetch_pubchem_sequence(value)
+
+
 def validate_target_value(value, target_type):
     """Validate and normalize the first column based on the target type."""
-    if target_type.lower() in ["protein", "peptide"]:
-        return _sequence_from_string(value)
-    else:
-        return _smiles_from_string(value)
+    t = target_type.lower()
+    if t == "protein":
+        return _protein_sequence_from_string(value)
+    if t == "peptide":
+        return _peptide_sequence_from_string(value)
+    return _smiles_from_string(value)
 
 
 def validate_result(parsed_result, schema_data, examples, key_columns=None, target_type="small_molecule", verify_target=True):

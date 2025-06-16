@@ -128,7 +128,13 @@ def batch_extract(job_settings: JobSettings):
                         except:
                             pass
 
-                validated_result = validate_result(parsed_result, job_settings.extract.schema_data, job_settings.extract.examples, job_settings.extract.key_columns)
+                validated_result = validate_result(
+                    parsed_result,
+                    job_settings.extract.schema_data,
+                    job_settings.extract.examples,
+                    job_settings.extract.key_columns,
+                    job_settings.target_type,
+                )
 
                 if validated_result:
                     print("Validated result:")
@@ -203,7 +209,16 @@ def extract(file_path, job_settings:JobSettings):
                       use_thinking=job_settings.use_thinking)
 
     # Prepare prompt data
-    data._refresh_paper_content(file_path, generate_prompt(job_settings.extract.schema_data, job_settings.extract.user_instructions, job_settings.extract.key_columns), check_prompt = job_settings.check_prompt)
+    data._refresh_paper_content(
+        file_path,
+        generate_prompt(
+            job_settings.extract.schema_data,
+            job_settings.extract.user_instructions,
+            job_settings.extract.key_columns,
+            job_settings.target_type,
+        ),
+        check_prompt=job_settings.check_prompt,
+    )
 
     validated_result = single_file_extract(job_settings, data, file_path)
     if not validated_result:
@@ -272,7 +287,13 @@ def single_file_extract(job_settings: JobSettings, data: PromptData, file_path):
                     except:
                         pass
 
-            validated_result = validate_result(parsed_result, job_settings.extract.schema_data, job_settings.extract.examples, job_settings.extract.key_columns)
+            validated_result = validate_result(
+                parsed_result,
+                job_settings.extract.schema_data,
+                job_settings.extract.examples,
+                job_settings.extract.key_columns,
+                job_settings.target_type,
+            )
             print(f"Validated Result:\n{validated_result}")
             if not validated_result:
                 print("Result failed to validate, trying again.")

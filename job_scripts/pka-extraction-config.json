@@ -7,7 +7,8 @@
     "concurrent":"y",
     "use_hi_res": "y",
     "use_multimodal": "n",
-    "use_thinking": "y"
+    "use_thinking": "y",
+    "target_type": "small_molecule"
   },
   "files": {
     "schema_file": "pka-extraction-schema.pkl",

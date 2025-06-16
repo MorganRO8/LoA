@@ -50,12 +50,12 @@ Follow the prompts to:
 Prepare a JSON configuration file with your desired settings, then run:
 
 ```
-python main.py -auto ./job_scripts/example.json
+python main.py -auto ./job_scripts/example_small_molecule.json
 ```
 
-Be sure to replace example.json with the actual file you want to use.
+Be sure to replace example_small_molecule.json with the actual file you want to use.
 
-Example json files for various kinds of jobs can be found in job_scripts.
+Example json files for small molecules, proteins, and peptides can be found in job_scripts.
 
 ## Key Components
 

@@ -67,18 +67,36 @@ def batch_extract(job_settings: JobSettings):
     # Process each file
     for file in files_to_process:
         print(f"Now processing {file}")
-        if data._refresh_paper_content(file, job_settings.extract.prompt, job_settings.check_prompt):
+        if data._refresh_paper_content(
+            file,
+            job_settings.extract.prompt,
+            job_settings.check_prompt,
+            check_only=True,
+        ):
             continue
 
         retry_count = 0
         success = False
         
         # Use a check prompt to lower cost
-        check_response = requests.post(f"{job_settings.extract.ollama_url}/api/generate", json=data.__check__())
+        check_response = requests.post(
+            f"{job_settings.extract.ollama_url}/api/generate", json=data.__check__()
+        )
         check_response.raise_for_status()
         check_result = check_response.json()["response"]
         print(f"Check result was '{check_result}'")
         allow_verification = str(check_result).strip().lower().startswith("yes")
+
+        if allow_verification:
+            data._refresh_paper_content(
+                file,
+                job_settings.extract.prompt,
+                job_settings.check_prompt,
+                check_only=False,
+            )
+        else:
+            data.images = []
+            data.si_images = []
 
         # Attempt extraction with retries
         while retry_count < job_settings.extract.max_retries and not success:
@@ -220,6 +238,7 @@ def extract(file_path, job_settings:JobSettings):
             job_settings.target_type,
         ),
         check_prompt=job_settings.check_prompt,
+        check_only=True,
     )
 
     validated_result = single_file_extract(job_settings, data, file_path)
@@ -235,11 +254,29 @@ def single_file_extract(job_settings: JobSettings, data: PromptData, file_path):
     success = False
     
     # Use a check prompt to lower cost
-    check_response = requests.post(f"{job_settings.extract.ollama_url}/api/generate", json=data.__check__())
+    check_response = requests.post(
+        f"{job_settings.extract.ollama_url}/api/generate", json=data.__check__()
+    )
     check_response.raise_for_status()
     check_result = check_response.json()["response"]
     print(f"Check result was '{check_result}'")
     allow_verification = str(check_result).strip().lower().startswith("yes")
+
+    if allow_verification:
+        data._refresh_paper_content(
+            file_path,
+            generate_prompt(
+                job_settings.extract.schema_data,
+                job_settings.extract.user_instructions,
+                job_settings.extract.key_columns,
+                job_settings.target_type,
+            ),
+            check_prompt=job_settings.check_prompt,
+            check_only=False,
+        )
+    else:
+        data.images = []
+        data.si_images = []
     
     while retry_count < job_settings.extract.max_retries:
         data._refresh_data(retry_count)

@@ -237,7 +237,7 @@ class PromptData():
             print(f"Found {len(imgs)} images in {directory}")
         return imgs
 
-    def _refresh_paper_content(self,file,prompt,check_prompt):
+    def _refresh_paper_content(self, file, prompt, check_prompt, check_only=False):
         file_path = os.path.join(os.getcwd(), 'scraped_docs', file)
         
         """ Supposed to only go once, doesn't...
@@ -247,17 +247,18 @@ class PromptData():
             self.first_print = False
         """
 
-        # Always run doc_to_elements to ensure images are captured when needed
+        # Load text first; skip image extraction when only checking
+        multimodal = False if check_only else self.use_multimodal
         try:
             self.paper_content = truncate_text(
-                doc_to_elements(file_path, self.use_hi_res, self.use_multimodal),
+                doc_to_elements(file_path, self.use_hi_res, multimodal),
                 max_tokens=self.options["num_ctx"],
             )
         except Exception as err:
             print(f"Unable to process {file} into plaintext due to {err}")
             return True
 
-        if self.use_multimodal and self.supports_vision:
+        if not check_only and self.use_multimodal and self.supports_vision:
             paper_id = os.path.splitext(os.path.basename(file))[0]
             main_img_dir = os.path.join(os.getcwd(), 'images', paper_id)
             self.images = self._load_images_from_dir(main_img_dir)
@@ -279,8 +280,19 @@ class PromptData():
         else:
             self.images = []
             self.si_images = []
-        self.prompt = f"{prompt}\n\n{self.paper_content}\n\nAgain, please make sure to respond only in the specified format exactly as described, or you will cause errors.\nResponse:"
-        self.check_prompt = f"{check_prompt}\n\n{self.paper_content}\n\nAgain, please only answer 'yes' or 'no' (without quotes) to let me know if we should extract information from this paper using the costly api call"
+        note = ""
+        if check_only and self.use_multimodal and self.supports_vision:
+            note = (
+                "\nNote: you are not being shown images at this stage, but they "
+                "will be provided if extraction proceeds. Consider this when "
+                "deciding if relevant information is present."
+            )
+        self.prompt = (
+            f"{prompt}\n\n{self.paper_content}\n\nAgain, please make sure to respond only in the specified format exactly as described, or you will cause errors.\nResponse:"
+        )
+        self.check_prompt = (
+            f"{check_prompt}{note}\n\n{self.paper_content}\n\nAgain, please only answer 'yes' or 'no' (without quotes) to let me know if we should extract information from this paper using the costly api call"
+        )
         return False
     
     def _refresh_data(self, retry_count):

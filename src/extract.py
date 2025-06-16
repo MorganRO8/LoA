@@ -78,6 +78,7 @@ def batch_extract(job_settings: JobSettings):
         check_response.raise_for_status()
         check_result = check_response.json()["response"]
         print(f"Check result was '{check_result}'")
+        allow_verification = str(check_result).strip().lower().startswith("yes")
 
         # Attempt extraction with retries
         while retry_count < job_settings.extract.max_retries and not success:
@@ -134,6 +135,7 @@ def batch_extract(job_settings: JobSettings):
                     job_settings.extract.examples,
                     job_settings.extract.key_columns,
                     job_settings.target_type,
+                    verify_target=allow_verification,
                 )
 
                 if validated_result:
@@ -237,6 +239,7 @@ def single_file_extract(job_settings: JobSettings, data: PromptData, file_path):
     check_response.raise_for_status()
     check_result = check_response.json()["response"]
     print(f"Check result was '{check_result}'")
+    allow_verification = str(check_result).strip().lower().startswith("yes")
     
     while retry_count < job_settings.extract.max_retries:
         data._refresh_data(retry_count)
@@ -293,6 +296,7 @@ def single_file_extract(job_settings: JobSettings, data: PromptData, file_path):
                 job_settings.extract.examples,
                 job_settings.extract.key_columns,
                 job_settings.target_type,
+                verify_target=allow_verification,
             )
             print(f"Validated Result:\n{validated_result}")
             if not validated_result:

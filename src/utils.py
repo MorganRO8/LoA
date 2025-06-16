@@ -1052,7 +1052,7 @@ def validate_target_value(value, target_type):
         return _smiles_from_string(value)
 
 
-def validate_result(parsed_result, schema_data, examples, key_columns=None, target_type="small_molecule"):
+def validate_result(parsed_result, schema_data, examples, key_columns=None, target_type="small_molecule", verify_target=True):
     """
     Validate the parsed result against the schema and remove any invalid or example rows.
 
@@ -1064,6 +1064,9 @@ def validate_result(parsed_result, schema_data, examples, key_columns=None, targ
     schema_data (dict): The schema defining the structure and constraints of the data.
     examples (str): A string containing example rows to be excluded from the result.
     key_columns (list): A list of column numbers to be used as keys for checking duplicates.
+
+    verify_target (bool): Whether to verify the first column according to the
+    target type.
 
     Returns:
     list: A list of validated rows that meet all the schema requirements.
@@ -1123,13 +1126,19 @@ def validate_result(parsed_result, schema_data, examples, key_columns=None, targ
                 print(f"Skipping row with all null key columns: {row}")
                 row_valid = False
 
-        if row_valid:
-            canonical = validate_target_value(validated_row[0], target_type)
-            if canonical is None:
-                print(f"Unable to verify target value '{validated_row[0]}'.")
+        if row_valid and verify_target:
+            if validated_row[0].lower() == 'null':
                 row_valid = False
             else:
-                validated_row[0] = canonical
+                canonical = validate_target_value(validated_row[0], target_type)
+                if canonical is None:
+                    print(f"Unable to verify target value '{validated_row[0]}'.")
+                    row_valid = False
+                else:
+                    validated_row[0] = canonical
+        elif row_valid and validated_row[0].lower() == 'null':
+            # Skip rows that provide no identifier in the first column
+            row_valid = False
 
         if row_valid:
             validated_result.append(validated_row)

@@ -508,6 +508,32 @@ BUILTIN_TARGET_COLUMNS = {
     },
 }
 
+# Mapping of common amino acid names to their one-letter codes
+AMINO_ACID_MAP = {
+    "alanine": "A",
+    "arginine": "R",
+    "asparagine": "N",
+    "aspartic acid": "D",
+    "aspartate": "D",
+    "cysteine": "C",
+    "glutamine": "Q",
+    "glutamic acid": "E",
+    "glutamate": "E",
+    "glycine": "G",
+    "histidine": "H",
+    "isoleucine": "I",
+    "leucine": "L",
+    "lysine": "K",
+    "methionine": "M",
+    "phenylalanine": "F",
+    "proline": "P",
+    "serine": "S",
+    "threonine": "T",
+    "tryptophan": "W",
+    "tyrosine": "Y",
+    "valine": "V",
+}
+
 
 def _target_descriptor(target_type: str) -> str:
     """Return a simplified descriptor for the target type."""
@@ -1035,6 +1061,9 @@ def _smiles_from_string(value):
 def _sequence_from_string(value):
     """Return a valid amino acid sequence given a name or sequence."""
     seq = value.strip()
+    name_key = seq.lower().strip()
+    if name_key in AMINO_ACID_MAP:
+        return AMINO_ACID_MAP[name_key]
     if _is_fasta_sequence(seq) and _try_pypept(seq):
         return seq
     seq2 = _fetch_uniprot_sequence(value)

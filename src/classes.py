@@ -1,5 +1,13 @@
 import os
-from src.utils import load_schema_file, generate_examples, generate_prompt, generate_check_prompt, truncate_text, get_out_id
+from src.utils import (
+    load_schema_file,
+    generate_examples,
+    generate_prompt,
+    generate_check_prompt,
+    truncate_text,
+    get_out_id,
+    prepend_target_column,
+)
 from src.document_reader import doc_to_elements
 
 
@@ -87,6 +95,7 @@ class JobSettings(): ## Contains subsettings as well for each of the job types.
         self.def_search_terms = []
         self.maybe_search_terms = []
         self.query_chunks = []
+        self.target_type = "small_molecule"
         self.model_name_version = "nemotron:latest"
         self.model_name = "nemotron"
         self.model_version = "latest"
@@ -136,6 +145,8 @@ class JobSettings(): ## Contains subsettings as well for each of the job types.
                 self.concurrent = bool(val.lower() == "y")
             elif key.lower() == "use_hi_res":
                 self.use_hi_res = bool(val.lower() == "y")
+            elif key.lower() == "target_type":
+                self.target_type = val
             else:
                 print(f"JSON key '{key}' not recognized.")
     
@@ -147,6 +158,7 @@ class JobSettings(): ## Contains subsettings as well for each of the job types.
         # Process Secondary extraction parameters.
         ## Set up extraction parameters
         self.extract.schema_data, self.extract.key_columns = load_schema_file(self.files.schema)
+        self.extract.schema_data = prepend_target_column(self.extract.schema_data, self.target_type)
         self.extract.num_columns = len(self.extract.schema_data)
         self.extract.headers = [self.extract.schema_data[column_number]['name'] for column_number in range(1, self.extract.num_columns + 1)] + ['paper']
         self.extract.prompt = generate_prompt(self.extract.schema_data, self.extract.user_instructions, self.extract.key_columns)

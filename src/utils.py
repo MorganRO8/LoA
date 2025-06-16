@@ -471,6 +471,35 @@ def select_schema_file():
             print("Invalid choice. Please try again.")
 
 
+# Built-in column definitions for different chemical targets
+BUILTIN_TARGET_COLUMNS = {
+    "small_molecule": {
+        "type": "str",
+        "name": "molecule_name",
+        "description": "Name of the small molecule (IUPAC or common name).",
+    },
+    "protein": {
+        "type": "str",
+        "name": "protein_name",
+        "description": "Name or identifier of the protein of interest.",
+    },
+    "peptide": {
+        "type": "str",
+        "name": "peptide_name",
+        "description": "Name or sequence of the peptide of interest.",
+    },
+}
+
+
+def prepend_target_column(schema_data, target_type):
+    """Prepend a built-in target column to the schema."""
+    info = BUILTIN_TARGET_COLUMNS.get(target_type.lower(), BUILTIN_TARGET_COLUMNS["small_molecule"])
+    new_schema = {1: info}
+    for idx in sorted(schema_data.keys()):
+        new_schema[idx + 1] = schema_data[idx]
+    return new_schema
+
+
 def load_schema_file(schema_file):
     """
     Loads and parses a schema file.

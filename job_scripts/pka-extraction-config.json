@@ -3,7 +3,8 @@
     "def_search_terms": ["pKa", "values"],
     "maybe_search_terms": ["none"],
     "model_name_version": "nemotron:latest",
-    "concurrent":"y"
+    "concurrent":"y",
+    "target_type": "small_molecule"
   },
   "files": {
     "schema_file": "pka-extraction-schema.pkl",

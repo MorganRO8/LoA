@@ -4,7 +4,8 @@
     "maybe_search_terms": ["absorption wavelength", "emission wavelength","fluorescence quantum yield"],
     "auto": true,
     "model_name_version": "mistral:7b-instruct-v0.2-q8_0",
-    "concurrent":"n"
+    "concurrent":"n",
+    "target_type": "small_molecule"
   },
   "files": {
     "schema_file": "chromophores.pkl",

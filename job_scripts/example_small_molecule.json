@@ -4,7 +4,7 @@
       "melting point",
       "boiling point"
     ],
-    "maybe_search_terms": [""],
+    "maybe_search_terms": ["density"],
     "model_name_version": "deepseek-r1:8b",
     "check_model_name_version": "falcon3:10b",
     "concurrent": "y",
@@ -12,8 +12,8 @@
     "target_type": "small_molecule"
   },
   "files": {
-    "schema_file": "example.pkl",
-    "results_csv": "./results/example.csv"
+    "schema_file": "example_small_molecule.pkl",
+    "results_csv": "./results/example_small_molecule.csv"
   },
   "scrape": {
     "pubmed": "y",
@@ -26,7 +26,7 @@
     "email": "youremail@example.com"
   },
   "extract": {
-    "user_instructions": "Extract information on small molecules for which a melting point or boiling point is reported. Only include data if a valid IUPAC or well-known common name is present. Numeric values must be in °C. If a paper reports a range, you may take the midpoint or the approximate average. Exclude polymers, proteins, or large biomolecules unless a well-defined small molecule is given with a parseable name.",
+    "user_instructions": "Extract melting point, boiling point, and density values for small molecules. Only include data if a valid name or SMILES is present.",
     "max_retries": 1,
     "ollama_url": "http://localhost:11434"
   }

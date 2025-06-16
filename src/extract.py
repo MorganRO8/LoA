@@ -197,7 +197,16 @@ def extract(file_path, job_settings:JobSettings):
     data = PromptData(model_name_version=job_settings.model_name_version, check_model_name_version=job_settings.check_model_name_version, use_openai=job_settings.use_openai, use_hi_res=job_settings.use_hi_res)
 
     # Prepare prompt data
-    data._refresh_paper_content(file_path, generate_prompt(job_settings.extract.schema_data, job_settings.extract.user_instructions, job_settings.extract.key_columns), check_prompt = job_settings.check_prompt)
+    data._refresh_paper_content(
+        file_path,
+        generate_prompt(
+            job_settings.extract.schema_data,
+            job_settings.extract.user_instructions,
+            job_settings.extract.key_columns,
+            job_settings.target_type,
+        ),
+        check_prompt=job_settings.check_prompt,
+    )
 
     validated_result = single_file_extract(job_settings, data, file_path)
     if not validated_result:

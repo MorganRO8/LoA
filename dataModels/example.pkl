@@ -1,5 +1,3 @@
-Key Columns: 1
-
 1 - Type: 'float'
 1 - Name: 'melting_point'
 1 - Description: 'Melting point in °C.'

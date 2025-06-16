@@ -157,14 +157,24 @@ class JobSettings(): ## Contains subsettings as well for each of the job types.
         
         # Process Secondary extraction parameters.
         ## Set up extraction parameters
-        self.extract.schema_data, self.extract.key_columns = load_schema_file(self.files.schema)
+        self.extract.schema_data, _ = load_schema_file(self.files.schema)
         self.extract.schema_data = prepend_target_column(self.extract.schema_data, self.target_type)
+        self.extract.key_columns = [1]
         self.extract.num_columns = len(self.extract.schema_data)
         self.extract.headers = [self.extract.schema_data[column_number]['name'] for column_number in range(1, self.extract.num_columns + 1)] + ['paper']
-        self.extract.prompt = generate_prompt(self.extract.schema_data, self.extract.user_instructions, self.extract.key_columns)
+        self.extract.prompt = generate_prompt(
+            self.extract.schema_data,
+            self.extract.user_instructions,
+            self.extract.key_columns,
+            self.target_type,
+        )
         self.extract.examples = generate_examples(self.extract.schema_data)
         # Generate check prompt to reduce cost
-        self.check_prompt = generate_check_prompt(self.extract.schema_data, self.extract.user_instructions)
+        self.check_prompt = generate_check_prompt(
+            self.extract.schema_data,
+            self.extract.user_instructions,
+            self.target_type,
+        )
         
         # Generate output directory ID and query chunks
         output_directory_id, self.query_chunks = get_out_id(self.def_search_terms, self.maybe_search_terms)

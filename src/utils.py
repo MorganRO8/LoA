@@ -479,19 +479,52 @@ BUILTIN_TARGET_COLUMNS = {
     "small_molecule": {
         "type": "str",
         "name": "molecule_name",
-        "description": "Name of the small molecule (IUPAC or common name).",
+        "description": (
+            "SMILES string or common name of the small molecule. "
+            "Names will be resolved to SMILES using RDKit, Cirpy, and PubChem."
+        ),
     },
     "protein": {
         "type": "str",
         "name": "protein_name",
-        "description": "Name or identifier of the protein of interest.",
+        "description": (
+            "Amino acid sequence or common name of the protein. "
+            "Names will be resolved to sequences via PyPept, UniProt, and the PDB."
+        ),
     },
     "peptide": {
         "type": "str",
         "name": "peptide_name",
-        "description": "Name or sequence of the peptide of interest.",
+        "description": (
+            "Amino acid sequence or common name of the peptide. "
+            "Names will be resolved to sequences via PyPept, UniProt, and the PDB."
+        ),
     },
 }
+
+
+def _target_descriptor(target_type: str) -> str:
+    """Return a simplified descriptor for the target type."""
+    t = target_type.lower()
+    if t in ["protein", "peptide"]:
+        return t
+    return "small molecule"
+
+
+def _first_column_instruction(target_type: str, col_name: str) -> str:
+    """Return instructions describing the first column based on target type."""
+    descriptor = _target_descriptor(target_type)
+    if descriptor in ["protein", "peptide"]:
+        return (
+            f"The first column '{col_name}' uniquely identifies each {descriptor}. "
+            "Provide an amino acid sequence in one-letter code or a common name. "
+            "Common names will be resolved to sequences."
+        )
+    return (
+        f"The first column '{col_name}' uniquely identifies each {descriptor}. "
+        "Provide a SMILES string if available or a common name. "
+        "Common names will be resolved to SMILES."
+    )
 
 
 def prepend_target_column(schema_data, target_type):
@@ -571,7 +604,7 @@ def load_schema_file(schema_file):
     return schema_data, key_columns
 
 
-def generate_prompt(schema_data, user_instructions, key_columns=None):
+def generate_prompt(schema_data, user_instructions, key_columns=None, target_type="small_molecule"):
     """
     Generates a prompt for the AI model based on the schema data and user instructions. Uses a few other helper
     functions to generate text describing the schema, examples of good responses, and key column info.
@@ -599,12 +632,17 @@ def generate_prompt(schema_data, user_instructions, key_columns=None):
 
     # Generate key column information
     key_column_names = [schema_data[int(column)]['name'] for column in key_columns]
-    key_column_info = (f"The column(s) {', '.join(key_column_names)} will be used as a key to check for duplicates "
-                       f"within each paper. Ensure that the values in these columns are unique for each row extracted.")
+    first_col_instruction = _first_column_instruction(target_type, key_column_names[0]) if key_columns else ""
+    key_column_info = (
+        f"{first_col_instruction} Ensure that the values in this column are unique within each paper."
+        if key_columns
+        else ""
+    )
 
     # Construct the prompt
+    descriptor = _target_descriptor(target_type)
     prompt = f"""
-Please extract information from the provided research paper that fits into the following CSV schema:
+Please extract information about {descriptor}s from the provided research paper that fits into the following CSV schema:
 
 {schema_info}
 {key_column_info if key_columns else ''}
@@ -650,7 +688,7 @@ Paper Contents:
     return prompt
     
 
-def generate_check_prompt(schema_data, user_instructions):
+def generate_check_prompt(schema_data, user_instructions, target_type="small_molecule"):
     """
     Generates a prompt for the AI model to check if the paper is relevant and contains extractable information.
     
@@ -667,8 +705,9 @@ def generate_check_prompt(schema_data, user_instructions):
         schema_info += f"- {column_data['name']}: {column_data['description']}\n"
     
     # Construct the prompt
+    descriptor = _target_descriptor(target_type)
     prompt = f"""
-Please read the following paper and determine whether it contains information relevant to the following schema and instructions:
+Please read the following paper and determine whether it contains information about {descriptor}s relevant to the following schema and instructions:
 
 Schema:
 {schema_info}

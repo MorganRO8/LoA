@@ -217,7 +217,6 @@ def get_out_id(def_search_terms_input, maybe_search_terms_input):
             queries = [list(comb) for comb in combinations]
             queries = [q for q in queries if len(q) > 1]
 
-        print(" Ok! your adjusted searches are: " + str(queries))
         print("That's " + str(len(queries)) + " total combinations")
         if len(queries) > 100:
             print("This could take a while...")

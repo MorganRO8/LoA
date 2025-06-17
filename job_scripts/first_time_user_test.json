@@ -8,7 +8,9 @@
     "concurrent":"n",
     "use_hi_res": "y",
     "use_multimodal": "n",
-    "use_thinking": "y"
+    "use_thinking": "y",
+    "target_type": "small_molecule",
+    "use_comments": "y"
   },
   "files": {
     "schema_file": "chromophores.pkl",

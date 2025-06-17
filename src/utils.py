@@ -21,6 +21,9 @@ import requests
 from pathlib import Path
 import subprocess
 import tarfile
+from rdkit import Chem
+import cirpy
+import pubchempy as pcp
 
 
 CONVERT_URL = "https://www.ncbi.nlm.nih.gov/pmc/utils/idconv/v1.0/?ids={}&format=json"
@@ -477,6 +480,90 @@ def select_schema_file():
             print("Invalid choice. Please try again.")
 
 
+# Built-in column definitions for different chemical targets
+BUILTIN_TARGET_COLUMNS = {
+    "small_molecule": {
+        "type": "str",
+        "name": "molecule_name",
+        "description": (
+            "SMILES string or common name of the small molecule. "
+            "Names will be resolved to SMILES using RDKit, Cirpy, and PubChem."
+        ),
+    },
+    "protein": {
+        "type": "str",
+        "name": "protein_name",
+        "description": (
+            "Amino acid sequence or common name of the protein. "
+            "Names will be resolved to sequences via PyPept, UniProt, and the PDB."
+        ),
+    },
+    "peptide": {
+        "type": "str",
+        "name": "peptide_name",
+        "description": (
+            "Amino acid sequence or common name of the peptide. "
+            "Names will be resolved to sequences via PyPept, UniProt, and the PDB."
+        ),
+    },
+}
+
+# Column added to all schemas to capture additional notes
+COMMENTS_COLUMN = {
+    "type": "str",
+    "name": "comments",
+    "description": "Any additional relevant details about the molecule or its measurements."
+}
+
+
+def _target_descriptor(target_type: str) -> str:
+    """Return a simplified descriptor for the target type."""
+    t = target_type.lower()
+    if t in ["protein", "peptide"]:
+        return t
+    return "small molecule"
+
+
+def _first_column_instruction(target_type: str, col_name: str) -> str:
+    """Return instructions describing the first column based on target type."""
+    descriptor = _target_descriptor(target_type)
+    if descriptor in ["protein", "peptide"]:
+        return (
+            f"The first column '{col_name}' uniquely identifies each {descriptor}. "
+            "Provide an amino acid sequence in one-letter code or a common name. "
+            "Common names will be resolved to sequences."
+        )
+    return (
+        f"The first column '{col_name}' uniquely identifies each {descriptor}. "
+        "Provide a SMILES string if available or a common name. "
+        "Common names will be resolved to SMILES."
+    )
+
+
+def prepend_target_column(schema_data, target_type):
+    """Prepend a built-in target column to the schema."""
+    info = BUILTIN_TARGET_COLUMNS.get(target_type.lower(), BUILTIN_TARGET_COLUMNS["small_molecule"])
+    new_schema = {1: info}
+    for idx in sorted(schema_data.keys()):
+        new_schema[idx + 1] = schema_data[idx]
+    return new_schema
+
+
+def append_comments_column(schema_data):
+    """Append the built-in comments column to the schema."""
+    new_schema = schema_data.copy()
+    new_schema[len(schema_data) + 1] = COMMENTS_COLUMN
+    return new_schema
+
+
+def has_comments_column(schema_data):
+    """Return True if the schema includes the default comments column."""
+    if not schema_data:
+        return False
+    last_col = schema_data.get(len(schema_data), {})
+    return last_col.get("name") == "comments"
+
+
 def load_schema_file(schema_file):
     """
     Loads and parses a schema file.
@@ -545,7 +632,7 @@ def load_schema_file(schema_file):
     return schema_data, key_columns
 
 
-def generate_prompt(schema_data, user_instructions, key_columns=None):
+def generate_prompt(schema_data, user_instructions, key_columns=None, target_type="small_molecule"):
     """
     Generates a prompt for the AI model based on the schema data and user instructions. Uses a few other helper
     functions to generate text describing the schema, examples of good responses, and key column info.
@@ -573,12 +660,15 @@ def generate_prompt(schema_data, user_instructions, key_columns=None):
 
     # Generate key column information
     key_column_names = [schema_data[int(column)]['name'] for column in key_columns]
-    key_column_info = (f"The column(s) {', '.join(key_column_names)} will be used as a key to check for duplicates "
-                       f"within each paper. Ensure that the values in these columns are unique for each row extracted.")
+    first_col_instruction = _first_column_instruction(target_type, key_column_names[0]) if key_columns else ""
+    key_column_info = (
+        f"{first_col_instruction} Ensure that the values in this column are unique within each paper." if key_columns else ""
+    )
 
     # Construct the prompt
+    descriptor = _target_descriptor(target_type)
     prompt = f"""
-Please extract information from the provided research paper that fits into the following CSV schema:
+Please extract information about {descriptor}s from the provided research paper that fits into the following CSV schema:
 
 {schema_info}
 {key_column_info if key_columns else ''}
@@ -624,7 +714,7 @@ Paper Contents:
     return prompt
     
 
-def generate_check_prompt(schema_data, user_instructions):
+def generate_check_prompt(schema_data, user_instructions, target_type="small_molecule"):
     """
     Generates a prompt for the AI model to check if the paper is relevant and contains extractable information.
     
@@ -641,8 +731,9 @@ def generate_check_prompt(schema_data, user_instructions):
         schema_info += f"- {column_data['name']}: {column_data['description']}\n"
     
     # Construct the prompt
+    descriptor = _target_descriptor(target_type)
     prompt = f"""
-Please read the following paper and determine whether it contains information relevant to the following schema and instructions:
+Please read the following paper and determine whether it contains information about {descriptor}s relevant to the following schema and instructions:
 
 Schema:
 {schema_info}
@@ -857,7 +948,167 @@ def process_value(value, column_data):
         return value
 
 
-def validate_result(parsed_result, schema_data, examples, key_columns=None):
+def _is_fasta_sequence(seq):
+    """Check if a string is a valid FASTA-style amino acid sequence."""
+    return re.fullmatch(r"[A-Za-z*]+", seq.strip()) is not None
+
+
+def _try_pypept(seq):
+    """Attempt to generate a peptide structure using pypept."""
+    try:
+        from pypept import Peptide
+        Peptide(seq)
+        return True
+    except Exception:
+        return False
+
+
+def _fetch_uniprot_sequence(name):
+    """Fetch a protein sequence from UniProt using the REST API."""
+    try:
+        search_url = (
+            "https://rest.uniprot.org/uniprotkb/search?query="
+            f"{requests.utils.quote(name)}&format=json&size=1"
+        )
+        r = requests.get(search_url, timeout=10)
+        if r.status_code == 200:
+            data = r.json()
+            results = data.get("results", [])
+            if results:
+                acc = results[0].get("primaryAccession")
+                if acc:
+                    fasta = requests.get(
+                        f"https://rest.uniprot.org/uniprotkb/{acc}.fasta",
+                        timeout=10,
+                    )
+                    if fasta.status_code == 200:
+                        seq = "".join(
+                            line.strip()
+                            for line in fasta.text.splitlines()
+                            if not line.startswith(">")
+                        )
+                        if seq:
+                            return seq
+    except Exception:
+        pass
+    return None
+
+
+def _fetch_pdb_sequence(name):
+    """Fetch a protein sequence from the RCSB PDB Data API."""
+    try:
+        query = {
+            "query": {
+                "type": "terminal",
+                "service": "text",
+                "parameters": {"value": name},
+            },
+            "return_type": "polymer_entity",
+            "request_options": {"pager": {"start": 0, "rows": 1}},
+        }
+        r = requests.post(
+            "https://search.rcsb.org/rcsbsearch/v2/query", json=query, timeout=10
+        )
+        if r.status_code == 200:
+            results = r.json().get("result_set", [])
+            if results:
+                identifier = results[0].get("identifier")
+                if identifier:
+                    r2 = requests.get(
+                        f"https://data.rcsb.org/rest/v1/core/polymer_entity/{identifier}",
+                        timeout=10,
+                    )
+                    if r2.status_code == 200:
+                        seq = (
+                            r2.json()
+                            .get("entity_poly", {})
+                            .get("pdbx_seq_one_letter_code_can")
+                        )
+                        if seq:
+                            return seq.replace("\n", "").strip()
+    except Exception:
+        pass
+    return None
+
+
+def _smiles_from_string(value):
+    """Return a canonical SMILES string from input using RDKit, cirpy or PubChem."""
+    try:
+        mol = Chem.MolFromSmiles(value)
+        if mol:
+            return Chem.MolToSmiles(mol)
+    except Exception:
+        pass
+    try:
+        res = cirpy.resolve(value, "smiles")
+        if res:
+            return res
+    except Exception:
+        pass
+    try:
+        compounds = pcp.get_compounds(value, "name")
+        if compounds:
+            return compounds[0].canonical_smiles
+    except Exception:
+        pass
+    return None
+
+
+def _protein_sequence_from_string(value):
+    """Resolve a protein name or sequence to a valid amino acid sequence."""
+    seq = value.strip()
+    if _is_fasta_sequence(seq) and _try_pypept(seq):
+        return seq
+    seq2 = _fetch_uniprot_sequence(value)
+    if seq2:
+        return seq2
+    seq3 = _fetch_pdb_sequence(value)
+    return seq3
+
+
+def _fetch_pubchem_sequence(name):
+    """Retrieve a peptide sequence from PubChem given a compound name."""
+    try:
+        compounds = pcp.get_compounds(name, "name")
+        if compounds:
+            comp = compounds[0]
+            seq = getattr(comp, "peptide_sequence", None)
+            if seq:
+                return seq
+            smiles = getattr(comp, "canonical_smiles", None)
+            if smiles:
+                try:
+                    mol = Chem.MolFromSmiles(smiles)
+                    if mol:
+                        seq = Chem.MolToFASTA(mol)
+                        if seq:
+                            return seq.strip()
+                except Exception:
+                    pass
+    except Exception:
+        pass
+    return None
+
+
+def _peptide_sequence_from_string(value):
+    """Resolve a peptide name or sequence to a valid amino acid sequence."""
+    seq = value.strip()
+    if _is_fasta_sequence(seq) and _try_pypept(seq):
+        return seq
+    return _fetch_pubchem_sequence(value)
+
+
+def validate_target_value(value, target_type):
+    """Validate and normalize the first column based on the target type."""
+    t = target_type.lower()
+    if t == "protein":
+        return _protein_sequence_from_string(value)
+    if t == "peptide":
+        return _peptide_sequence_from_string(value)
+    return _smiles_from_string(value)
+
+
+def validate_result(parsed_result, schema_data, examples, key_columns=None, target_type="small_molecule", verify_target=True):
     """
     Validate the parsed result against the schema and remove any invalid or example rows.
 
@@ -869,6 +1120,9 @@ def validate_result(parsed_result, schema_data, examples, key_columns=None):
     schema_data (dict): The schema defining the structure and constraints of the data.
     examples (str): A string containing example rows to be excluded from the result.
     key_columns (list): A list of column numbers to be used as keys for checking duplicates.
+
+    verify_target (bool): Whether to verify the first column according to the
+    target type.
 
     Returns:
     list: A list of validated rows that meet all the schema requirements.
@@ -926,6 +1180,27 @@ def validate_result(parsed_result, schema_data, examples, key_columns=None):
             key_values = [validated_row[i-1] for i in key_columns]
             if all(value.lower() == 'null' for value in key_values):
                 print(f"Skipping row with all null key columns: {row}")
+                row_valid = False
+
+        if row_valid and verify_target:
+            if validated_row[0].lower() == 'null':
+                row_valid = False
+            else:
+                canonical = validate_target_value(validated_row[0], target_type)
+                if canonical is None:
+                    print(f"Unable to verify target value '{validated_row[0]}'.")
+                    row_valid = False
+                else:
+                    validated_row[0] = canonical
+
+        # Require at least one data field (excluding comments) when a target is present
+        if row_valid:
+            if has_comments_column(schema_data):
+                data_fields = validated_row[1:-1] if len(validated_row) > 2 else []
+            else:
+                data_fields = validated_row[1:]
+            if all(str(v).lower() == 'null' for v in data_fields):
+                print(f"Skipping row with no data fields: {row}")
                 row_valid = False
 
         if row_valid:

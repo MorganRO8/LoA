@@ -21,3 +21,9 @@ pip install "unstructured[all-docs]"
 pip install "unstructured[local-inference]"
 pip install libmagic poppler-utils pytesseract
 conda install -y tesseract
+
+# Additional chemistry dependencies
+pip install git+https://github.com/Boehringer-Ingelheim/pyPept.git
+pip install rdkit-pypi
+pip install cirpy
+pip install pubchempy

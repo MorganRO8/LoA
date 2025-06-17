@@ -9,6 +9,8 @@ from src.utils import (
     truncate_text,
     get_out_id,
     get_model_info,
+    prepend_target_column,
+    append_comments_column,
 )
 from src.document_reader import doc_to_elements
 
@@ -96,6 +98,8 @@ class JobSettings(): ## Contains subsettings as well for each of the job types.
         self.use_hi_res = False
         self.use_multimodal = False
         self.use_thinking = False
+        self.use_comments = True
+        self.target_type = "small_molecule"
         self.def_search_terms = []
         self.maybe_search_terms = []
         self.query_chunks = []
@@ -152,6 +156,10 @@ class JobSettings(): ## Contains subsettings as well for each of the job types.
                 self.use_multimodal = bool(val.lower() == "y")
             elif key.lower() == "use_thinking":
                 self.use_thinking = bool(val.lower() == "y")
+            elif key.lower() == "use_comments":
+                self.use_comments = bool(val.lower() == "y")
+            elif key.lower() == "target_type":
+                self.target_type = val
             else:
                 print(f"JSON key '{key}' not recognized.")
     
@@ -162,13 +170,26 @@ class JobSettings(): ## Contains subsettings as well for each of the job types.
         
         # Process Secondary extraction parameters.
         ## Set up extraction parameters
-        self.extract.schema_data, self.extract.key_columns = load_schema_file(self.files.schema)
+        self.extract.schema_data, _ = load_schema_file(self.files.schema)
+        self.extract.schema_data = prepend_target_column(self.extract.schema_data, self.target_type)
+        if self.use_comments:
+            self.extract.schema_data = append_comments_column(self.extract.schema_data)
+        self.extract.key_columns = [1]
         self.extract.num_columns = len(self.extract.schema_data)
         self.extract.headers = [self.extract.schema_data[column_number]['name'] for column_number in range(1, self.extract.num_columns + 1)] + ['paper']
-        self.extract.prompt = generate_prompt(self.extract.schema_data, self.extract.user_instructions, self.extract.key_columns)
+        self.extract.prompt = generate_prompt(
+            self.extract.schema_data,
+            self.extract.user_instructions,
+            self.extract.key_columns,
+            self.target_type,
+        )
         self.extract.examples = generate_examples(self.extract.schema_data)
         # Generate check prompt to reduce cost
-        self.check_prompt = generate_check_prompt(self.extract.schema_data, self.extract.user_instructions)
+        self.check_prompt = generate_check_prompt(
+            self.extract.schema_data,
+            self.extract.user_instructions,
+            self.target_type,
+        )
         
         # Generate output directory ID and query chunks
         output_directory_id, self.query_chunks = get_out_id(self.def_search_terms, self.maybe_search_terms)
@@ -222,7 +243,7 @@ class PromptData():
             print(f"Found {len(imgs)} images in {directory}")
         return imgs
 
-    def _refresh_paper_content(self,file,prompt,check_prompt):
+    def _refresh_paper_content(self, file, prompt, check_prompt, check_only=False):
         file_path = os.path.join(os.getcwd(), 'scraped_docs', file)
         
         """ Supposed to only go once, doesn't...
@@ -232,17 +253,18 @@ class PromptData():
             self.first_print = False
         """
 
-        # Always run doc_to_elements to ensure images are captured when needed
+        # Load text first; skip image extraction when only checking
+        multimodal = False if check_only else self.use_multimodal
         try:
             self.paper_content = truncate_text(
-                doc_to_elements(file_path, self.use_hi_res, self.use_multimodal),
+                doc_to_elements(file_path, self.use_hi_res, multimodal),
                 max_tokens=self.options["num_ctx"],
             )
         except Exception as err:
             print(f"Unable to process {file} into plaintext due to {err}")
             return True
 
-        if self.use_multimodal and self.supports_vision:
+        if not check_only and self.use_multimodal and self.supports_vision:
             paper_id = os.path.splitext(os.path.basename(file))[0]
             main_img_dir = os.path.join(os.getcwd(), 'images', paper_id)
             self.images = self._load_images_from_dir(main_img_dir)
@@ -264,8 +286,19 @@ class PromptData():
         else:
             self.images = []
             self.si_images = []
-        self.prompt = f"{prompt}\n\n{self.paper_content}\n\nAgain, please make sure to respond only in the specified format exactly as described, or you will cause errors.\nResponse:"
-        self.check_prompt = f"{check_prompt}\n\n{self.paper_content}\n\nAgain, please only answer 'yes' or 'no' (without quotes) to let me know if we should extract information from this paper using the costly api call"
+        note = ""
+        if check_only and self.use_multimodal and self.supports_vision:
+            note = (
+                "\nNote: you are not being shown images at this stage, but they "
+                "will be provided if extraction proceeds. Consider this when "
+                "deciding if relevant information is present."
+            )
+        self.prompt = (
+            f"{prompt}\n\n{self.paper_content}\n\nAgain, please make sure to respond only in the specified format exactly as described, or you will cause errors.\nResponse:"
+        )
+        self.check_prompt = (
+            f"{check_prompt}{note}\n\n{self.paper_content}\n\nAgain, please only answer 'yes' or 'no' (without quotes) to let me know if we should extract information from this paper using the costly api call"
+        )
         return False
     
     def _refresh_data(self, retry_count):

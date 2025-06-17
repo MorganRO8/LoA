@@ -24,7 +24,7 @@ conda install -y tesseract
 
 # Additional chemistry dependencies
 pip install git+https://github.com/Boehringer-Ingelheim/pyPept.git
-pip install rdkit-pypi
+conda install rdkit -c conda-forge
 pip install cirpy
 pip install pubchempy
 

@@ -103,7 +103,7 @@ def batch_extract(job_settings: JobSettings):
             )
             
             print("Attempting to pull SMILES from images in paper...")
-            smiles_list = extract_smiles_for_paper(file)
+            smiles_list = extract_smiles_for_paper(file_path)
             if smiles_list:
                 extra = (
                     "We ran automated SMILES extraction from all images in this paper and obtained these SMILES strings, "
@@ -293,7 +293,7 @@ def single_file_extract(job_settings: JobSettings, data: PromptData, file_path):
             check_only=False,
         )
         print("Attempting to pull SMILES from images in paper...")
-        smiles_list = extract_smiles_for_paper(file)
+        smiles_list = extract_smiles_for_paper(file_path)
         if smiles_list:
             extra = (
                 "We ran automated SMILES extraction from all images in this paper and obtained these SMILES strings, "

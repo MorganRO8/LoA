@@ -24,6 +24,7 @@ import tarfile
 from rdkit import Chem
 import cirpy
 import pubchempy as pcp
+import json
 
 
 CONVERT_URL = "https://www.ncbi.nlm.nih.gov/pmc/utils/idconv/v1.0/?ids={}&format=json"

@@ -98,6 +98,7 @@ class JobSettings(): ## Contains subsettings as well for each of the job types.
         self.use_hi_res = False
         self.use_multimodal = False
         self.use_thinking = False
+        self.use_comments = True
         self.target_type = "small_molecule"
         self.def_search_terms = []
         self.maybe_search_terms = []
@@ -155,6 +156,8 @@ class JobSettings(): ## Contains subsettings as well for each of the job types.
                 self.use_multimodal = bool(val.lower() == "y")
             elif key.lower() == "use_thinking":
                 self.use_thinking = bool(val.lower() == "y")
+            elif key.lower() == "use_comments":
+                self.use_comments = bool(val.lower() == "y")
             elif key.lower() == "target_type":
                 self.target_type = val
             else:
@@ -169,7 +172,8 @@ class JobSettings(): ## Contains subsettings as well for each of the job types.
         ## Set up extraction parameters
         self.extract.schema_data, _ = load_schema_file(self.files.schema)
         self.extract.schema_data = prepend_target_column(self.extract.schema_data, self.target_type)
-        self.extract.schema_data = append_comments_column(self.extract.schema_data)
+        if self.use_comments:
+            self.extract.schema_data = append_comments_column(self.extract.schema_data)
         self.extract.key_columns = [1]
         self.extract.num_columns = len(self.extract.schema_data)
         self.extract.headers = [self.extract.schema_data[column_number]['name'] for column_number in range(1, self.extract.num_columns + 1)] + ['paper']

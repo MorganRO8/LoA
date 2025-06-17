@@ -23,7 +23,3 @@
 5 - Description: 'The reported uncertainty or error in the pKa measurement.'
 5 - Min Value: 0
 5 - Max Value: 5
-
-6 - Type: 'str'
-6 - Name: 'additional_info'
-6 - Description: 'Any additional relevant information about the pKa measurement or compound.'

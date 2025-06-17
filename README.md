@@ -56,6 +56,8 @@ python main.py -auto ./job_scripts/example_small_molecule.json
 Be sure to replace example_small_molecule.json with the actual file you want to use.
 
 Example json files for small molecules, proteins, and peptides can be found in job_scripts.
+Each configuration can optionally include a `use_comments` setting (`"y"` or `"n"`) to control
+whether a trailing comments column is added automatically.
 
 ## Key Components
 

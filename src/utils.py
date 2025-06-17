@@ -556,6 +556,14 @@ def append_comments_column(schema_data):
     return new_schema
 
 
+def has_comments_column(schema_data):
+    """Return True if the schema includes the default comments column."""
+    if not schema_data:
+        return False
+    last_col = schema_data.get(len(schema_data), {})
+    return last_col.get("name") == "comments"
+
+
 def load_schema_file(schema_file):
     """
     Loads and parses a schema file.
@@ -1187,7 +1195,10 @@ def validate_result(parsed_result, schema_data, examples, key_columns=None, targ
 
         # Require at least one data field (excluding comments) when a target is present
         if row_valid:
-            data_fields = validated_row[1:-1] if len(validated_row) > 2 else []
+            if has_comments_column(schema_data):
+                data_fields = validated_row[1:-1] if len(validated_row) > 2 else []
+            else:
+                data_fields = validated_row[1:]
             if all(str(v).lower() == 'null' for v in data_fields):
                 print(f"Skipping row with no data fields: {row}")
                 row_valid = False

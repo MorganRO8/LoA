@@ -3,6 +3,9 @@ import sys
 import json
 import datetime
 import builtins
+import multiprocessing as mp
+
+mp.set_start_method("spawn", force=True)
 
 # Create necessary directories if they don't exist
 os.makedirs(os.path.join(os.getcwd(), 'scraped_docs'), exist_ok=True)

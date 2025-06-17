@@ -1741,9 +1741,64 @@ def check_model_file(model_name_version):
         except Exception as e:
             print(f"Failed to pull the model using local install: {e}")
             print("Trying using global install...")
-            try: 
+            try:
                 subprocess.run(["ollama", "pull", model_name_version], check=True)
             except Exception as e:
                 print(f"Global install failed: {e}")
                 return True
         return False
+
+
+def _segments_to_smiles(segments):
+    """Convert image segments to SMILES strings using DECIMER."""
+    try:
+        from DECIMER import predict_SMILES
+    except Exception as err:
+        print(f"DECIMER not available: {err}")
+        return []
+
+    smiles_list = []
+    for seg in segments:
+        try:
+            smi = predict_SMILES(seg)
+            if smi:
+                smiles_list.append(smi)
+        except Exception as err:
+            print(f"SMILES prediction failed: {err}")
+    return smiles_list
+
+
+def extract_smiles_for_paper(file_path):
+    """Extract SMILES strings from images or PDFs using decimer-segmentation."""
+    try:
+        from decimer_segmentation import segment_chemical_structures_from_file
+    except Exception as err:
+        print(f"decimer-segmentation not available: {err}")
+        return []
+
+    found = []
+    if file_path.endswith('.xml'):
+        paper_id = os.path.splitext(os.path.basename(file_path))[0]
+        images_dir = os.path.join(os.getcwd(), 'images', paper_id)
+        if os.path.isdir(images_dir):
+            for img in os.listdir(images_dir):
+                img_path = os.path.join(images_dir, img)
+                try:
+                    segments = segment_chemical_structures_from_file(img_path)
+                    found.extend(_segments_to_smiles(segments))
+                except Exception as err:
+                    print(f"Segmentation failed for {img_path}: {err}")
+    else:
+        try:
+            segments = segment_chemical_structures_from_file(file_path)
+            found.extend(_segments_to_smiles(segments))
+        except Exception as err:
+            print(f"Segmentation failed for {file_path}: {err}")
+    # Remove duplicates while preserving order
+    unique = []
+    seen = set()
+    for smi in found:
+        if smi and smi not in seen:
+            seen.add(smi)
+            unique.append(smi)
+    return unique

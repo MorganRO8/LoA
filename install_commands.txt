@@ -27,3 +27,7 @@ pip install git+https://github.com/Boehringer-Ingelheim/pyPept.git
 pip install rdkit-pypi
 pip install cirpy
 pip install pubchempy
+
+# DECIMER segmentation and SMILES prediction
+pip install decimer-segmentation
+pip install decimer

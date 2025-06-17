@@ -1749,33 +1749,36 @@ def check_model_file(model_name_version):
         return False
 
 
-def _segments_to_smiles(segments):
-    """Convert image segments to SMILES strings using DECIMER."""
+def _run_decimer(path):
+    """Execute DECIMER extraction in a separate conda environment."""
+    script = os.path.join(os.path.dirname(__file__), "decimer_runner.py")
+    cmd = ["conda", "run", "-n", "DECIMER", "python", script, path]
     try:
-        from DECIMER import predict_SMILES
+        result = subprocess.run(
+            cmd,
+            capture_output=True,
+            text=True,
+            check=False,
+        )
     except Exception as err:
-        print(f"DECIMER not available: {err}")
+        print(f"Failed to invoke DECIMER: {err}")
         return []
 
-    smiles_list = []
-    for seg in segments:
-        try:
-            smi = predict_SMILES(seg)
-            if smi:
-                smiles_list.append(smi)
-        except Exception as err:
-            print(f"SMILES prediction failed: {err}")
-    return smiles_list
+    if result.returncode != 0:
+        print(f"DECIMER error: {result.stderr}")
+        return []
+
+    try:
+        smiles = json.loads(result.stdout.strip())
+        if isinstance(smiles, list):
+            return [s for s in smiles if s]
+    except json.JSONDecodeError:
+        print(f"Could not decode DECIMER output: {result.stdout}")
+    return []
 
 
 def extract_smiles_for_paper(file_path):
-    """Extract SMILES strings from images or PDFs using decimer-segmentation."""
-    try:
-        from decimer_segmentation import segment_chemical_structures_from_file
-    except Exception as err:
-        print(f"decimer-segmentation not available: {err}")
-        return []
-
+    """Extract SMILES strings from images or PDFs using a DECIMER subprocess."""
     found = []
     if file_path.endswith('.xml'):
         paper_id = os.path.splitext(os.path.basename(file_path))[0]
@@ -1783,17 +1786,9 @@ def extract_smiles_for_paper(file_path):
         if os.path.isdir(images_dir):
             for img in os.listdir(images_dir):
                 img_path = os.path.join(images_dir, img)
-                try:
-                    segments = segment_chemical_structures_from_file(img_path)
-                    found.extend(_segments_to_smiles(segments))
-                except Exception as err:
-                    print(f"Segmentation failed for {img_path}: {err}")
+                found.extend(_run_decimer(img_path))
     else:
-        try:
-            segments = segment_chemical_structures_from_file(file_path)
-            found.extend(_segments_to_smiles(segments))
-        except Exception as err:
-            print(f"Segmentation failed for {file_path}: {err}")
+        found.extend(_run_decimer(file_path))
     # Remove duplicates while preserving order
     unique = []
     seen = set()

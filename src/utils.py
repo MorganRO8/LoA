@@ -508,6 +508,13 @@ BUILTIN_TARGET_COLUMNS = {
     },
 }
 
+# Column added to all schemas to capture additional notes
+COMMENTS_COLUMN = {
+    "type": "str",
+    "name": "comments",
+    "description": "Any additional relevant details about the molecule or its measurements."
+}
+
 
 def _target_descriptor(target_type: str) -> str:
     """Return a simplified descriptor for the target type."""
@@ -539,6 +546,13 @@ def prepend_target_column(schema_data, target_type):
     new_schema = {1: info}
     for idx in sorted(schema_data.keys()):
         new_schema[idx + 1] = schema_data[idx]
+    return new_schema
+
+
+def append_comments_column(schema_data):
+    """Append the built-in comments column to the schema."""
+    new_schema = schema_data.copy()
+    new_schema[len(schema_data) + 1] = COMMENTS_COLUMN
     return new_schema
 
 
@@ -1170,6 +1184,13 @@ def validate_result(parsed_result, schema_data, examples, key_columns=None, targ
                     row_valid = False
                 else:
                     validated_row[0] = canonical
+
+        # Require at least one data field (excluding comments) when a target is present
+        if row_valid:
+            data_fields = validated_row[1:-1] if len(validated_row) > 2 else []
+            if all(str(v).lower() == 'null' for v in data_fields):
+                print(f"Skipping row with no data fields: {row}")
+                row_valid = False
 
         if row_valid:
             validated_result.append(validated_row)

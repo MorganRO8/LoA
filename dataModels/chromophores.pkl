@@ -29,7 +29,3 @@
 6 - Description: 'Photoluminescence or phosphorescence lifetime (in ns). If multiple lifetimes are listed, provide the primary or average value.'
 6 - Min Value: 0
 6 - Max Value: 100000
-
-7 - Type: 'str'
-7 - Name: 'comments'
-7 - Description: 'Any additional relevant details about the molecule or its measurements.'

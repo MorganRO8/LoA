@@ -10,6 +10,7 @@ from src.utils import (
     get_out_id,
     get_model_info,
     prepend_target_column,
+    append_comments_column,
 )
 from src.document_reader import doc_to_elements
 
@@ -168,6 +169,7 @@ class JobSettings(): ## Contains subsettings as well for each of the job types.
         ## Set up extraction parameters
         self.extract.schema_data, _ = load_schema_file(self.files.schema)
         self.extract.schema_data = prepend_target_column(self.extract.schema_data, self.target_type)
+        self.extract.schema_data = append_comments_column(self.extract.schema_data)
         self.extract.key_columns = [1]
         self.extract.num_columns = len(self.extract.schema_data)
         self.extract.headers = [self.extract.schema_data[column_number]['name'] for column_number in range(1, self.extract.num_columns + 1)] + ['paper']

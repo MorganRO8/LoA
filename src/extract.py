@@ -3,8 +3,15 @@ import os
 import csv
 import requests
 import json
-from src.utils import (generate_prompt, parse_llm_response, validate_result, write_to_csv,
-                       list_files_in_directory, begin_ollama_server)
+from src.utils import (
+    generate_prompt,
+    parse_llm_response,
+    validate_result,
+    write_to_csv,
+    list_files_in_directory,
+    begin_ollama_server,
+    extract_smiles_for_paper,
+)
 from src.classes import JobSettings,PromptData
 from openai import OpenAI
 
@@ -94,7 +101,18 @@ def batch_extract(job_settings: JobSettings):
                 job_settings.check_prompt,
                 check_only=False,
             )
+            
+            print("Attempting to pull SMILES from images in paper...")
+            smiles_list = extract_smiles_for_paper(file_path)
+            if smiles_list:
+                extra = (
+                    "We ran automated SMILES extraction from all images in this paper and obtained these SMILES strings, "
+                    "which may or may not be relevant to your current extraction task:\n" + str(smiles_list) + "\n"
+                )
+                data.prompt += "\n" + extra
+                print(f"Found smiles: \n {str(smiles_list)}\n")
         else:
+            print("No SMILES found")
             data.images = []
             data.si_images = []
 
@@ -274,7 +292,17 @@ def single_file_extract(job_settings: JobSettings, data: PromptData, file_path):
             check_prompt=job_settings.check_prompt,
             check_only=False,
         )
+        print("Attempting to pull SMILES from images in paper...")
+        smiles_list = extract_smiles_for_paper(file_path)
+        if smiles_list:
+            extra = (
+                "We ran automated SMILES extraction from all images in this paper and obtained these SMILES strings, "
+                "which may or may not be relevant to your current extraction task:\n" + str(smiles_list) + "\n"
+            )
+            data.prompt += "\n" + extra
+            print(f"Found smiles: \n {str(smiles_list)}\n")
     else:
+        print("No SMILES found")
         data.images = []
         data.si_images = []
     

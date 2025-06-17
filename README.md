@@ -81,6 +81,15 @@ whether a trailing comments column is added automatically.
 3. Regularly update your NLP models to benefit from the latest improvements.
 4. For large-scale scraping, consider using a distributed system to avoid overloading single sources.
 
+## SMILES Extraction
+
+LoA can optionally extract SMILES strings from PDFs and images using the
+DECIMER project. Because DECIMER relies on a separate set of dependencies,
+the recommended approach is to install it in its own conda environment. The
+`install_commands.txt` file includes the commands to create an environment
+named `DECIMER` and install the required packages. LoA will invoke this
+environment via `conda run` whenever SMILES extraction is requested.
+
 ## Troubleshooting
 
 - If you encounter issues with model downloads, ensure you have a stable internet connection and sufficient disk space.

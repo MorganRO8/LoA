@@ -24,6 +24,7 @@ import tarfile
 from rdkit import Chem
 import cirpy
 import pubchempy as pcp
+import json
 
 
 CONVERT_URL = "https://www.ncbi.nlm.nih.gov/pmc/utils/idconv/v1.0/?ids={}&format=json"
@@ -217,7 +218,6 @@ def get_out_id(def_search_terms_input, maybe_search_terms_input):
             queries = [list(comb) for comb in combinations]
             queries = [q for q in queries if len(q) > 1]
 
-        print(" Ok! your adjusted searches are: " + str(queries))
         print("That's " + str(len(queries)) + " total combinations")
         if len(queries) > 100:
             print("This could take a while...")
@@ -1741,9 +1741,59 @@ def check_model_file(model_name_version):
         except Exception as e:
             print(f"Failed to pull the model using local install: {e}")
             print("Trying using global install...")
-            try: 
+            try:
                 subprocess.run(["ollama", "pull", model_name_version], check=True)
             except Exception as e:
                 print(f"Global install failed: {e}")
                 return True
         return False
+
+
+def _run_decimer(path):
+    """Execute DECIMER extraction in a separate conda environment."""
+    script = os.path.join(os.path.dirname(__file__), "decimer_runner.py")
+    cmd = ["conda", "run", "-n", "DECIMER", "python", script, path]
+    try:
+        result = subprocess.run(
+            cmd,
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+    except Exception as err:
+        print(f"Failed to invoke DECIMER: {err}")
+        return []
+
+    if result.returncode != 0:
+        print(f"DECIMER error: {result.stderr}")
+        return []
+
+    try:
+        smiles = json.loads(result.stdout.strip())
+        if isinstance(smiles, list):
+            return [s for s in smiles if s]
+    except json.JSONDecodeError:
+        print(f"Could not decode DECIMER output: {result.stdout}")
+    return []
+
+
+def extract_smiles_for_paper(file_path):
+    """Extract SMILES strings from images or PDFs using a DECIMER subprocess."""
+    found = []
+    if file_path.endswith('.xml'):
+        paper_id = os.path.splitext(os.path.basename(file_path))[0]
+        images_dir = os.path.join(os.getcwd(), 'images', paper_id)
+        if os.path.isdir(images_dir):
+            for img in os.listdir(images_dir):
+                img_path = os.path.join(images_dir, img)
+                found.extend(_run_decimer(img_path))
+    else:
+        found.extend(_run_decimer(file_path))
+    # Remove duplicates while preserving order
+    unique = []
+    seen = set()
+    for smi in found:
+        if smi and smi not in seen:
+            seen.add(smi)
+            unique.append(smi)
+    return unique

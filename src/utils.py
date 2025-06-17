@@ -4,6 +4,7 @@ import os
 import re
 import hashlib
 import csv
+import json
 import numpy as np
 from pdf2image import convert_from_path
 import builtins

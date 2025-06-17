@@ -72,10 +72,10 @@ def batch_extract(job_settings: JobSettings):
     print(f"Found {len(files_to_process)} files to process, starting!")
 
     # Process each file
-    for file in files_to_process:
-        print(f"Now processing {file}")
+    for file_path in files_to_process:
+        print(f"Now processing {file_path}")
         if data._refresh_paper_content(
-            file,
+            file_path,
             job_settings.extract.prompt,
             job_settings.check_prompt,
             check_only=True,
@@ -96,14 +96,14 @@ def batch_extract(job_settings: JobSettings):
 
         if allow_verification:
             data._refresh_paper_content(
-                file,
+                file_path,
                 job_settings.extract.prompt,
                 job_settings.check_prompt,
                 check_only=False,
             )
             
             print("Attempting to pull SMILES from images in paper...")
-            smiles_list = extract_smiles_for_paper(file)
+            smiles_list = extract_smiles_for_paper(file_path)
             if smiles_list:
                 extra = (
                     "We ran automated SMILES extraction from all images in this paper and obtained these SMILES strings, "
@@ -205,21 +205,21 @@ def batch_extract(job_settings: JobSettings):
                     retry_count += 1
 
             except ValueError as e:
-                print(f"Validation failed for {file}: {str(e)}")
+                print(f"Validation failed for {file_path}: {str(e)}")
                 retry_count += 1
                 print(f"Retrying ({retry_count}/{job_settings.extract.max_retries})...")
 
             except (requests.exceptions.RequestException, json.JSONDecodeError, KeyError) as e:
                 if isinstance(e, requests.exceptions.RequestException) and hasattr(e, "response") and e.response is not None:
                     print(f"Ollama response:\n{e.response.text}")
-                print(f"Error processing {file}: {type(e).__name__} - {str(e)}")
+                print(f"Error processing {file_path}: {type(e).__name__} - {str(e)}")
                 retry_count += 1
                 print(f"Retrying ({retry_count}/{job_settings.extract.max_retries})...")
 
         if not success:
-            print(f"Failed to extract data from {file} after {job_settings.extract.max_retries} retries.")
+            print(f"Failed to extract data from {file_path} after {job_settings.extract.max_retries} retries.")
             failed_result = ["failed" for _ in range(job_settings.extract.num_columns)]
-            failed_result.append(os.path.splitext(os.path.basename(file))[0])
+            failed_result.append(os.path.splitext(os.path.basename(file_path))[0])
             write_to_csv([failed_result], job_settings.extract.headers, filename=job_settings.files.csv)
 
     # If not in auto mode, restart the script
@@ -293,7 +293,7 @@ def single_file_extract(job_settings: JobSettings, data: PromptData, file_path):
             check_only=False,
         )
         print("Attempting to pull SMILES from images in paper...")
-        smiles_list = extract_smiles_for_paper(file)
+        smiles_list = extract_smiles_for_paper(file_path)
         if smiles_list:
             extra = (
                 "We ran automated SMILES extraction from all images in this paper and obtained these SMILES strings, "

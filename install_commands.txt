@@ -28,10 +28,11 @@ pip install rdkit-pypi
 pip install cirpy
 pip install pubchempy
 
+# For using openai API (need install even if you aren't going to use openai)
+pip install openai
+
 # DECIMER segmentation and SMILES prediction
 
 # Set up a separate environment for DECIMER utilities
-conda create --name DECIMER -y python=3.10
-conda activate DECIMER
-pip install decimer-segmentation decimer
-conda deactivate
+conda env create --name DECIMER -y -f DECIMER-GPU.yml
+

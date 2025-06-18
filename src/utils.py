@@ -1840,23 +1840,61 @@ def _run_decimer(path):
     return []
 
 
-def extract_smiles_for_paper(file_path):
-    """Extract SMILES strings from images or PDFs using a DECIMER subprocess."""
-    found = []
-    if file_path.endswith('.xml'):
-        paper_id = os.path.splitext(os.path.basename(file_path))[0]
-        images_dir = os.path.join(os.getcwd(), 'images', paper_id)
-        if os.path.isdir(images_dir):
-            for img in os.listdir(images_dir):
-                img_path = os.path.join(images_dir, img)
-                found.extend(_run_decimer(img_path))
-    else:
-        found.extend(_run_decimer(file_path))
-    # Remove duplicates while preserving order
-    unique = []
-    seen = set()
-    for smi in found:
-        if smi and smi not in seen:
-            seen.add(smi)
-            unique.append(smi)
-    return unique
+def extract_smiles_for_paper(file_path, text):
+    """Insert SMILES strings predicted from figures directly into the text.
+
+    Parameters
+    ----------
+    file_path : str
+        Path to the source PDF or XML file.
+    text : str
+        Body text extracted from the paper that may contain placeholders like
+        ``[image.jpg]`` where figures were located.
+
+    Returns
+    -------
+    tuple
+        Updated text with SMILES strings inserted and a list of tuples
+        ``(smiles, index)`` describing where each SMILES string was placed.
+    """
+
+    if not text:
+        return text, []
+
+    paper_id = os.path.splitext(os.path.basename(file_path))[0]
+    images_dir = os.path.join(os.getcwd(), 'images', paper_id)
+
+    if not os.path.isdir(images_dir):
+        return text, []
+
+    # Find all image placeholders
+    pattern = re.compile(r"\[([^\[\]]+\.(?:png|jpg|jpeg|gif|tif|tiff))\]")
+
+    # Map image filename -> SMILES (first prediction)
+    smiles_cache = {}
+    for match in pattern.finditer(text):
+        img_name = os.path.basename(match.group(1))
+        if img_name in smiles_cache:
+            continue
+        img_path = os.path.join(images_dir, img_name)
+        if os.path.exists(img_path):
+            preds = _run_decimer(img_path)
+            if preds:
+                smiles_cache[img_name] = preds[0]
+
+    # Replace placeholders with predicted SMILES
+    updated_text = text
+    offset = 0
+    locations = []
+    for match in pattern.finditer(text):
+        img_name = os.path.basename(match.group(1))
+        smi = smiles_cache.get(img_name)
+        if smi:
+            start, end = match.span()
+            start += offset
+            end += offset
+            updated_text = updated_text[:start] + smi + updated_text[end:]
+            offset += len(smi) - (end - start)
+            locations.append((smi, start))
+
+    return updated_text, locations

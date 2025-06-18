@@ -10,6 +10,7 @@ from src.utils import (
     get_out_id,
     get_model_info,
     prepend_target_column,
+    insert_solvent_column,
     append_comments_column,
 )
 from src.document_reader import doc_to_elements
@@ -98,7 +99,10 @@ class JobSettings(): ## Contains subsettings as well for each of the job types.
         self.use_hi_res = False
         self.use_multimodal = False
         self.use_thinking = False
+        self.use_decimer = False
         self.use_comments = True
+        self.use_solvent = False
+        self.assume_water = False
         self.target_type = "small_molecule"
         self.def_search_terms = []
         self.maybe_search_terms = []
@@ -156,8 +160,14 @@ class JobSettings(): ## Contains subsettings as well for each of the job types.
                 self.use_multimodal = bool(val.lower() == "y")
             elif key.lower() == "use_thinking":
                 self.use_thinking = bool(val.lower() == "y")
+            elif key.lower() == "use_decimer":
+                self.use_decimer = bool(val.lower() == "y")
             elif key.lower() == "use_comments":
                 self.use_comments = bool(val.lower() == "y")
+            elif key.lower() == "use_solvent":
+                self.use_solvent = bool(val.lower() == "y")
+            elif key.lower() == "assume_water":
+                self.assume_water = bool(val.lower() == "y")
             elif key.lower() == "target_type":
                 self.target_type = val
             else:
@@ -172,6 +182,8 @@ class JobSettings(): ## Contains subsettings as well for each of the job types.
         ## Set up extraction parameters
         self.extract.schema_data, _ = load_schema_file(self.files.schema)
         self.extract.schema_data = prepend_target_column(self.extract.schema_data, self.target_type)
+        if self.use_solvent:
+            self.extract.schema_data = insert_solvent_column(self.extract.schema_data)
         if self.use_comments:
             self.extract.schema_data = append_comments_column(self.extract.schema_data)
         self.extract.key_columns = [1]

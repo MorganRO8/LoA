@@ -515,6 +515,30 @@ COMMENTS_COLUMN = {
     "description": "Any additional relevant details about the molecule or its measurements."
 }
 
+# Column added optionally to capture solvent information
+SOLVENT_COLUMN = {
+    "type": "str",
+    "name": "solvent",
+    "description": "SMILES string or common name of the solvent; treated like a small molecule."
+}
+
+# Common solvents mapped to canonical SMILES to avoid network lookups
+SOLVENT_SMILES_LOOKUP = {
+    "water": "O",
+    "h2o": "O",
+    "methanol": "CO",
+    "ethanol": "CCO",
+    "propanol": "CCCO",
+    "isopropanol": "CC(C)O",
+    "acetonitrile": "CC#N",
+    "dichloromethane": "ClCCl",
+    "chloroform": "ClC(Cl)Cl",
+    "dmso": "CS(=O)C",
+    "dimethyl sulfoxide": "CS(=O)C",
+    "hexane": "CCCCCC",
+    "dioxane": "O1CCOCC1",
+}
+
 
 def _target_descriptor(target_type: str) -> str:
     """Return a simplified descriptor for the target type."""
@@ -554,6 +578,25 @@ def append_comments_column(schema_data):
     new_schema = schema_data.copy()
     new_schema[len(schema_data) + 1] = COMMENTS_COLUMN
     return new_schema
+
+
+def insert_solvent_column(schema_data):
+    """Insert the solvent column after the target column."""
+    if not schema_data:
+        return {1: SOLVENT_COLUMN}
+    new_schema = {}
+    inserted = False
+    for idx in sorted(schema_data.keys()):
+        new_schema[idx + (1 if inserted and idx > 1 else 0)] = schema_data[idx]
+        if idx == 1 and not inserted:
+            new_schema[2] = SOLVENT_COLUMN
+            inserted = True
+    return new_schema
+
+
+def has_solvent_column(schema_data):
+    """Return True if the schema includes the solvent column."""
+    return any(col.get("name") == "solvent" for col in schema_data.values())
 
 
 def has_comments_column(schema_data):
@@ -1032,7 +1075,10 @@ def _fetch_pdb_sequence(name):
 
 
 def _smiles_from_string(value):
-    """Return a canonical SMILES string from input using RDKit, cirpy or PubChem."""
+    """Return a canonical SMILES string from input using RDKit, local lookup, cirpy or PubChem."""
+    val_lower = value.strip().lower()
+    if val_lower in SOLVENT_SMILES_LOOKUP:
+        return SOLVENT_SMILES_LOOKUP[val_lower]
     try:
         mol = Chem.MolFromSmiles(value)
         if mol:
@@ -1108,7 +1154,7 @@ def validate_target_value(value, target_type):
     return _smiles_from_string(value)
 
 
-def validate_result(parsed_result, schema_data, examples, key_columns=None, target_type="small_molecule", verify_target=True):
+def validate_result(parsed_result, schema_data, examples, key_columns=None, target_type="small_molecule", verify_target=True, assume_water=False):
     """
     Validate the parsed result against the schema and remove any invalid or example rows.
 
@@ -1123,6 +1169,8 @@ def validate_result(parsed_result, schema_data, examples, key_columns=None, targ
 
     verify_target (bool): Whether to verify the first column according to the
     target type.
+    assume_water (bool): If True, replace 'null' in the solvent column with the
+        SMILES for water and skip validation for that column.
 
     Returns:
     list: A list of validated rows that meet all the schema requirements.
@@ -1193,12 +1241,27 @@ def validate_result(parsed_result, schema_data, examples, key_columns=None, targ
                 else:
                     validated_row[0] = canonical
 
+        if row_valid and has_solvent_column(schema_data):
+            solvent_val = validated_row[1]
+            if solvent_val.lower() == 'null':
+                if assume_water:
+                    validated_row[1] = SOLVENT_SMILES_LOOKUP.get('water', 'O')
+            else:
+                canonical_solvent = validate_target_value(solvent_val, "small_molecule")
+                if canonical_solvent is None:
+                    print(f"Unable to verify solvent value '{solvent_val}'.")
+                    row_valid = False
+                else:
+                    validated_row[1] = canonical_solvent
+
         # Require at least one data field (excluding comments) when a target is present
         if row_valid:
+            start_idx = 1 + int(has_solvent_column(schema_data))
             if has_comments_column(schema_data):
-                data_fields = validated_row[1:-1] if len(validated_row) > 2 else []
+                end_idx = -1
             else:
-                data_fields = validated_row[1:]
+                end_idx = None
+            data_fields = validated_row[start_idx:end_idx] if end_idx is not None else validated_row[start_idx:]
             if all(str(v).lower() == 'null' for v in data_fields):
                 print(f"Skipping row with no data fields: {row}")
                 row_valid = False

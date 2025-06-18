@@ -57,7 +57,15 @@ Be sure to replace example_small_molecule.json with the actual file you want to 
 
 Example json files for small molecules, proteins, and peptides can be found in job_scripts.
 Each configuration can optionally include a `use_comments` setting (`"y"` or `"n"`) to control
-whether a trailing comments column is added automatically.
+whether a trailing comments column is added automatically. A similar `use_solvent` setting
+(`"y"` or `"n"`) toggles a built-in solvent column that expects a SMILES string or common name.
+If `use_solvent` is enabled, you can also set `assume_water` (`"y"` or `"n"`). When `assume_water`
+is on and the model outputs `null` for the solvent column, the value will automatically be filled
+with the SMILES string for water (`O`) without further validation.
+Common solvents like water and ethanol are resolved through a built-in lookup
+table before any online database queries.
+The `use_decimer` option (`"y"` or `"n"`) controls whether images are processed
+with DECIMER to extract additional SMILES strings from figures.
 
 ## Key Components
 

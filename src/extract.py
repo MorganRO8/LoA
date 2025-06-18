@@ -101,16 +101,19 @@ def batch_extract(job_settings: JobSettings):
                 job_settings.check_prompt,
                 check_only=False,
             )
-            
-            print("Attempting to pull SMILES from images in paper...")
-            smiles_list = extract_smiles_for_paper(file_path)
-            if smiles_list:
-                extra = (
-                    "We ran automated SMILES extraction from all images in this paper and obtained these SMILES strings, "
-                    "which may or may not be relevant to your current extraction task:\n" + str(smiles_list) + "\n"
-                )
-                data.prompt += "\n" + extra
-                print(f"Found smiles: \n {str(smiles_list)}\n")
+
+            if job_settings.use_decimer:
+                print("Attempting to pull SMILES from images in paper...")
+                smiles_list = extract_smiles_for_paper(file_path)
+                if smiles_list:
+                    extra = (
+                        "We ran automated SMILES extraction from all images in this paper and obtained these SMILES strings, "
+                        "which may or may not be relevant to your current extraction task:\n" + str(smiles_list) + "\n"
+                    )
+                    data.prompt += "\n" + extra
+                    print(f"Found smiles: \n {str(smiles_list)}\n")
+            else:
+                print("DECIMER extraction disabled")
         else:
             print("No SMILES found")
             data.images = []
@@ -172,6 +175,7 @@ def batch_extract(job_settings: JobSettings):
                     job_settings.extract.key_columns,
                     job_settings.target_type,
                     verify_target=allow_verification,
+                    assume_water=job_settings.assume_water,
                 )
 
                 if validated_result:
@@ -292,15 +296,18 @@ def single_file_extract(job_settings: JobSettings, data: PromptData, file_path):
             check_prompt=job_settings.check_prompt,
             check_only=False,
         )
-        print("Attempting to pull SMILES from images in paper...")
-        smiles_list = extract_smiles_for_paper(file_path)
-        if smiles_list:
-            extra = (
-                "We ran automated SMILES extraction from all images in this paper and obtained these SMILES strings, "
-                "which may or may not be relevant to your current extraction task:\n" + str(smiles_list) + "\n"
-            )
-            data.prompt += "\n" + extra
-            print(f"Found smiles: \n {str(smiles_list)}\n")
+        if job_settings.use_decimer:
+            print("Attempting to pull SMILES from images in paper...")
+            smiles_list = extract_smiles_for_paper(file_path)
+            if smiles_list:
+                extra = (
+                    "We ran automated SMILES extraction from all images in this paper and obtained these SMILES strings, "
+                    "which may or may not be relevant to your current extraction task:\n" + str(smiles_list) + "\n"
+                )
+                data.prompt += "\n" + extra
+                print(f"Found smiles: \n {str(smiles_list)}\n")
+        else:
+            print("DECIMER extraction disabled")
     else:
         print("No SMILES found")
         data.images = []
@@ -362,6 +369,7 @@ def single_file_extract(job_settings: JobSettings, data: PromptData, file_path):
                 job_settings.extract.key_columns,
                 job_settings.target_type,
                 verify_target=allow_verification,
+                assume_water=job_settings.assume_water,
             )
             print(f"Validated Result:\n{validated_result}")
             if not validated_result:

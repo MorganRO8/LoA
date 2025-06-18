@@ -9,7 +9,9 @@
     "use_multimodal": "n",
     "target_type": "small_molecule",
     "use_thinking": "y",
-    "use_comments": "y"
+    "use_comments": "y",
+    "use_solvent": "y",
+    "assume_water": "y"
   },
   "files": {
     "schema_file": "chromophores.pkl",

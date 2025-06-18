@@ -172,6 +172,7 @@ def batch_extract(job_settings: JobSettings):
                     job_settings.extract.key_columns,
                     job_settings.target_type,
                     verify_target=allow_verification,
+                    assume_water=job_settings.assume_water,
                 )
 
                 if validated_result:
@@ -362,6 +363,7 @@ def single_file_extract(job_settings: JobSettings, data: PromptData, file_path):
                 job_settings.extract.key_columns,
                 job_settings.target_type,
                 verify_target=allow_verification,
+                assume_water=job_settings.assume_water,
             )
             print(f"Validated Result:\n{validated_result}")
             if not validated_result:

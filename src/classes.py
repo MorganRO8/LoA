@@ -99,6 +99,7 @@ class JobSettings(): ## Contains subsettings as well for each of the job types.
         self.use_hi_res = False
         self.use_multimodal = False
         self.use_thinking = False
+        self.use_decimer = False
         self.use_comments = True
         self.use_solvent = False
         self.assume_water = False
@@ -159,6 +160,8 @@ class JobSettings(): ## Contains subsettings as well for each of the job types.
                 self.use_multimodal = bool(val.lower() == "y")
             elif key.lower() == "use_thinking":
                 self.use_thinking = bool(val.lower() == "y")
+            elif key.lower() == "use_decimer":
+                self.use_decimer = bool(val.lower() == "y")
             elif key.lower() == "use_comments":
                 self.use_comments = bool(val.lower() == "y")
             elif key.lower() == "use_solvent":

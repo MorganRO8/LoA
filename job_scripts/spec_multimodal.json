@@ -23,6 +23,7 @@
     "use_hi_res": "y",
     "use_multimodal": "y",
     "use_thinking": "y",
+    "use_decimer": "y",
     "target_type": "small_molecule",
     "use_comments": "y",
     "use_solvent": "y",

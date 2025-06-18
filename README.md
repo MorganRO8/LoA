@@ -64,6 +64,8 @@ is on and the model outputs `null` for the solvent column, the value will automa
 with the SMILES string for water (`O`) without further validation.
 Common solvents like water and ethanol are resolved through a built-in lookup
 table before any online database queries.
+The `use_decimer` option (`"y"` or `"n"`) controls whether images are processed
+with DECIMER to extract additional SMILES strings from figures.
 
 ## Key Components
 

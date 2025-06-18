@@ -22,9 +22,12 @@ from pathlib import Path
 import subprocess
 import tarfile
 from rdkit import Chem
+from rdkit import RDLogger
 import cirpy
 import pubchempy as pcp
 import json
+
+RDLogger.DisableLog('rdApp.error')
 
 
 CONVERT_URL = "https://www.ncbi.nlm.nih.gov/pmc/utils/idconv/v1.0/?ids={}&format=json"
@@ -1236,7 +1239,9 @@ def validate_result(parsed_result, schema_data, examples, key_columns=None, targ
             else:
                 canonical = validate_target_value(validated_row[0], target_type)
                 if canonical is None:
-                    print(f"Unable to verify target value '{validated_row[0]}'.")
+                    print(
+                        f"Warning: Unable to resolve '{validated_row[0]}' to a valid {target_type}."
+                    )
                     row_valid = False
                 else:
                     validated_row[0] = canonical
@@ -1249,7 +1254,9 @@ def validate_result(parsed_result, schema_data, examples, key_columns=None, targ
             else:
                 canonical_solvent = validate_target_value(solvent_val, "small_molecule")
                 if canonical_solvent is None:
-                    print(f"Unable to verify solvent value '{solvent_val}'.")
+                    print(
+                        f"Warning: Unable to resolve solvent '{solvent_val}' to a valid small_molecule."
+                    )
                     row_valid = False
                 else:
                     validated_row[1] = canonical_solvent
@@ -1895,6 +1902,9 @@ def extract_smiles_for_paper(file_path, text):
             end += offset
             updated_text = updated_text[:start] + smi + updated_text[end:]
             offset += len(smi) - (end - start)
-            locations.append((smi, start))
+            context_start = max(0, start - 30)
+            context_end = min(len(updated_text), start + len(smi) + 30)
+            snippet = updated_text[context_start:context_end]
+            locations.append((smi, snippet))
 
     return updated_text, locations

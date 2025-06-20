@@ -116,9 +116,11 @@ def batch_extract(job_settings: JobSettings):
                     f"{base_prompt}\n\n{data.paper_content}\n\nAgain, please make sure to respond only in the specified format exactly as described, or you will cause errors.\nResponse:"
                 )
                 if locations:
-                    loc_str = "; ".join(
-                        [f"{smi} -> '{snip.replace('\n', ' ').strip()}'" for smi, snip in locations]
-                    )
+                    parts = []
+                    for smi, snip in locations:
+                        snippet = snip.replace("\n", " ").strip()
+                        parts.append(f"{smi} -> '{snippet}'")
+                    loc_str = "; ".join(parts)
                     print(f"Inserted SMILES with context: {loc_str}")
             else:
                 print("DECIMER extraction disabled")
@@ -318,9 +320,11 @@ def single_file_extract(job_settings: JobSettings, data: PromptData, file_path):
                 f"{base_prompt}\n\n{data.paper_content}\n\nAgain, please make sure to respond only in the specified format exactly as described, or you will cause errors.\nResponse:"
             )
             if locations:
-                loc_str = "; ".join(
-                    [f"{smi} -> '{snip.replace('\n', ' ').strip()}'" for smi, snip in locations]
-                )
+                parts = []
+                for smi, snip in locations:
+                    snippet = snip.replace("\n", " ").strip()
+                    parts.append(f"{smi} -> '{snippet}'")
+                loc_str = "; ".join(parts)
                 print(f"Inserted SMILES with context: {loc_str}")
         else:
             print("DECIMER extraction disabled")

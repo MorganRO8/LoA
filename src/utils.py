@@ -1862,7 +1862,7 @@ def extract_smiles_for_paper(file_path, text):
     -------
     tuple
         Updated text with SMILES strings inserted and a list of tuples
-        ``(smiles, index)`` describing where each SMILES string was placed.
+        ``(smiles, snippet)`` describing where each SMILES string was placed.
     """
 
     if not text:

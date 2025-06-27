@@ -1818,7 +1818,9 @@ def check_model_file(model_name_version):
 def _run_decimer(path):
     """Execute DECIMER extraction in a separate conda environment."""
     script = os.path.join(os.path.dirname(__file__), "decimer_runner.py")
-    cmd = ["conda", "run", "-n", "DECIMER", "python", script, path]
+    # Ensure the path is absolute so DECIMER can locate the file
+    abs_path = path if os.path.isabs(path) else os.path.join(os.getcwd(), 'scraped_docs', path)
+    cmd = ["conda", "run", "-n", "DECIMER", "python", script, abs_path]
     try:
         result = subprocess.run(
             cmd,
@@ -1864,14 +1866,20 @@ def extract_smiles_for_paper(file_path, text):
     if not text:
         return text, []
 
+    abs_path = file_path if os.path.isabs(file_path) else os.path.join(os.getcwd(), 'scraped_docs', file_path)
+    ext = os.path.splitext(abs_path)[1].lower()
     paper_id = os.path.splitext(os.path.basename(file_path))[0]
+
+    if ext == '.pdf':
+        extra_results = _run_decimer(abs_path)
+        smiles = [item.get('smiles') for item in extra_results if item.get('smiles')]
+        if smiles:
+            prepend = "[Unplaced SMILES: " + ", ".join(smiles) + "]\n"
+            return prepend + text, []
+        return text, []
+
     images_dir = os.path.join(os.getcwd(), 'images', paper_id)
-
-
-    # Find all image placeholders
     pattern = re.compile(r"\[([^\[\]]+\.(?:png|jpg|jpeg|gif|tif|tiff))\]")
-
-    # Map image filename -> SMILES (first prediction)
     smiles_cache = {}
     for match in pattern.finditer(text):
         img_name = os.path.basename(match.group(1))
@@ -1881,9 +1889,8 @@ def extract_smiles_for_paper(file_path, text):
         if os.path.exists(img_path):
             preds = _run_decimer(img_path)
             if preds:
-                smiles_cache[img_name] = preds[0].get("smiles")
+                smiles_cache[img_name] = preds[0].get('smiles')
 
-    # Replace placeholders with predicted SMILES
     updated_text = text
     offset = 0
     locations = []
@@ -1900,22 +1907,5 @@ def extract_smiles_for_paper(file_path, text):
             context_end = min(len(updated_text), start + len(smi) + 30)
             snippet = updated_text[context_start:context_end]
             locations.append((smi, snippet))
-
-    # Run DECIMER on the entire file to capture additional structures
-    extra_results = _run_decimer(file_path)
-    unmatched = []
-    for item in extra_results:
-        smi = item.get("smiles")
-        if not smi:
-            continue
-        if smi in smiles_cache.values() or smi in updated_text:
-            continue
-        unmatched.append(smi)
-
-    if unmatched:
-        prepend = (
-            "[Unplaced SMILES: " + ", ".join(unmatched) + "]\n" if unmatched else ""
-        )
-        updated_text = prepend + updated_text
 
     return updated_text, locations

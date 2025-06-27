@@ -109,6 +109,7 @@ dependencies:
       - pexpect==4.9.0
       - pillow==11.2.1
       - pillow-heif==0.22.0
+      - pdf2image==1.17.0
       - prompt-toolkit==3.0.51
       - protobuf==4.25.8
       - ptyprocess==0.7.0

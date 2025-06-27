@@ -18,7 +18,7 @@
     "results_csv": "./results/chromophore_quality.csv"
   },
   "extract": {
-    "user_instructions": "Extract all photophysical properties reported for each chromophore in the paper. Use the exact column order from the schema. The chromophore, solvent, and reference columns are added automatically, so do not include them. Assume the solvent is water if none is mentioned. If a value is missing, write null. Capture SMILES from figures using DECIMER when needed. Only output CSV rows with no additional text.",
+    "user_instructions": "Extract all photophysical properties reported for each chromophore in the paper. Use the exact column order from the schema. If a value is missing, write null. Only output CSV rows with no additional text.",
     "max_retries": 1,
     "ollama_url": "http://localhost:11434"
   }

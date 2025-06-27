@@ -636,7 +636,7 @@ def load_schema_file(schema_file):
         if not line:
             continue
 
-        parts = line.split('-')
+        parts = line.split('-', 1)
         if len(parts) == 2:
             column_number = int(parts[0].strip())
             info_type, info_value = parts[1].split(':', 1)

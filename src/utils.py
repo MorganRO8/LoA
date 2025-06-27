@@ -22,9 +22,12 @@ from pathlib import Path
 import subprocess
 import tarfile
 from rdkit import Chem
+from rdkit import RDLogger
 import cirpy
 import pubchempy as pcp
 import json
+
+RDLogger.DisableLog('rdApp.error')
 
 
 CONVERT_URL = "https://www.ncbi.nlm.nih.gov/pmc/utils/idconv/v1.0/?ids={}&format=json"
@@ -1236,7 +1239,9 @@ def validate_result(parsed_result, schema_data, examples, key_columns=None, targ
             else:
                 canonical = validate_target_value(validated_row[0], target_type)
                 if canonical is None:
-                    print(f"Unable to verify target value '{validated_row[0]}'.")
+                    print(
+                        f"Warning: Unable to resolve '{validated_row[0]}' to a valid {target_type}."
+                    )
                     row_valid = False
                 else:
                     validated_row[0] = canonical
@@ -1249,7 +1254,9 @@ def validate_result(parsed_result, schema_data, examples, key_columns=None, targ
             else:
                 canonical_solvent = validate_target_value(solvent_val, "small_molecule")
                 if canonical_solvent is None:
-                    print(f"Unable to verify solvent value '{solvent_val}'.")
+                    print(
+                        f"Warning: Unable to resolve solvent '{solvent_val}' to a valid small_molecule."
+                    )
                     row_valid = False
                 else:
                     validated_row[1] = canonical_solvent
@@ -1840,23 +1847,64 @@ def _run_decimer(path):
     return []
 
 
-def extract_smiles_for_paper(file_path):
-    """Extract SMILES strings from images or PDFs using a DECIMER subprocess."""
-    found = []
-    if file_path.endswith('.xml'):
-        paper_id = os.path.splitext(os.path.basename(file_path))[0]
-        images_dir = os.path.join(os.getcwd(), 'images', paper_id)
-        if os.path.isdir(images_dir):
-            for img in os.listdir(images_dir):
-                img_path = os.path.join(images_dir, img)
-                found.extend(_run_decimer(img_path))
-    else:
-        found.extend(_run_decimer(file_path))
-    # Remove duplicates while preserving order
-    unique = []
-    seen = set()
-    for smi in found:
-        if smi and smi not in seen:
-            seen.add(smi)
-            unique.append(smi)
-    return unique
+def extract_smiles_for_paper(file_path, text):
+    """Insert SMILES strings predicted from figures directly into the text.
+
+    Parameters
+    ----------
+    file_path : str
+        Path to the source PDF or XML file.
+    text : str
+        Body text extracted from the paper that may contain placeholders like
+        ``[image.jpg]`` where figures were located.
+
+    Returns
+    -------
+    tuple
+        Updated text with SMILES strings inserted and a list of tuples
+        ``(smiles, snippet)`` describing where each SMILES string was placed.
+    """
+
+    if not text:
+        return text, []
+
+    paper_id = os.path.splitext(os.path.basename(file_path))[0]
+    images_dir = os.path.join(os.getcwd(), 'images', paper_id)
+
+    if not os.path.isdir(images_dir):
+        return text, []
+
+    # Find all image placeholders
+    pattern = re.compile(r"\[([^\[\]]+\.(?:png|jpg|jpeg|gif|tif|tiff))\]")
+
+    # Map image filename -> SMILES (first prediction)
+    smiles_cache = {}
+    for match in pattern.finditer(text):
+        img_name = os.path.basename(match.group(1))
+        if img_name in smiles_cache:
+            continue
+        img_path = os.path.join(images_dir, img_name)
+        if os.path.exists(img_path):
+            preds = _run_decimer(img_path)
+            if preds:
+                smiles_cache[img_name] = preds[0]
+
+    # Replace placeholders with predicted SMILES
+    updated_text = text
+    offset = 0
+    locations = []
+    for match in pattern.finditer(text):
+        img_name = os.path.basename(match.group(1))
+        smi = smiles_cache.get(img_name)
+        if smi:
+            start, end = match.span()
+            start += offset
+            end += offset
+            updated_text = updated_text[:start] + smi + updated_text[end:]
+            offset += len(smi) - (end - start)
+            context_start = max(0, start - 30)
+            context_end = min(len(updated_text), start + len(smi) + 30)
+            snippet = updated_text[context_start:context_end]
+            locations.append((smi, snippet))
+
+    return updated_text, locations

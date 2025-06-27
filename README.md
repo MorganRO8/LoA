@@ -56,6 +56,8 @@ python main.py -auto ./job_scripts/example_small_molecule.json
 Be sure to replace example_small_molecule.json with the actual file you want to use.
 
 Example json files for small molecules, proteins, and peptides can be found in job_scripts.
+The decimer_synthesis.json configuration focuses on synthesis papers rich in
+chemical figures so DECIMER insertion can be tested easily.
 Each configuration can optionally include a `use_comments` setting (`"y"` or `"n"`) to control
 whether a trailing comments column is added automatically. A similar `use_solvent` setting
 (`"y"` or `"n"`) toggles a built-in solvent column that expects a SMILES string or common name.
@@ -65,7 +67,9 @@ with the SMILES string for water (`O`) without further validation.
 Common solvents like water and ethanol are resolved through a built-in lookup
 table before any online database queries.
 The `use_decimer` option (`"y"` or `"n"`) controls whether images are processed
-with DECIMER to extract additional SMILES strings from figures.
+with DECIMER to extract additional SMILES strings from figures. When enabled,
+any predicted SMILES are inserted back into the text at the location of the
+corresponding figure instead of being appended separately.
 
 ## Key Components
 
@@ -96,7 +100,9 @@ DECIMER project. Because DECIMER relies on a separate set of dependencies,
 the recommended approach is to install it in its own conda environment. The
 `install_commands.txt` file includes the commands to create an environment
 named `DECIMER` and install the required packages. LoA will invoke this
-environment via `conda run` whenever SMILES extraction is requested.
+environment via `conda run` whenever SMILES extraction is requested. SMILES
+strings predicted from figures are inserted directly into the extracted text
+where the corresponding images were located.
 
 ## Troubleshooting
 

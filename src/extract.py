@@ -104,14 +104,24 @@ def batch_extract(job_settings: JobSettings):
 
             if job_settings.use_decimer:
                 print("Attempting to pull SMILES from images in paper...")
-                smiles_list = extract_smiles_for_paper(file_path)
-                if smiles_list:
-                    extra = (
-                        "We ran automated SMILES extraction from all images in this paper and obtained these SMILES strings, "
-                        "which may or may not be relevant to your current extraction task:\n" + str(smiles_list) + "\n"
-                    )
-                    data.prompt += "\n" + extra
-                    print(f"Found smiles: \n {str(smiles_list)}\n")
+                new_text, locations = extract_smiles_for_paper(file_path, data.paper_content)
+                data.paper_content = new_text
+                base_prompt = generate_prompt(
+                    job_settings.extract.schema_data,
+                    job_settings.extract.user_instructions,
+                    job_settings.extract.key_columns,
+                    job_settings.target_type,
+                )
+                data.prompt = (
+                    f"{base_prompt}\n\n{data.paper_content}\n\nAgain, please make sure to respond only in the specified format exactly as described, or you will cause errors.\nResponse:"
+                )
+                if locations:
+                    parts = []
+                    for smi, snip in locations:
+                        snippet = snip.replace("\n", " ").strip()
+                        parts.append(f"{smi} -> '{snippet}'")
+                    loc_str = "; ".join(parts)
+                    print(f"Inserted SMILES with context: {loc_str}")
             else:
                 print("DECIMER extraction disabled")
         else:
@@ -298,14 +308,24 @@ def single_file_extract(job_settings: JobSettings, data: PromptData, file_path):
         )
         if job_settings.use_decimer:
             print("Attempting to pull SMILES from images in paper...")
-            smiles_list = extract_smiles_for_paper(file_path)
-            if smiles_list:
-                extra = (
-                    "We ran automated SMILES extraction from all images in this paper and obtained these SMILES strings, "
-                    "which may or may not be relevant to your current extraction task:\n" + str(smiles_list) + "\n"
-                )
-                data.prompt += "\n" + extra
-                print(f"Found smiles: \n {str(smiles_list)}\n")
+            new_text, locations = extract_smiles_for_paper(file_path, data.paper_content)
+            data.paper_content = new_text
+            base_prompt = generate_prompt(
+                job_settings.extract.schema_data,
+                job_settings.extract.user_instructions,
+                job_settings.extract.key_columns,
+                job_settings.target_type,
+            )
+            data.prompt = (
+                f"{base_prompt}\n\n{data.paper_content}\n\nAgain, please make sure to respond only in the specified format exactly as described, or you will cause errors.\nResponse:"
+            )
+            if locations:
+                parts = []
+                for smi, snip in locations:
+                    snippet = snip.replace("\n", " ").strip()
+                    parts.append(f"{smi} -> '{snippet}'")
+                loc_str = "; ".join(parts)
+                print(f"Inserted SMILES with context: {loc_str}")
         else:
             print("DECIMER extraction disabled")
     else:

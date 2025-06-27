@@ -55,6 +55,12 @@ python main.py -auto ./job_scripts/example_small_molecule.json
 
 Be sure to replace example_small_molecule.json with the actual file you want to use.
 
+If the `def_search_terms` list contains only `"local"` and `maybe_search_terms`
+is set to `"none"`, LoA will skip the scraping step and instead process every
+file found in the `scraped_docs` directory. This mode is useful when you have
+already downloaded all the papers you want to analyze. Any directories inside
+`scraped_docs` are ignored.
+
 Example json files for small molecules, proteins, and peptides can be found in job_scripts.
 The decimer_synthesis.json configuration focuses on synthesis papers rich in
 chemical figures so DECIMER insertion can be tested easily.

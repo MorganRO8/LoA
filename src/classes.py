@@ -1,6 +1,8 @@
 import os
 import base64
 import glob
+from io import BytesIO
+from PIL import Image
 from src.utils import (
     load_schema_file,
     generate_examples,
@@ -103,6 +105,7 @@ class JobSettings(): ## Contains subsettings as well for each of the job types.
         self.use_comments = True
         self.use_solvent = False
         self.assume_water = False
+        self.skip_check = False
         self.target_type = "small_molecule"
         self.def_search_terms = []
         self.maybe_search_terms = []
@@ -168,6 +171,8 @@ class JobSettings(): ## Contains subsettings as well for each of the job types.
                 self.use_solvent = bool(val.lower() == "y")
             elif key.lower() == "assume_water":
                 self.assume_water = bool(val.lower() == "y")
+            elif key.lower() == "skip_check":
+                self.skip_check = bool(val.lower() == "y")
             elif key.lower() == "target_type":
                 self.target_type = val
             else:
@@ -260,8 +265,22 @@ class PromptData():
         imgs = []
         for img_file in sorted(glob.glob(os.path.join(directory, '*'))):
             if os.path.isfile(img_file):
-                with open(img_file, 'rb') as img_f:
-                    imgs.append(base64.b64encode(img_f.read()).decode('utf-8'))
+                ext = os.path.splitext(img_file)[1].lower()
+                data = None
+                if ext not in ['.png', '.jpg', '.jpeg']:
+                    try:
+                        with Image.open(img_file) as im:
+                            im = im.convert('RGB')
+                            with BytesIO() as buf:
+                                im.save(buf, format='PNG')
+                                data = buf.getvalue()
+                    except Exception as err:
+                        print(f"Failed to convert {img_file}: {err}")
+                        continue
+                if data is None:
+                    with open(img_file, 'rb') as img_f:
+                        data = img_f.read()
+                imgs.append(base64.b64encode(data).decode('utf-8'))
         if not imgs:
             print(f"No images found in {directory}")
         else:

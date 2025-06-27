@@ -74,33 +74,43 @@ def batch_extract(job_settings: JobSettings):
     # Process each file
     for file in files_to_process:
         print(f"Now processing {file}")
-        if data._refresh_paper_content(
-            file,
-            job_settings.extract.prompt,
-            job_settings.check_prompt,
-            check_only=True,
-        ):
-            continue
-
         retry_count = 0
         success = False
-        
-        # Use a check prompt to lower cost
-        check_response = requests.post(
-            f"{job_settings.extract.ollama_url}/api/generate", json=data.__check__()
-        )
-        check_response.raise_for_status()
-        check_result = check_response.json()["response"]
-        print(f"Check result was '{check_result}'")
-        allow_verification = str(check_result).strip().lower().startswith("yes")
-
-        if allow_verification:
-            data._refresh_paper_content(
+        if job_settings.skip_check:
+            if data._refresh_paper_content(
                 file,
                 job_settings.extract.prompt,
                 job_settings.check_prompt,
                 check_only=False,
+            ):
+                continue
+            check_result = "yes"
+            allow_verification = True
+        else:
+            if data._refresh_paper_content(
+                file,
+                job_settings.extract.prompt,
+                job_settings.check_prompt,
+                check_only=True,
+            ):
+                continue
+            # Use a check prompt to lower cost
+            check_response = requests.post(
+                f"{job_settings.extract.ollama_url}/api/generate", json=data.__check__()
             )
+            check_response.raise_for_status()
+            check_result = check_response.json()["response"]
+            print(f"Check result was '{check_result}'")
+            allow_verification = str(check_result).strip().lower().startswith("yes")
+
+        if allow_verification:
+            if not job_settings.skip_check:
+                data._refresh_paper_content(
+                    file,
+                    job_settings.extract.prompt,
+                    job_settings.check_prompt,
+                    check_only=False,
+                )
 
             if job_settings.use_decimer:
                 print("Attempting to pull SMILES from images in paper...")
@@ -270,7 +280,7 @@ def extract(file_path, job_settings:JobSettings):
             job_settings.target_type,
         ),
         check_prompt=job_settings.check_prompt,
-        check_only=True,
+        check_only=not job_settings.skip_check,
     )
 
     validated_result = single_file_extract(job_settings, data, file_path)
@@ -283,28 +293,33 @@ def extract(file_path, job_settings:JobSettings):
 
 def single_file_extract(job_settings: JobSettings, data: PromptData, file_path):
     retry_count = 0
-    
-    # Use a check prompt to lower cost
-    check_response = requests.post(
-        f"{job_settings.extract.ollama_url}/api/generate", json=data.__check__()
-    )
-    check_response.raise_for_status()
-    check_result = check_response.json()["response"]
-    print(f"Check result was '{check_result}'")
-    allow_verification = str(check_result).strip().lower().startswith("yes")
+
+    if job_settings.skip_check:
+        check_result = "yes"
+        allow_verification = True
+    else:
+        # Use a check prompt to lower cost
+        check_response = requests.post(
+            f"{job_settings.extract.ollama_url}/api/generate", json=data.__check__()
+        )
+        check_response.raise_for_status()
+        check_result = check_response.json()["response"]
+        print(f"Check result was '{check_result}'")
+        allow_verification = str(check_result).strip().lower().startswith("yes")
 
     if allow_verification:
-        data._refresh_paper_content(
-            file_path,
-            generate_prompt(
-                job_settings.extract.schema_data,
-                job_settings.extract.user_instructions,
-                job_settings.extract.key_columns,
-                job_settings.target_type,
-            ),
-            check_prompt=job_settings.check_prompt,
-            check_only=False,
-        )
+        if not job_settings.skip_check:
+            data._refresh_paper_content(
+                file_path,
+                generate_prompt(
+                    job_settings.extract.schema_data,
+                    job_settings.extract.user_instructions,
+                    job_settings.extract.key_columns,
+                    job_settings.target_type,
+                ),
+                check_prompt=job_settings.check_prompt,
+                check_only=False,
+            )
         if job_settings.use_decimer:
             print("Attempting to pull SMILES from images in paper...")
             new_text, locations = extract_smiles_for_paper(file_path, data.paper_content)

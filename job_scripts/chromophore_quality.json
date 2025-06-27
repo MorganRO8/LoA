@@ -11,7 +11,8 @@
     "target_type": "small_molecule",
     "use_comments": "n",
     "use_solvent": "y",
-    "assume_water": "y"
+    "assume_water": "y",
+    "skip_check": "y"
   },
   "files": {
     "schema_file": "chromophore_quality.pkl",

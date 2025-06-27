@@ -136,14 +136,14 @@ class JobSettings(): ## Contains subsettings as well for each of the job types.
     def _parse_from_json(self,json):
         for key,val in json.items():
             if key.lower() == "def_search_terms":
-                if type(val) == list:
+                if isinstance(val, list):
                     self.def_search_terms = val
-                elif type(val) == str:
+                elif isinstance(val, str):
                     self.def_search_terms = val.split(",")
             elif key.lower() == "maybe_search_terms":
-                if type(val) == list:
+                if isinstance(val, list):
                     self.maybe_search_terms = val
-                elif type(val) == str:
+                elif isinstance(val, str):
                     self.maybe_search_terms = val.split(",")
             elif key.lower() == "model_name_version":
                 self._update_model_name_version(val)
@@ -204,9 +204,22 @@ class JobSettings(): ## Contains subsettings as well for each of the job types.
         )
         
         # Generate output directory ID and query chunks
-        output_directory_id, self.query_chunks = get_out_id(self.def_search_terms, self.maybe_search_terms)
+        output_directory_id, self.query_chunks = get_out_id(
+            self.def_search_terms, self.maybe_search_terms
+        )
         # Define the search info file path
-        self.files.search_info_file = os.path.join(os.getcwd(), 'search_info', f"{output_directory_id}.txt")
+        self.files.search_info_file = os.path.join(
+            os.getcwd(), 'search_info', f"{output_directory_id}.txt"
+        )
+
+        # Special case: use all locally downloaded papers
+        if (
+            len(self.def_search_terms) == 1
+            and self.def_search_terms[0].lower() == "local"
+            and (not self.maybe_search_terms or self.maybe_search_terms[0].lower() == "none")
+        ):
+            self.run_scrape = False
+            self.files.search_info_file = "All"
 
 
 class PromptData():

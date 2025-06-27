@@ -7,7 +7,6 @@ import csv
 import numpy as np
 from pdf2image import convert_from_path
 import builtins
-import datetime
 import random
 from selenium import webdriver
 from selenium.common.exceptions import WebDriverException
@@ -1742,11 +1741,11 @@ def begin_ollama_server():
     # Ping ollama port to see if it is running
     try:
         response = requests.get("http://localhost:11434")
-    
-    except:
+
+    except Exception:
         try:
             response.status_code = 404
-        except:
+        except Exception:
             is_ollama_running = False
         
     # If so, cool, if not, start it!
@@ -1755,7 +1754,7 @@ def begin_ollama_server():
             is_ollama_running = True
         else:
             is_ollama_running = False
-    except:
+    except Exception:
         is_ollama_running = False
 
     if is_ollama_running:
@@ -1773,10 +1772,18 @@ def begin_ollama_server():
         
         try:
             # Start ollama server
-            subprocess.Popen(["./ollama", "serve"], stdout=subprocess.DEVNULL, stderr=subprocess.STDOUT)
-        except:
+            subprocess.Popen(
+                ["./ollama", "serve"],
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.STDOUT,
+            )
+        except Exception:
             # print("Failed to start ollama using portable install, trying with full install")
-            subprocess.Popen(["ollama", "serve"], stdout=subprocess.DEVNULL, stderr=subprocess.STDOUT)
+            subprocess.Popen(
+                ["ollama", "serve"],
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.STDOUT,
+            )
 
 def check_model_file(model_name_version):
     model_name, model_version = model_name_version.split(":")
@@ -1794,7 +1801,7 @@ def check_model_file(model_name_version):
         return False
     else:
         begin_ollama_server()
-        print(f"Model file not found. Pulling the model...")
+        print("Model file not found. Pulling the model...")
         try:
             subprocess.run(["./ollama", "pull", model_name_version], check=True)
         except Exception as e:

@@ -5,6 +5,10 @@ import datetime
 import builtins
 import multiprocessing as mp
 
+from src.utils import print  # Custom print function for logging
+from src.utils import splashbanner, get_yn_response, select_data_model_file, check_model_file
+from src.classes import JobSettings
+
 mp.set_start_method("spawn", force=True)
 
 # Create necessary directories if they don't exist
@@ -14,10 +18,9 @@ os.makedirs(os.path.join(os.getcwd(), 'logs'), exist_ok=True)
 
 # Set up custom logging
 # This creates a log file with the current timestamp in the filename
-builtins.a = os.path.join(os.getcwd(), "logs", f"{str(datetime.datetime.now()).replace(' ', '_')}.txt")
-from src.utils import print  # Custom print function for logging
-from src.utils import splashbanner, get_yn_response, select_data_model_file, get_out_id, check_model_file
-from src.classes import JobSettings
+builtins.a = os.path.join(
+    os.getcwd(), 'logs', f"{str(datetime.datetime.now()).replace(' ', '_')}.txt"
+)
 
 def write_json_jobfile(job_settings: JobSettings):
     with open(job_settings.files.json,"w") as f:

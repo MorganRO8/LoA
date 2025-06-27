@@ -104,7 +104,7 @@ def batch_extract(job_settings: JobSettings):
 
             if job_settings.use_decimer:
                 print("Attempting to pull SMILES from images in paper...")
-                new_text, locations = extract_smiles_for_paper(file_path, data.paper_content)
+                new_text, locations = extract_smiles_for_paper(file, data.paper_content)
                 data.paper_content = new_text
                 base_prompt = generate_prompt(
                     job_settings.extract.schema_data,
@@ -175,7 +175,7 @@ def batch_extract(job_settings: JobSettings):
                         try:
                             if item.lower().replace(" ", "") == 'null' or item == '' or item == '""' or item == "''" or item.strip().lower().replace('"', '').replace("'", "") == 'no information found':
                                 row[idx] = 'null'
-                        except:
+                        except Exception:
                             pass
 
                 validated_result = validate_result(
@@ -283,7 +283,6 @@ def extract(file_path, job_settings:JobSettings):
 
 def single_file_extract(job_settings: JobSettings, data: PromptData, file_path):
     retry_count = 0
-    success = False
     
     # Use a check prompt to lower cost
     check_response = requests.post(
@@ -379,7 +378,7 @@ def single_file_extract(job_settings: JobSettings, data: PromptData, file_path):
                             item.strip().lower().replace('"', '').replace("'", "") == 'no information found'
                         ]):
                             row[idx] = 'null'
-                    except:
+                    except Exception:
                         pass
 
             validated_result = validate_result(

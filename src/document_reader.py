@@ -7,11 +7,6 @@ import subprocess
 from src.utils import xml_to_string, elements_to_string
 from src.utils import print  # Custom print function for logging
 
-# Configure logging to minimize output from the 'unstructured' library
-LOGGER = logging.getLogger()
-LOGGER.setLevel(logging.CRITICAL)
-
-
 from xml.etree import ElementTree as ET
 import requests
 import tarfile
@@ -19,6 +14,10 @@ import io
 import re
 from html import unescape
 from PIL import Image
+
+# Configure logging to minimize output from the 'unstructured' library
+LOGGER = logging.getLogger()
+LOGGER.setLevel(logging.CRITICAL)
 
 
 def pdf2txt_extract(pdf_path, output_dir):

@@ -1835,9 +1835,9 @@ def _run_decimer(path):
         return []
 
     try:
-        smiles = json.loads(result.stdout.strip())
-        if isinstance(smiles, list):
-            return [s for s in smiles if s]
+        data = json.loads(result.stdout.strip())
+        if isinstance(data, list):
+            return data
     except json.JSONDecodeError:
         print(f"Could not decode DECIMER output: {result.stdout}")
     return []
@@ -1867,8 +1867,6 @@ def extract_smiles_for_paper(file_path, text):
     paper_id = os.path.splitext(os.path.basename(file_path))[0]
     images_dir = os.path.join(os.getcwd(), 'images', paper_id)
 
-    if not os.path.isdir(images_dir):
-        return text, []
 
     # Find all image placeholders
     pattern = re.compile(r"\[([^\[\]]+\.(?:png|jpg|jpeg|gif|tif|tiff))\]")
@@ -1883,7 +1881,7 @@ def extract_smiles_for_paper(file_path, text):
         if os.path.exists(img_path):
             preds = _run_decimer(img_path)
             if preds:
-                smiles_cache[img_name] = preds[0]
+                smiles_cache[img_name] = preds[0].get("smiles")
 
     # Replace placeholders with predicted SMILES
     updated_text = text
@@ -1902,5 +1900,22 @@ def extract_smiles_for_paper(file_path, text):
             context_end = min(len(updated_text), start + len(smi) + 30)
             snippet = updated_text[context_start:context_end]
             locations.append((smi, snippet))
+
+    # Run DECIMER on the entire file to capture additional structures
+    extra_results = _run_decimer(file_path)
+    unmatched = []
+    for item in extra_results:
+        smi = item.get("smiles")
+        if not smi:
+            continue
+        if smi in smiles_cache.values() or smi in updated_text:
+            continue
+        unmatched.append(smi)
+
+    if unmatched:
+        prepend = (
+            "[Unplaced SMILES: " + ", ".join(unmatched) + "]\n" if unmatched else ""
+        )
+        updated_text = prepend + updated_text
 
     return updated_text, locations

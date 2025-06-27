@@ -714,48 +714,41 @@ def generate_prompt(schema_data, user_instructions, key_columns=None, target_typ
     # Construct the prompt
     descriptor = _target_descriptor(target_type)
     prompt = f"""
-Please extract information about {descriptor}s from the provided research paper that fits into the following CSV schema:
+Using the research paper text provided above, extract information about {descriptor}s that fits into the following CSV schema:
 
 {schema_info}
 {key_column_info if key_columns else ''}
 
-Instructions:
+Extraction Instructions:
 - Extract relevant information and provide it as comma-separated values.
-- This paper has been flagged as containing relevant information, and should have data to be extracted.
-- Each line should contain {num_columns} values, corresponding to the {num_columns} columns in the schema.
+- This paper has been flagged as containing relevant information and should have data to be extracted.
+- Each line must contain {num_columns} values, corresponding to the {num_columns} columns in the schema.
 - If information is missing for a column, use 'null' as a placeholder.
 - Do not use anything other than 'null' as a placeholder.
 - Enclose all string values in double-quotes.
 - Never use natural language outside of a string enclosed in double-quotes.
-- For range values, use the format "min-max", do not use this format for field expecting integer or float values, if a range is expected it will be labelled explicitly as a range.
+- For range values, use the format "min-max" when a range is explicitly expected.
 - Do not include headers, explanations, summaries, or any additional formatting.
-- Invalid responses will result in retries, thus causing significant time and money loss per paper.
+- Invalid responses will result in retries, causing significant time and money loss per paper.
 - Ignore any information in references that may be included at the end of the paper.
 
-Below I shall provide a few examples to help you understand the desired output format.
+Below are a few examples that demonstrate the correct output format.
 
-Here is an example with just the names of the columns instead of actual values, and just a single entry:
+Example showing only the column names:
 {schema_diagram}
 
-Here are a few examples with randomly generated values where appropriate (be sure to recognize that these values mean nothing, 
-should be ignored, and definitely not included in your output, this is just to show the proper structure):
-
-Example where the paper contains a single piece of information to extract:
+Example where the paper contains a single piece of information:
 {generate_examples(schema_data, 1)}
 
-Example where the paper contains two pieces of information to extract:
+Example where the paper contains two pieces of information:
 {generate_examples(schema_data, 2)}
 
-Example where the paper contains three pieces of information to extract:
+Example where the paper contains three pieces of information:
 {generate_examples(schema_data, 3)}
-
-Hopefully that is enough examples for you to see the desired output format.
 
 User Instructions:
 {user_instructions}
-
-Paper Contents:
-    """
+"""
 
     return prompt
     
@@ -779,7 +772,7 @@ def generate_check_prompt(schema_data, user_instructions, target_type="small_mol
     # Construct the prompt
     descriptor = _target_descriptor(target_type)
     prompt = f"""
-Please read the following paper and determine whether it contains information about {descriptor}s relevant to the following schema and instructions:
+Using the research paper text provided above, determine whether it contains information about {descriptor}s relevant to the following schema and instructions.
 
 Schema:
 {schema_info}
@@ -787,17 +780,13 @@ Schema:
 User Instructions:
 {user_instructions}
 
-Answer "yes" if the paper contains information that can be extracted according to the schema and instructions.
-Answer "no" if the paper does not contain enough relevant information to fill out a single row of the defined schema.
+Answer "yes" if the paper contains enough information to fill out at least one row of the defined schema.
+Answer "no" if the required information is missing.
 
-Your answer should be only "yes" or "no".
+Your answer must be exactly "yes" or "no" with no additional text.
 
-Understand that if you answer "yes" a somewhat costly call will be made to an api to extract relevant information. 
-So, it is important to only answer "yes" if the paper contains enough relevant information to fill out at least one row of the defined schema.
-Otherwise, answering "yes" when the paper does not contain the needed information will result in wasted money.
-
-Paper Contents:
-    """
+Understand that answering "yes" will result in a costly extraction step, so please be certain.
+"""
     return prompt
     
 

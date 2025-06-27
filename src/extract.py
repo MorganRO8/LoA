@@ -113,7 +113,7 @@ def batch_extract(job_settings: JobSettings):
                     job_settings.target_type,
                 )
                 data.prompt = (
-                    f"{base_prompt}\n\n{data.paper_content}\n\nAgain, please make sure to respond only in the specified format exactly as described, or you will cause errors.\nResponse:"
+                    f"Paper Contents:\n{data.paper_content}\n\n{base_prompt}\n\nAgain, please make sure to respond only in the specified format exactly as described, or you will cause errors.\nResponse:"
                 )
                 if locations:
                     parts = []
@@ -317,7 +317,7 @@ def single_file_extract(job_settings: JobSettings, data: PromptData, file_path):
                 job_settings.target_type,
             )
             data.prompt = (
-                f"{base_prompt}\n\n{data.paper_content}\n\nAgain, please make sure to respond only in the specified format exactly as described, or you will cause errors.\nResponse:"
+                f"Paper Contents:\n{data.paper_content}\n\n{base_prompt}\n\nAgain, please make sure to respond only in the specified format exactly as described, or you will cause errors.\nResponse:"
             )
             if locations:
                 parts = []

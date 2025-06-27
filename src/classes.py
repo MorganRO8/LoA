@@ -306,10 +306,10 @@ class PromptData():
                 "deciding if relevant information is present."
             )
         self.prompt = (
-            f"{prompt}\n\n{self.paper_content}\n\nAgain, please make sure to respond only in the specified format exactly as described, or you will cause errors.\nResponse:"
+            f"Paper Contents:\n{self.paper_content}\n\n{prompt}\n\nAgain, please make sure to respond only in the specified format exactly as described, or you will cause errors.\nResponse:"
         )
         self.check_prompt = (
-            f"{check_prompt}{note}\n\n{self.paper_content}\n\nAgain, please only answer 'yes' or 'no' (without quotes) to let me know if we should extract information from this paper using the costly api call"
+            f"Paper Contents:\n{self.paper_content}{note}\n\n{check_prompt}\n\nAgain, please only answer 'yes' or 'no' (without quotes) to let me know if we should extract information from this paper using the costly api call"
         )
         return False
     

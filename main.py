@@ -216,6 +216,9 @@ def print_all_settings(job_settings: JobSettings):
     print("#     " + str(job_settings.extract.user_instructions))
     print("#   Ollama Server: " + str(job_settings.extract.ollama_url))
     print("#   Maximum retries: " + str(job_settings.extract.max_retries))
+    print("#   Using OpenAI: " + str(job_settings.use_openai))
+    if job_settings.use_openai:
+        print("#   API Key Present: " + str(bool(job_settings.api_key)))
     print("######################################################")
     
 #################################### BEGIN MAIN ######################################
@@ -269,7 +272,12 @@ def main():
     os.makedirs(os.path.join(os.getcwd(), 'search_info'), exist_ok=True)
     os.makedirs(os.path.join(os.getcwd(), 'results'), exist_ok=True)
 
-    if not job_settings.use_openai:
+    if job_settings.use_openai:
+        from src.utils import check_openai_model
+        if check_openai_model(job_settings.model_name_version.split(":")[0], job_settings.api_key):
+            print(f"Unable to access OpenAI model {job_settings.model_name_version}. Terminating.")
+            AUTO_EPICFAIL = True
+    else:
         ################## SAFETY CHECKS! ##################
         ## Check if the model is available, download if not.  If unable, crash out.
         if check_model_file(job_settings.model_name_version):

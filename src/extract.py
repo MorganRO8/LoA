@@ -59,12 +59,15 @@ def batch_extract(job_settings: JobSettings):
     # Check for Ollama binary and start server
     begin_ollama_server()
 
-    data = PromptData(model_name_version=job_settings.model_name_version,
-                      check_model_name_version=job_settings.check_model_name_version,
-                      use_openai=job_settings.use_openai,
-                      use_hi_res=job_settings.use_hi_res,
-                      use_multimodal=job_settings.use_multimodal,
-                      use_thinking=job_settings.use_thinking)
+    data = PromptData(
+        model_name_version=job_settings.model_name_version,
+        check_model_name_version=job_settings.check_model_name_version,
+        use_openai=job_settings.use_openai,
+        api_key=job_settings.api_key,
+        use_hi_res=job_settings.use_hi_res,
+        use_multimodal=job_settings.use_multimodal,
+        use_thinking=job_settings.use_thinking,
+    )
 
     # Determine which files to process
     files_to_process = get_files_to_process(job_settings)
@@ -268,12 +271,15 @@ def extract(file_path, job_settings:JobSettings):
     Returns:
     list or None: Validated results if successful, None if extraction fails.
     '''
-    data = PromptData(model_name_version=job_settings.model_name_version,
-                      check_model_name_version=job_settings.check_model_name_version,
-                      use_openai=job_settings.use_openai,
-                      use_hi_res=job_settings.use_hi_res,
-                      use_multimodal=job_settings.use_multimodal,
-                      use_thinking=job_settings.use_thinking)
+    data = PromptData(
+        model_name_version=job_settings.model_name_version,
+        check_model_name_version=job_settings.check_model_name_version,
+        use_openai=job_settings.use_openai,
+        api_key=job_settings.api_key,
+        use_hi_res=job_settings.use_hi_res,
+        use_multimodal=job_settings.use_multimodal,
+        use_thinking=job_settings.use_thinking,
+    )
 
     # Prepare prompt data
     data._refresh_paper_content(

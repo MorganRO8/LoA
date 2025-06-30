@@ -6,6 +6,7 @@ import hashlib
 import csv
 import numpy as np
 from pdf2image import convert_from_path
+from openai import OpenAI
 import builtins
 import random
 from selenium import webdriver
@@ -1387,7 +1388,7 @@ def estimate_tokens(text):
     return estimated_tokens
 
 
-def get_model_info(model_name_version, ollama_url="http://localhost:11434"):
+def get_model_info(model_name_version, ollama_url="http://localhost:11434", use_openai=False, api_key=None):
     """Return context length and capabilities for a model.
 
     Attempts to run ``ollama show`` via subprocess. If that fails or the needed
@@ -1396,6 +1397,25 @@ def get_model_info(model_name_version, ollama_url="http://localhost:11434"):
     (a set of capability strings). If the context length cannot be determined,
     a default of 32768 is used.
     """
+
+    if use_openai:
+        ctx = 32768
+        caps = {"text"}
+        try:
+            client = OpenAI(api_key=api_key)
+            models = client.models.list()
+            found = False
+            for m in models.data:
+                if m.id == model_name_version:
+                    found = True
+                    if any(word in m.id.lower() for word in ["gpt-4", "vision", "gpt-4o"]):
+                        caps.add("vision")
+                    break
+            if not found:
+                print(f"Model {model_name_version} not available for this API key")
+        except Exception as err:
+            print(f"Failed to query OpenAI for model info: {err}")
+        return {"context_length": ctx, "capabilities": caps}
 
     output = ""
 
@@ -1813,6 +1833,21 @@ def check_model_file(model_name_version):
                 print(f"Global install failed: {e}")
                 return True
         return False
+
+
+def check_openai_model(model_name, api_key=None):
+    """Return True if the given model is unavailable for the provided API key."""
+    try:
+        client = OpenAI(api_key=api_key)
+        models = client.models.list()
+        for m in models.data:
+            if m.id == model_name:
+                return False
+        print(f"OpenAI model {model_name} not found for this API key")
+        return True
+    except Exception as err:
+        print(f"Failed to fetch OpenAI models: {err}")
+        return True
 
 
 def _run_decimer(path):

@@ -76,6 +76,14 @@ The `use_decimer` option (`"y"` or `"n"`) controls whether images are processed
 with DECIMER to extract additional SMILES strings from figures. When enabled,
 any predicted SMILES are inserted back into the text at the location of the
 corresponding figure instead of being appended separately.
+`use_openai` can be set to `"y"` if you want to send prompts to the OpenAI API
+instead of using local Ollama models. Provide your API key with the `api_key`
+setting. You can list available models for your key using:
+```
+curl https://api.openai.com/v1/models \
+  -H "Authorization: Bearer $OPENAI_API_KEY"
+```
+When `use_openai` is enabled, model files are not downloaded through Ollama.
 
 ## Key Components
 

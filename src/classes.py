@@ -127,19 +127,6 @@ class JobSettings(): ## Contains subsettings as well for each of the job types.
         self.model_name, self.model_version = model_name_version.split(":", 1)
         self.model_name_version = f"{self.model_name}:{self.model_version}"
 
-        # Check if model_name indicates OpenAI API usage
-        lower_name = self.model_name.lower()
-        if (
-            lower_name.startswith(("o1-", "ft:", "openai-", "openai/"))
-            or "gpt" in lower_name
-        ):
-            self.use_openai = True
-            self.api_key = self.model_version  # The part after the first colon is the API key
-            os.environ["OPENAI_API_KEY"] = self.api_key  # OpenAI API requires env var
-        else:
-            self.use_openai = False
-            self.api_key = None
-
     def _parse_from_json(self,json):
         for key,val in json.items():
             if key.lower() == "def_search_terms":
@@ -175,6 +162,10 @@ class JobSettings(): ## Contains subsettings as well for each of the job types.
                 self.use_solvent = bool(val.lower() == "y")
             elif key.lower() == "assume_water":
                 self.assume_water = bool(val.lower() == "y")
+            elif key.lower() == "use_openai":
+                self.use_openai = bool(val.lower() == "y")
+            elif key.lower() == "api_key":
+                self.api_key = str(val)
             elif key.lower() == "skip_check":
                 self.skip_check = bool(val.lower() == "y")
             elif key.lower() == "target_type":
@@ -221,6 +212,9 @@ class JobSettings(): ## Contains subsettings as well for each of the job types.
             os.getcwd(), 'search_info', f"{output_directory_id}.txt"
         )
 
+        if self.use_openai and self.api_key:
+            os.environ["OPENAI_API_KEY"] = self.api_key
+
         # Special case: use all locally downloaded papers
         if (
             len(self.def_search_terms) == 1
@@ -232,12 +226,12 @@ class JobSettings(): ## Contains subsettings as well for each of the job types.
 
 
 class PromptData():
-    def __init__(self, model_name_version, check_model_name_version, use_openai=False, use_hi_res=False, use_multimodal=False, use_thinking=False):
+    def __init__(self, model_name_version, check_model_name_version, use_openai=False, api_key=None, use_hi_res=False, use_multimodal=False, use_thinking=False):
         self.model = model_name_version
         self.check_model_name_version = check_model_name_version
         self.use_openai = use_openai  # Track if using OpenAI API
         self.stream = False
-        info = get_model_info(model_name_version)
+        info = get_model_info(model_name_version, use_openai=use_openai, api_key=api_key)
         ctx_len = info["context_length"]
         self.supports_thinking = "thinking" in info["capabilities"]
         self.supports_vision = any(cap in info["capabilities"] for cap in ["vision", "images"])

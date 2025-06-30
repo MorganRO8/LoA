@@ -122,13 +122,28 @@ class JobSettings(): ## Contains subsettings as well for each of the job types.
 
 
     def _update_model_name_version(self, model_name_version):
-        if ":" not in model_name_version:
-            model_name_version += ":latest"
-        self.model_name, self.model_version = model_name_version.split(":", 1)
-        self.model_name_version = f"{self.model_name}:{self.model_version}"
+        """Set ``model_name_version`` respecting OpenAI naming."""
+        if self.use_openai:
+            name = model_name_version.split(":", 1)[0]
+            self.model_name = name
+            self.model_version = ""
+            self.model_name_version = name
+        else:
+            if ":" not in model_name_version:
+                model_name_version += ":latest"
+            self.model_name, self.model_version = model_name_version.split(":", 1)
+            self.model_name_version = f"{self.model_name}:{self.model_version}"
 
-    def _parse_from_json(self,json):
-        for key,val in json.items():
+    def _parse_from_json(self, json):
+        # Handle OpenAI settings first so model parsing knows the mode
+        if "use_openai" in json:
+            self.use_openai = str(json["use_openai"]).lower() == "y"
+        if "api_key" in json:
+            self.api_key = str(json["api_key"])
+
+        for key, val in json.items():
+            if key.lower() in {"use_openai", "api_key"}:
+                continue
             if key.lower() == "def_search_terms":
                 if isinstance(val, list):
                     self.def_search_terms = val
@@ -142,10 +157,15 @@ class JobSettings(): ## Contains subsettings as well for each of the job types.
             elif key.lower() == "model_name_version":
                 self._update_model_name_version(val)
             elif key.lower() == "check_model_name_version":
-                if ":" not in val:
-                    val += ":latest"
-                self.check_model_name, self.check_model_version = val.split(":", 1)
-                self.check_model_name_version = f"{self.check_model_name}:{self.check_model_version}"
+                if self.use_openai:
+                    self.check_model_name = val.split(":", 1)[0]
+                    self.check_model_version = ""
+                    self.check_model_name_version = self.check_model_name
+                else:
+                    if ":" not in val:
+                        val += ":latest"
+                    self.check_model_name, self.check_model_version = val.split(":", 1)
+                    self.check_model_name_version = f"{self.check_model_name}:{self.check_model_version}"
             elif key.lower() == "concurrent":
                 self.concurrent = bool(val.lower() == "y")
             elif key.lower() == "use_hi_res":
@@ -212,6 +232,12 @@ class JobSettings(): ## Contains subsettings as well for each of the job types.
             os.getcwd(), 'search_info', f"{output_directory_id}.txt"
         )
 
+        if self.use_openai:
+            # Ensure model names are plain IDs without version suffixes
+            self.model_name_version = self.model_name_version.split(":", 1)[0]
+            self.model_name = self.model_name_version
+            self.check_model_name_version = self.check_model_name_version.split(":", 1)[0]
+            self.check_model_name = self.check_model_name_version
         if self.use_openai and self.api_key:
             os.environ["OPENAI_API_KEY"] = self.api_key
 

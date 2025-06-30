@@ -261,6 +261,7 @@ class PromptData():
         ctx_len = info["context_length"]
         self.supports_thinking = "thinking" in info["capabilities"]
         self.supports_vision = any(cap in info["capabilities"] for cap in ["vision", "images"])
+        self.supports_responses = "responses" in info["capabilities"]
         if use_multimodal and not self.supports_vision:
             if use_openai:
                 print(

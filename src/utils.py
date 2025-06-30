@@ -1874,8 +1874,17 @@ def extract_smiles_for_paper(file_path, text):
         extra_results = _run_decimer(abs_path)
         smiles = [item.get('smiles') for item in extra_results if item.get('smiles')]
         if smiles:
-            prepend = "[Unplaced SMILES: " + ", ".join(smiles) + "]\n"
-            return prepend + text, []
+            append = (
+                "\n\n[We ran automated code to extract SMILES from figures in the paper and "
+                "place them in the correct location within the text, however we did not "
+                "find locations for these SMILES strings that were extracted, so we will "
+                "provide them here. Please do your best to guess which molecules in the "
+                "paper these SMILES refer to, based on descriptions of the molecules and "
+                "obvious features apparent in the SMILES strings: "
+                + ", ".join(smiles)
+                + "]\n"
+            )
+            return text + append, []
         return text, []
 
     images_dir = os.path.join(os.getcwd(), 'images', paper_id)

@@ -128,10 +128,14 @@ class JobSettings(): ## Contains subsettings as well for each of the job types.
         self.model_name_version = f"{self.model_name}:{self.model_version}"
 
         # Check if model_name indicates OpenAI API usage
-        if self.model_name.startswith("o1-") or self.model_name.startswith("gpt-"):
+        lower_name = self.model_name.lower()
+        if (
+            lower_name.startswith(("o1-", "ft:", "openai-", "openai/"))
+            or "gpt" in lower_name
+        ):
             self.use_openai = True
             self.api_key = self.model_version  # The part after the first colon is the API key
-            os.environ["OPENAI_API_KEY"] = self.api_key # To use the current version of openai api, must set as environment variable
+            os.environ["OPENAI_API_KEY"] = self.api_key  # OpenAI API requires env var
         else:
             self.use_openai = False
             self.api_key = None

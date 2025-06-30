@@ -146,15 +146,20 @@ def batch_extract(job_settings: JobSettings):
                 if check_result == "yes" or check_result == "Yes":
                     if job_settings.use_openai:
                         client = OpenAI()
-
+                        content_parts = [{"type": "text", "text": data.prompt}]
+                        if job_settings.use_multimodal:
+                            for img in data.images + data.si_images:
+                                content_parts.append(
+                                    {
+                                        "type": "image_url",
+                                        "image_url": {
+                                            "url": f"data:image/png;base64,{img}"
+                                        },
+                                    }
+                                )
                         completion = client.chat.completions.create(
                             model=job_settings.model_name,
-                            messages=[
-                                {
-                                    "role": "user",
-                                    "content": data.prompt
-                                }
-                            ]
+                            messages=[{"role": "user", "content": content_parts}],
                         )
 
                         result = completion.choices[0].message.content
@@ -353,15 +358,18 @@ def single_file_extract(job_settings: JobSettings, data: PromptData, file_path):
             if check_result == "yes" or check_result == "Yes":
                 if job_settings.use_openai:
                     client = OpenAI()
-
+                    content_parts = [{"type": "text", "text": data.prompt}]
+                    if job_settings.use_multimodal:
+                        for img in data.images + data.si_images:
+                            content_parts.append(
+                                {
+                                    "type": "image_url",
+                                    "image_url": {"url": f"data:image/png;base64,{img}"},
+                                }
+                            )
                     completion = client.chat.completions.create(
                         model=job_settings.model_name,
-                        messages=[
-                            {
-                                "role": "user",
-                                "content": data.prompt
-                            }
-                        ]
+                        messages=[{"role": "user", "content": content_parts}],
                     )
 
                     result = completion.choices[0].message.content

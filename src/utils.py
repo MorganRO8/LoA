@@ -1400,7 +1400,7 @@ def get_model_info(model_name_version, ollama_url="http://localhost:11434", use_
     """
 
     if use_openai:
-        ctx = 32768
+        ctx = 64000
         caps = {"text"}
         try:
             client = OpenAI(api_key=api_key)
@@ -1884,9 +1884,19 @@ def _run_decimer(path):
 def _rms_diff(arr1, arr2):
     """Return the normalized RMS difference between two image arrays."""
     arr1 = arr1.astype("float32")
-    arr2 = arr2.astype("float32")
+    # Ensure arr2 is uint8 before converting to an image
+    if arr2.dtype != np.uint8:
+        scaled = arr2.copy()
+        if scaled.max() <= 1.0:
+            scaled *= 255.0
+        scaled = np.clip(scaled, 0, 255)
+        arr2 = scaled.astype("uint8")
     if arr1.shape != arr2.shape:
-        arr2 = np.array(Image.fromarray(arr2).resize((arr1.shape[1], arr1.shape[0])))
+        arr2 = np.array(
+            Image.fromarray(arr2).resize((arr1.shape[1], arr1.shape[0]))
+        ).astype("float32")
+    else:
+        arr2 = arr2.astype("float32")
     diff = np.sqrt(np.mean((arr1 - arr2) ** 2))
     return diff / 255.0
 

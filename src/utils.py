@@ -1402,20 +1402,28 @@ def get_model_info(model_name_version, ollama_url="http://localhost:11434", use_
     if use_openai:
         ctx = 64000
         caps = {"text"}
+        model_id = model_name_version.split(":", 1)[0]
+        # Basic heuristic for vision-capable models
+        heuristics_vision = any(
+            key in model_id.lower()
+            for key in ["gpt-4o", "vision", "gpt-4-turbo", "gpt-4-1106", "gpt-4-0125"]
+        )
         try:
             client = OpenAI(api_key=api_key)
             models = client.models.list()
             found = False
             for m in models.data:
-                if m.id == model_name_version:
+                if m.id == model_id:
                     found = True
-                    if any(word in m.id.lower() for word in ["gpt-4", "vision", "gpt-4o"]):
-                        caps.add("vision")
+                    if any(word in m.id.lower() for word in ["gpt-4o", "vision"]):
+                        heuristics_vision = True
                     break
             if not found:
-                print(f"Model {model_name_version} not available for this API key")
+                print(f"Model {model_id} not available for this API key")
         except Exception as err:
             print(f"Failed to query OpenAI for model info: {err}")
+        if heuristics_vision:
+            caps.add("vision")
         return {"context_length": ctx, "capabilities": caps}
 
     output = ""

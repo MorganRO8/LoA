@@ -262,8 +262,14 @@ class PromptData():
         self.supports_thinking = "thinking" in info["capabilities"]
         self.supports_vision = any(cap in info["capabilities"] for cap in ["vision", "images"])
         if use_multimodal and not self.supports_vision:
-            print("Model does not support vision; disabling multimodal features.")
-            use_multimodal = False
+            if use_openai:
+                print(
+                    "Could not verify vision support for this OpenAI model; proceeding with multimodal anyway."
+                )
+                self.supports_vision = True
+            else:
+                print("Model does not support vision; disabling multimodal features.")
+                use_multimodal = False
         self.options = {
                         "num_ctx": ctx_len,
                         "num_predict": 2048,

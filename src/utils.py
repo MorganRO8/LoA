@@ -6,6 +6,7 @@ import hashlib
 import csv
 import numpy as np
 from pdf2image import convert_from_path
+from PIL import Image
 from openai import OpenAI
 import builtins
 import random
@@ -1880,7 +1881,23 @@ def _run_decimer(path):
     return []
 
 
-def extract_smiles_for_paper(file_path, text):
+def _rms_diff(arr1, arr2):
+    """Return the normalized RMS difference between two image arrays."""
+    arr1 = arr1.astype("float32")
+    arr2 = arr2.astype("float32")
+    if arr1.shape != arr2.shape:
+        arr2 = np.array(Image.fromarray(arr2).resize((arr1.shape[1], arr1.shape[0])))
+    diff = np.sqrt(np.mean((arr1 - arr2) ** 2))
+    return diff / 255.0
+
+
+def _load_pdf_pages(pdf_path, dpi=300):
+    """Return list of page images as numpy arrays."""
+    pages = convert_from_path(pdf_path, dpi)
+    return [np.array(p.convert("RGB")) for p in pages]
+
+
+def extract_smiles_for_paper(file_path, text, match_tolerance=0.1):
     """Insert SMILES strings predicted from figures directly into the text.
 
     Parameters
@@ -1907,20 +1924,74 @@ def extract_smiles_for_paper(file_path, text):
 
     if ext == '.pdf':
         extra_results = _run_decimer(abs_path)
-        smiles = [item.get('smiles') for item in extra_results if item.get('smiles')]
-        if smiles:
+        if not extra_results:
+            return text, []
+
+        page_images = _load_pdf_pages(abs_path, dpi=300)
+        images_dir = os.path.join(os.getcwd(), 'images', paper_id)
+        placeholders = {
+            os.path.basename(p): os.path.join(images_dir, p)
+            for p in os.listdir(images_dir) if os.path.isfile(os.path.join(images_dir, p))
+        } if os.path.isdir(images_dir) else {}
+
+        match_map = {}
+        leftovers = []
+        for item in extra_results:
+            smi = item.get('smiles')
+            page = item.get('page')
+            bbox = item.get('bbox')
+            if not smi:
+                continue
+            if page and bbox and placeholders:
+                try:
+                    arr = page_images[page - 1]
+                    y0, x0, y1, x1 = bbox
+                    crop = arr[y0:y1, x0:x1]
+                except Exception:
+                    leftovers.append(smi)
+                    continue
+                best_name = None
+                best_diff = 1.0
+                for name, path in placeholders.items():
+                    try:
+                        img_arr = np.array(Image.open(path).convert('RGB'))
+                    except Exception:
+                        continue
+                    diff = _rms_diff(crop, img_arr)
+                    if diff < best_diff:
+                        best_diff = diff
+                        best_name = name
+                if best_name and best_diff <= match_tolerance:
+                    match_map[best_name] = smi
+                else:
+                    leftovers.append(smi)
+            else:
+                leftovers.append(smi)
+
+        pattern = re.compile(r"\[([^\[\]]+\.(?:png|jpg|jpeg|gif|tif|tiff))\]")
+        updated_text = text
+        offset = 0
+        locations = []
+        for match in pattern.finditer(text):
+            img_name = os.path.basename(match.group(1))
+            smi = match_map.get(img_name)
+            if smi:
+                start, end = match.span()
+                start += offset
+                end += offset
+                updated_text = updated_text[:start] + smi + updated_text[end:]
+                offset += len(smi) - (end - start)
+                snippet = updated_text[max(0, start - 30):min(len(updated_text), start + len(smi) + 30)]
+                locations.append((smi, snippet))
+
+        if leftovers:
             append = (
-                "\n\n[We ran automated code to extract SMILES from figures in the paper and "
-                "place them in the correct location within the text, however we did not "
-                "find locations for these SMILES strings that were extracted, so we will "
-                "provide them here. Please do your best to guess which molecules in the "
-                "paper these SMILES refer to, based on descriptions of the molecules and "
-                "obvious features apparent in the SMILES strings: "
-                + ", ".join(smiles)
-                + "]\n"
+                "\n\n[We ran automated code to extract SMILES from figures in the paper but could not "
+                "confidently determine where some should be placed. Please deduce which molecules these "
+                "SMILES refer to: " + ", ".join(leftovers) + "]\n"
             )
-            return text + append, []
-        return text, []
+            updated_text += append
+        return updated_text, locations
 
     images_dir = os.path.join(os.getcwd(), 'images', paper_id)
     pattern = re.compile(r"\[([^\[\]]+\.(?:png|jpg|jpeg|gif|tif|tiff))\]")

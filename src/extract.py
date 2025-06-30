@@ -56,8 +56,9 @@ def batch_extract(job_settings: JobSettings):
     None: Results are written to a CSV file.
     '''
 
-    # Check for Ollama binary and start server
-    begin_ollama_server()
+    # Check for Ollama binary and start server when using local models
+    if not job_settings.use_openai:
+        begin_ollama_server()
 
     data = PromptData(
         model_name_version=job_settings.model_name_version,

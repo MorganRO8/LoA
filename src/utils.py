@@ -1411,49 +1411,17 @@ def get_model_info(model_name_version, ollama_url="http://localhost:11434", use_
 
     if use_openai:
         ctx = 64000
-        caps = {"text"}
+        caps = {"text", "responses", "chat", "vision"}
         model_id = model_name_version.split(":", 1)[0]
-        heuristics_vision = any(
-            key in model_id.lower()
-            for key in ["gpt-4o", "vision", "gpt-4-turbo", "gpt-4-1106", "gpt-4-0125"]
-        )
 
-        # Query OpenAI API to ensure the model is available
         try:
             client = OpenAI(api_key=api_key)
             models = client.models.list()
-            found = False
-            for m in models.data:
-                if m.id == model_id:
-                    found = True
-                    if any(word in m.id.lower() for word in ["gpt-4o", "vision"]):
-                        heuristics_vision = True
-                    break
-            if not found:
+            if not any(m.id == model_id for m in models.data):
                 print(f"Model {model_id} not available for this API key")
         except Exception as err:
-            print(f"Failed to query OpenAI for model info: {err}")
+            print(f"Failed to query OpenAI for model list: {err}")
 
-        # Attempt to scrape model capabilities from OpenAI docs
-        url = f"https://platform.openai.com/docs/models/{model_id}"
-        try:
-            resp = requests.get(url, headers={"User-Agent": "Mozilla/5.0"}, timeout=10)
-            resp.raise_for_status()
-            page = resp.text
-            if _supports_feature(page, "Vision") or _supports_feature(page, "Images"):
-                caps.add("vision")
-            if _supports_feature(page, "Responses"):
-                caps.add("responses")
-            if _supports_feature(page, "Chat Completions"):
-                caps.add("chat")
-        except Exception as err:
-            print(f"Failed to fetch model page {url}: {err}")
-            if heuristics_vision:
-                caps.add("vision")
-        if heuristics_vision and "vision" not in caps:
-            caps.add("vision")
-        if "responses" not in caps and "chat" not in caps:
-            caps.add("chat")
         return {"context_length": ctx, "capabilities": caps}
 
     output = ""

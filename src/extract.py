@@ -150,22 +150,23 @@ def batch_extract(job_settings: JobSettings):
                 if check_result == "yes" or check_result == "Yes":
                     if job_settings.use_openai:
                         client = OpenAI()
-                        if data.supports_responses:
-                            parts = [{"type": "input_text", "text": data.prompt}]
-                            if job_settings.use_multimodal:
-                                for img in data.images + data.si_images:
-                                    parts.append(
-                                        {
-                                            "type": "input_image",
-                                            "image_url": f"data:image/png;base64,{img}",
-                                        }
-                                    )
+                        parts = [{"type": "input_text", "text": data.prompt}]
+                        if job_settings.use_multimodal:
+                            for img in data.images + data.si_images:
+                                parts.append(
+                                    {
+                                        "type": "input_image",
+                                        "image_url": f"data:image/png;base64,{img}",
+                                    }
+                                )
+                        try:
                             resp = client.responses.create(
                                 model=job_settings.model_name,
                                 input=[{"role": "user", "content": parts}],
                             )
                             result = resp.output_text
-                        else:
+                        except Exception as err:
+                            print(f"Responses endpoint failed: {err}. Falling back to chat completions.")
                             content_parts = [{"type": "text", "text": data.prompt}]
                             if job_settings.use_multimodal:
                                 for img in data.images + data.si_images:
@@ -378,22 +379,23 @@ def single_file_extract(job_settings: JobSettings, data: PromptData, file_path):
             if check_result == "yes" or check_result == "Yes":
                 if job_settings.use_openai:
                     client = OpenAI()
-                    if data.supports_responses:
-                        parts = [{"type": "input_text", "text": data.prompt}]
-                        if job_settings.use_multimodal:
-                            for img in data.images + data.si_images:
-                                parts.append(
-                                    {
-                                        "type": "input_image",
-                                        "image_url": f"data:image/png;base64,{img}",
-                                    }
-                                )
+                    parts = [{"type": "input_text", "text": data.prompt}]
+                    if job_settings.use_multimodal:
+                        for img in data.images + data.si_images:
+                            parts.append(
+                                {
+                                    "type": "input_image",
+                                    "image_url": f"data:image/png;base64,{img}",
+                                }
+                            )
+                    try:
                         resp = client.responses.create(
                             model=job_settings.model_name,
                             input=[{"role": "user", "content": parts}],
                         )
                         result = resp.output_text
-                    else:
+                    except Exception as err:
+                        print(f"Responses endpoint failed: {err}. Falling back to chat completions.")
                         content_parts = [{"type": "text", "text": data.prompt}]
                         if job_settings.use_multimodal:
                             for img in data.images + data.si_images:

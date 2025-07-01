@@ -1068,7 +1068,11 @@ def _fetch_pdb_sequence(name):
 
 
 def _smiles_from_string(value):
-    """Return a canonical SMILES string from input using RDKit, local lookup, cirpy or PubChem."""
+    """Return a canonical SMILES string from input using RDKit, Cirpy or PubChem.
+
+    This function now falls back to synonym and related compound searches in
+    PubChem when a direct name lookup does not yield a valid structure.
+    """
     val_lower = value.strip().lower()
     if val_lower in SOLVENT_SMILES_LOOKUP:
         return SOLVENT_SMILES_LOOKUP[val_lower]
@@ -1078,18 +1082,63 @@ def _smiles_from_string(value):
             return Chem.MolToSmiles(mol)
     except Exception:
         pass
+
     try:
         res = cirpy.resolve(value, "smiles")
         if res:
             return res
     except Exception:
         pass
+
+    def _smiles_from_pubchem(name):
+        try:
+            comps = pcp.get_compounds(name, "name")
+            if comps:
+                for comp in comps:
+                    smi = getattr(comp, "canonical_smiles", None)
+                    if smi:
+                        return smi
+        except Exception:
+            pass
+        return None
+
+    smi = _smiles_from_pubchem(value)
+    if smi:
+        return smi
+
+    # Try synonyms and related compounds when a direct lookup fails
     try:
-        compounds = pcp.get_compounds(value, "name")
-        if compounds:
-            return compounds[0].canonical_smiles
+        syns = pcp.get_synonyms(value, "name") or []
+    except Exception:
+        syns = []
+
+    # extract any synonyms from the first failed lookup if available
+    try:
+        comps = pcp.get_compounds(value, "name")
+        if comps:
+            for comp in comps:
+                syns.extend(getattr(comp, "synonyms", []) or [])
     except Exception:
         pass
+
+    for syn in syns:
+        if not syn or syn.lower() == value.lower():
+            continue
+        smi = _smiles_from_pubchem(syn)
+        if smi:
+            return smi
+        # detect numeric identifiers which may be CIDs
+        m = re.search(r"\b(\d{3,})\b", syn)
+        if m:
+            cid = m.group(1)
+            try:
+                comp = pcp.Compound.from_cid(cid)
+                smi = getattr(comp, "canonical_smiles", None)
+                if smi:
+                    return smi
+            except Exception:
+                pass
+
     return None
 
 

@@ -201,12 +201,16 @@ class JobSettings(): ## Contains subsettings as well for each of the job types.
         # Process Secondary extraction parameters.
         ## Set up extraction parameters
         self.extract.schema_data, _ = load_schema_file(self.files.schema)
-        self.extract.schema_data = prepend_target_column(self.extract.schema_data, self.target_type)
+        self.extract.schema_data = prepend_target_column(
+            self.extract.schema_data, self.target_type
+        )
         if self.use_solvent:
             self.extract.schema_data = insert_solvent_column(self.extract.schema_data)
         if self.use_comments:
             self.extract.schema_data = append_comments_column(self.extract.schema_data)
         self.extract.key_columns = [1]
+        if self.use_solvent:
+            self.extract.key_columns.append(2)
         self.extract.num_columns = len(self.extract.schema_data)
         self.extract.headers = [self.extract.schema_data[column_number]['name'] for column_number in range(1, self.extract.num_columns + 1)] + ['paper']
         self.extract.prompt = generate_prompt(

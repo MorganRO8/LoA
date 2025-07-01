@@ -228,16 +228,15 @@ def batch_extract(job_settings: JobSettings):
                     paper_filename = os.path.splitext(os.path.basename(file))[0]
 
                     # Filter results based on key columns
-                    for key_column in job_settings.extract.key_columns:
-                        if key_column is not None:
-                            key_values = set()
-                            filtered_result = []
-                            for row in validated_result:
-                                key_value = row[key_column - 1]
-                                if key_value not in key_values:
-                                    key_values.add(key_value)
-                                    filtered_result.append(row)
-                            validated_result = filtered_result
+                    if job_settings.extract.key_columns:
+                        key_values = set()
+                        filtered_result = []
+                        for row in validated_result:
+                            key = tuple(row[i - 1] for i in job_settings.extract.key_columns)
+                            if key not in key_values:
+                                key_values.add(key)
+                                filtered_result.append(row)
+                        validated_result = filtered_result
 
                     # Add paper filename to each row
                     for row in validated_result:
@@ -458,15 +457,13 @@ def single_file_extract(job_settings: JobSettings, data: PromptData, file_path):
 
             if validated_result:
                 # Filter results based on key columns
-                for key_column in job_settings.extract.key_columns:
-                    if key_column is None:
-                        continue
+                if job_settings.extract.key_columns:
                     key_values = set()
                     filtered_result = []
                     for row in validated_result:
-                        key_value = row[key_column - 1]
-                        if key_value not in key_values:
-                            key_values.add(key_value)
+                        key = tuple(row[i - 1] for i in job_settings.extract.key_columns)
+                        if key not in key_values:
+                            key_values.add(key)
                             filtered_result.append(row)
                     validated_result = filtered_result
 

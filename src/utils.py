@@ -563,7 +563,8 @@ def _first_column_instruction(target_type: str, col_name: str) -> str:
         )
     return (
         f"The first column '{col_name}' uniquely identifies each {descriptor}. "
-        "Provide a SMILES string if available or a common name. "
+        "Always provide a SMILES string directly if it is available. "
+        "Only fall back to an IUPAC or common name when no SMILES is given. "
         "Common names will be resolved to SMILES."
     )
 
@@ -729,6 +730,7 @@ Extraction Instructions:
 - Enclose all string values in double-quotes.
 - Never use natural language outside of a string enclosed in double-quotes.
 - For range values, use the format "min-max" when a range is explicitly expected.
+- Provide SMILES strings directly whenever possible. This has the highest priority over IUPAC or common names.
 - Do not include headers, explanations, summaries, or any additional formatting.
 - Invalid responses will result in retries, causing significant time and money loss per paper.
 - Ignore any information in references that may be included at the end of the paper.

@@ -1091,18 +1091,18 @@ def _smiles_from_string(value):
         pass
 
     def _smiles_from_pubchem(name):
+        """Return a canonical SMILES for a name via PubChem, if available."""
         try:
             comps = pcp.get_compounds(name, "name")
-            if comps:
-                for comp in comps:
-                    smi = getattr(comp, "canonical_smiles", None)
-                    if smi:
-                        return smi
+            for comp in comps:
+                smi = getattr(comp, "canonical_smiles", None)
+                if smi:
+                    return smi, comp
         except Exception:
             pass
-        return None
+        return None, None
 
-    smi = _smiles_from_pubchem(value)
+    smi, comp = _smiles_from_pubchem(value)
     if smi:
         return smi
 
@@ -1116,6 +1116,11 @@ def _smiles_from_string(value):
     try:
         for comp in pcp.get_compounds(value, "name"):
             syns.update(getattr(comp, "synonyms", []) or [])
+            rec = getattr(comp, "record", {})
+            for rel in rec.get("compound", []):
+                cid = rel.get("id", {}).get("id", {}).get("cid")
+                if cid:
+                    syns.add(f"CID {cid}")
     except Exception:
         pass
 
@@ -1125,10 +1130,17 @@ def _smiles_from_string(value):
         if not syn or syn.lower() in seen:
             continue
         seen.add(syn.lower())
-        smi = _smiles_from_pubchem(syn)
+        smi, comp = _smiles_from_pubchem(syn)
         if smi:
             return smi
-        m = re.search(r"\bCID\s*(\d+)\b", syn, re.IGNORECASE)
+        if comp:
+            syns.update(getattr(comp, "synonyms", []) or [])
+            rec = getattr(comp, "record", {})
+            for rel in rec.get("compound", []):
+                cid2 = rel.get("id", {}).get("id", {}).get("cid")
+                if cid2:
+                    syns.add(f"CID {cid2}")
+        m = re.search(r"\bCID\s+(\d+)\b", syn, re.IGNORECASE)
         if m:
             cid = m.group(1)
             try:
@@ -1137,12 +1149,22 @@ def _smiles_from_string(value):
                 if smi:
                     return smi
                 syns.update(getattr(comp, "synonyms", []) or [])
+                rec = getattr(comp, "record", {})
+                for rel in rec.get("compound", []):
+                    cid2 = rel.get("id", {}).get("id", {}).get("cid")
+                    if cid2:
+                        syns.add(f"CID {cid2}")
             except Exception:
                 pass
         else:
             try:
                 for comp in pcp.get_compounds(syn, "name"):
                     syns.update(getattr(comp, "synonyms", []) or [])
+                    rec = getattr(comp, "record", {})
+                    for rel in rec.get("compound", []):
+                        cid = rel.get("id", {}).get("id", {}).get("cid")
+                        if cid:
+                            syns.add(f"CID {cid}")
             except Exception:
                 pass
 

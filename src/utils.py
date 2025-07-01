@@ -1107,28 +1107,28 @@ def _smiles_from_string(value):
         return smi
 
     # Try synonyms and related compounds when a direct lookup fails
+    syns: set[str] = set()
     try:
-        syns = pcp.get_synonyms(value, "name") or []
-    except Exception:
-        syns = []
-
-    # extract any synonyms from the first failed lookup if available
-    try:
-        comps = pcp.get_compounds(value, "name")
-        if comps:
-            for comp in comps:
-                syns.extend(getattr(comp, "synonyms", []) or [])
+        syns.update(pcp.get_synonyms(value, "name") or [])
     except Exception:
         pass
 
-    for syn in syns:
-        if not syn or syn.lower() == value.lower():
+    try:
+        for comp in pcp.get_compounds(value, "name"):
+            syns.update(getattr(comp, "synonyms", []) or [])
+    except Exception:
+        pass
+
+    seen: set[str] = {value.lower()}
+    while syns:
+        syn = syns.pop()
+        if not syn or syn.lower() in seen:
             continue
+        seen.add(syn.lower())
         smi = _smiles_from_pubchem(syn)
         if smi:
             return smi
-        # detect numeric identifiers which may be CIDs
-        m = re.search(r"\b(\d{3,})\b", syn)
+        m = re.search(r"\bCID\s*(\d+)\b", syn, re.IGNORECASE)
         if m:
             cid = m.group(1)
             try:
@@ -1136,6 +1136,13 @@ def _smiles_from_string(value):
                 smi = getattr(comp, "canonical_smiles", None)
                 if smi:
                     return smi
+                syns.update(getattr(comp, "synonyms", []) or [])
+            except Exception:
+                pass
+        else:
+            try:
+                for comp in pcp.get_compounds(syn, "name"):
+                    syns.update(getattr(comp, "synonyms", []) or [])
             except Exception:
                 pass
 

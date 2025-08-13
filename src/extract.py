@@ -56,15 +56,19 @@ def batch_extract(job_settings: JobSettings):
     None: Results are written to a CSV file.
     '''
 
-    # Check for Ollama binary and start server
-    begin_ollama_server()
+    # Check for Ollama binary and start server when using local models
+    if not job_settings.use_openai:
+        begin_ollama_server()
 
-    data = PromptData(model_name_version=job_settings.model_name_version,
-                      check_model_name_version=job_settings.check_model_name_version,
-                      use_openai=job_settings.use_openai,
-                      use_hi_res=job_settings.use_hi_res,
-                      use_multimodal=job_settings.use_multimodal,
-                      use_thinking=job_settings.use_thinking)
+    data = PromptData(
+        model_name_version=job_settings.model_name_version,
+        check_model_name_version=job_settings.check_model_name_version,
+        use_openai=job_settings.use_openai,
+        api_key=job_settings.api_key,
+        use_hi_res=job_settings.use_hi_res,
+        use_multimodal=job_settings.use_multimodal,
+        use_thinking=job_settings.use_thinking,
+    )
 
     # Determine which files to process
     files_to_process = get_files_to_process(job_settings)
@@ -74,37 +78,47 @@ def batch_extract(job_settings: JobSettings):
     # Process each file
     for file in files_to_process:
         print(f"Now processing {file}")
-        if data._refresh_paper_content(
-            file,
-            job_settings.extract.prompt,
-            job_settings.check_prompt,
-            check_only=True,
-        ):
-            continue
-
         retry_count = 0
         success = False
-        
-        # Use a check prompt to lower cost
-        check_response = requests.post(
-            f"{job_settings.extract.ollama_url}/api/generate", json=data.__check__()
-        )
-        check_response.raise_for_status()
-        check_result = check_response.json()["response"]
-        print(f"Check result was '{check_result}'")
-        allow_verification = str(check_result).strip().lower().startswith("yes")
-
-        if allow_verification:
-            data._refresh_paper_content(
+        if job_settings.skip_check:
+            if data._refresh_paper_content(
                 file,
                 job_settings.extract.prompt,
                 job_settings.check_prompt,
                 check_only=False,
+            ):
+                continue
+            check_result = "yes"
+            allow_verification = True
+        else:
+            if data._refresh_paper_content(
+                file,
+                job_settings.extract.prompt,
+                job_settings.check_prompt,
+                check_only=True,
+            ):
+                continue
+            # Use a check prompt to lower cost
+            check_response = requests.post(
+                f"{job_settings.extract.ollama_url}/api/generate", json=data.__check__()
             )
+            check_response.raise_for_status()
+            check_result = check_response.json()["response"]
+            print(f"Check result was '{check_result}'")
+            allow_verification = str(check_result).strip().lower().startswith("yes")
+
+        if allow_verification:
+            if not job_settings.skip_check:
+                data._refresh_paper_content(
+                    file,
+                    job_settings.extract.prompt,
+                    job_settings.check_prompt,
+                    check_only=False,
+                )
 
             if job_settings.use_decimer:
                 print("Attempting to pull SMILES from images in paper...")
-                new_text, locations = extract_smiles_for_paper(file_path, data.paper_content)
+                new_text, locations = extract_smiles_for_paper(file, data.paper_content)
                 data.paper_content = new_text
                 base_prompt = generate_prompt(
                     job_settings.extract.schema_data,
@@ -113,7 +127,7 @@ def batch_extract(job_settings: JobSettings):
                     job_settings.target_type,
                 )
                 data.prompt = (
-                    f"{base_prompt}\n\n{data.paper_content}\n\nAgain, please make sure to respond only in the specified format exactly as described, or you will cause errors.\nResponse:"
+                    f"Paper Contents:\n{data.paper_content}\n\n{base_prompt}\n\nAgain, please make sure to respond only in the specified format exactly as described, or you will cause errors.\nResponse:"
                 )
                 if locations:
                     parts = []
@@ -136,18 +150,37 @@ def batch_extract(job_settings: JobSettings):
                 if check_result == "yes" or check_result == "Yes":
                     if job_settings.use_openai:
                         client = OpenAI()
-
-                        completion = client.chat.completions.create(
-                            model=job_settings.model_name,
-                            messages=[
-                                {
-                                    "role": "user",
-                                    "content": data.prompt
-                                }
-                            ]
-                        )
-
-                        result = completion.choices[0].message.content
+                        parts = [{"type": "input_text", "text": data.prompt}]
+                        if job_settings.use_multimodal:
+                            for img in data.images + data.si_images:
+                                parts.append(
+                                    {
+                                        "type": "input_image",
+                                        "image_url": f"data:image/png;base64,{img}",
+                                    }
+                                )
+                        try:
+                            resp = client.responses.create(
+                                model=job_settings.model_name,
+                                input=[{"role": "user", "content": parts}],
+                            )
+                            result = resp.output_text
+                        except Exception as err:
+                            print(f"Responses endpoint failed: {err}. Falling back to chat completions.")
+                            content_parts = [{"type": "text", "text": data.prompt}]
+                            if job_settings.use_multimodal:
+                                for img in data.images + data.si_images:
+                                    content_parts.append(
+                                        {
+                                            "type": "image_url",
+                                            "image_url": {"url": f"data:image/png;base64,{img}"},
+                                        }
+                                    )
+                            completion = client.chat.completions.create(
+                                model=job_settings.model_name,
+                                messages=[{"role": "user", "content": content_parts}],
+                            )
+                            result = completion.choices[0].message.content
                     else:
                         # Use Ollama API
                         response = requests.post(f"{job_settings.extract.ollama_url}/api/generate", json=data.__dict__())
@@ -175,7 +208,7 @@ def batch_extract(job_settings: JobSettings):
                         try:
                             if item.lower().replace(" ", "") == 'null' or item == '' or item == '""' or item == "''" or item.strip().lower().replace('"', '').replace("'", "") == 'no information found':
                                 row[idx] = 'null'
-                        except:
+                        except Exception:
                             pass
 
                 validated_result = validate_result(
@@ -195,16 +228,15 @@ def batch_extract(job_settings: JobSettings):
                     paper_filename = os.path.splitext(os.path.basename(file))[0]
 
                     # Filter results based on key columns
-                    for key_column in job_settings.extract.key_columns:
-                        if key_column is not None:
-                            key_values = set()
-                            filtered_result = []
-                            for row in validated_result:
-                                key_value = row[key_column - 1]
-                                if key_value not in key_values:
-                                    key_values.add(key_value)
-                                    filtered_result.append(row)
-                            validated_result = filtered_result
+                    if job_settings.extract.key_columns:
+                        key_values = set()
+                        filtered_result = []
+                        for row in validated_result:
+                            key = tuple(row[i - 1] for i in job_settings.extract.key_columns)
+                            if key not in key_values:
+                                key_values.add(key)
+                                filtered_result.append(row)
+                        validated_result = filtered_result
 
                     # Add paper filename to each row
                     for row in validated_result:
@@ -253,12 +285,15 @@ def extract(file_path, job_settings:JobSettings):
     Returns:
     list or None: Validated results if successful, None if extraction fails.
     '''
-    data = PromptData(model_name_version=job_settings.model_name_version,
-                      check_model_name_version=job_settings.check_model_name_version,
-                      use_openai=job_settings.use_openai,
-                      use_hi_res=job_settings.use_hi_res,
-                      use_multimodal=job_settings.use_multimodal,
-                      use_thinking=job_settings.use_thinking)
+    data = PromptData(
+        model_name_version=job_settings.model_name_version,
+        check_model_name_version=job_settings.check_model_name_version,
+        use_openai=job_settings.use_openai,
+        api_key=job_settings.api_key,
+        use_hi_res=job_settings.use_hi_res,
+        use_multimodal=job_settings.use_multimodal,
+        use_thinking=job_settings.use_thinking,
+    )
 
     # Prepare prompt data
     data._refresh_paper_content(
@@ -270,7 +305,7 @@ def extract(file_path, job_settings:JobSettings):
             job_settings.target_type,
         ),
         check_prompt=job_settings.check_prompt,
-        check_only=True,
+        check_only=not job_settings.skip_check,
     )
 
     validated_result = single_file_extract(job_settings, data, file_path)
@@ -283,29 +318,33 @@ def extract(file_path, job_settings:JobSettings):
 
 def single_file_extract(job_settings: JobSettings, data: PromptData, file_path):
     retry_count = 0
-    success = False
-    
-    # Use a check prompt to lower cost
-    check_response = requests.post(
-        f"{job_settings.extract.ollama_url}/api/generate", json=data.__check__()
-    )
-    check_response.raise_for_status()
-    check_result = check_response.json()["response"]
-    print(f"Check result was '{check_result}'")
-    allow_verification = str(check_result).strip().lower().startswith("yes")
+
+    if job_settings.skip_check:
+        check_result = "yes"
+        allow_verification = True
+    else:
+        # Use a check prompt to lower cost
+        check_response = requests.post(
+            f"{job_settings.extract.ollama_url}/api/generate", json=data.__check__()
+        )
+        check_response.raise_for_status()
+        check_result = check_response.json()["response"]
+        print(f"Check result was '{check_result}'")
+        allow_verification = str(check_result).strip().lower().startswith("yes")
 
     if allow_verification:
-        data._refresh_paper_content(
-            file_path,
-            generate_prompt(
-                job_settings.extract.schema_data,
-                job_settings.extract.user_instructions,
-                job_settings.extract.key_columns,
-                job_settings.target_type,
-            ),
-            check_prompt=job_settings.check_prompt,
-            check_only=False,
-        )
+        if not job_settings.skip_check:
+            data._refresh_paper_content(
+                file_path,
+                generate_prompt(
+                    job_settings.extract.schema_data,
+                    job_settings.extract.user_instructions,
+                    job_settings.extract.key_columns,
+                    job_settings.target_type,
+                ),
+                check_prompt=job_settings.check_prompt,
+                check_only=False,
+            )
         if job_settings.use_decimer:
             print("Attempting to pull SMILES from images in paper...")
             new_text, locations = extract_smiles_for_paper(file_path, data.paper_content)
@@ -317,7 +356,7 @@ def single_file_extract(job_settings: JobSettings, data: PromptData, file_path):
                 job_settings.target_type,
             )
             data.prompt = (
-                f"{base_prompt}\n\n{data.paper_content}\n\nAgain, please make sure to respond only in the specified format exactly as described, or you will cause errors.\nResponse:"
+                f"Paper Contents:\n{data.paper_content}\n\n{base_prompt}\n\nAgain, please make sure to respond only in the specified format exactly as described, or you will cause errors.\nResponse:"
             )
             if locations:
                 parts = []
@@ -339,18 +378,37 @@ def single_file_extract(job_settings: JobSettings, data: PromptData, file_path):
             if check_result == "yes" or check_result == "Yes":
                 if job_settings.use_openai:
                     client = OpenAI()
-
-                    completion = client.chat.completions.create(
-                        model=job_settings.model_name,
-                        messages=[
-                            {
-                                "role": "user",
-                                "content": data.prompt
-                            }
-                        ]
-                    )
-
-                    result = completion.choices[0].message.content
+                    parts = [{"type": "input_text", "text": data.prompt}]
+                    if job_settings.use_multimodal:
+                        for img in data.images + data.si_images:
+                            parts.append(
+                                {
+                                    "type": "input_image",
+                                    "image_url": f"data:image/png;base64,{img}",
+                                }
+                            )
+                    try:
+                        resp = client.responses.create(
+                            model=job_settings.model_name,
+                            input=[{"role": "user", "content": parts}],
+                        )
+                        result = resp.output_text
+                    except Exception as err:
+                        print(f"Responses endpoint failed: {err}. Falling back to chat completions.")
+                        content_parts = [{"type": "text", "text": data.prompt}]
+                        if job_settings.use_multimodal:
+                            for img in data.images + data.si_images:
+                                content_parts.append(
+                                    {
+                                        "type": "image_url",
+                                        "image_url": {"url": f"data:image/png;base64,{img}"},
+                                    }
+                                )
+                        completion = client.chat.completions.create(
+                            model=job_settings.model_name,
+                            messages=[{"role": "user", "content": content_parts}],
+                        )
+                        result = completion.choices[0].message.content
                 else:
                     # Use Ollama API
                     response = requests.post(f"{job_settings.extract.ollama_url}/api/generate", json=data.__dict__())
@@ -379,7 +437,7 @@ def single_file_extract(job_settings: JobSettings, data: PromptData, file_path):
                             item.strip().lower().replace('"', '').replace("'", "") == 'no information found'
                         ]):
                             row[idx] = 'null'
-                    except:
+                    except Exception:
                         pass
 
             validated_result = validate_result(
@@ -399,15 +457,13 @@ def single_file_extract(job_settings: JobSettings, data: PromptData, file_path):
 
             if validated_result:
                 # Filter results based on key columns
-                for key_column in job_settings.extract.key_columns:
-                    if key_column is None:
-                        continue
+                if job_settings.extract.key_columns:
                     key_values = set()
                     filtered_result = []
                     for row in validated_result:
-                        key_value = row[key_column - 1]
-                        if key_value not in key_values:
-                            key_values.add(key_value)
+                        key = tuple(row[i - 1] for i in job_settings.extract.key_columns)
+                        if key not in key_values:
+                            key_values.add(key)
                             filtered_result.append(row)
                     validated_result = filtered_result
 

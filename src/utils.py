@@ -6,8 +6,9 @@ import hashlib
 import csv
 import numpy as np
 from pdf2image import convert_from_path
+from PIL import Image
+from openai import OpenAI
 import builtins
-import datetime
 import random
 from selenium import webdriver
 from selenium.common.exceptions import WebDriverException
@@ -562,7 +563,8 @@ def _first_column_instruction(target_type: str, col_name: str) -> str:
         )
     return (
         f"The first column '{col_name}' uniquely identifies each {descriptor}. "
-        "Provide a SMILES string if available or a common name. "
+        "Always provide a SMILES string directly if it is available. "
+        "Only fall back to an IUPAC or common name when no SMILES is given. "
         "Common names will be resolved to SMILES."
     )
 
@@ -637,7 +639,7 @@ def load_schema_file(schema_file):
         if not line:
             continue
 
-        parts = line.split('-')
+        parts = line.split('-', 1)
         if len(parts) == 2:
             column_number = int(parts[0].strip())
             info_type, info_value = parts[1].split(':', 1)
@@ -714,48 +716,42 @@ def generate_prompt(schema_data, user_instructions, key_columns=None, target_typ
     # Construct the prompt
     descriptor = _target_descriptor(target_type)
     prompt = f"""
-Please extract information about {descriptor}s from the provided research paper that fits into the following CSV schema:
+Using the research paper text provided above, extract information about {descriptor}s that fits into the following CSV schema:
 
 {schema_info}
 {key_column_info if key_columns else ''}
 
-Instructions:
+Extraction Instructions:
 - Extract relevant information and provide it as comma-separated values.
-- This paper has been flagged as containing relevant information, and should have data to be extracted.
-- Each line should contain {num_columns} values, corresponding to the {num_columns} columns in the schema.
+- This paper has been flagged as containing relevant information and should have data to be extracted.
+- Each line must contain {num_columns} values, corresponding to the {num_columns} columns in the schema.
 - If information is missing for a column, use 'null' as a placeholder.
 - Do not use anything other than 'null' as a placeholder.
 - Enclose all string values in double-quotes.
 - Never use natural language outside of a string enclosed in double-quotes.
-- For range values, use the format "min-max", do not use this format for field expecting integer or float values, if a range is expected it will be labelled explicitly as a range.
+- For range values, use the format "min-max" when a range is explicitly expected.
+- Provide SMILES strings directly whenever possible. This has the highest priority over IUPAC or common names.
 - Do not include headers, explanations, summaries, or any additional formatting.
-- Invalid responses will result in retries, thus causing significant time and money loss per paper.
+- Invalid responses will result in retries, causing significant time and money loss per paper.
 - Ignore any information in references that may be included at the end of the paper.
 
-Below I shall provide a few examples to help you understand the desired output format.
+Below are a few examples that demonstrate the correct output format.
 
-Here is an example with just the names of the columns instead of actual values, and just a single entry:
+Example showing only the column names:
 {schema_diagram}
 
-Here are a few examples with randomly generated values where appropriate (be sure to recognize that these values mean nothing, 
-should be ignored, and definitely not included in your output, this is just to show the proper structure):
-
-Example where the paper contains a single piece of information to extract:
+Example where the paper contains a single piece of information:
 {generate_examples(schema_data, 1)}
 
-Example where the paper contains two pieces of information to extract:
+Example where the paper contains two pieces of information:
 {generate_examples(schema_data, 2)}
 
-Example where the paper contains three pieces of information to extract:
+Example where the paper contains three pieces of information:
 {generate_examples(schema_data, 3)}
-
-Hopefully that is enough examples for you to see the desired output format.
 
 User Instructions:
 {user_instructions}
-
-Paper Contents:
-    """
+"""
 
     return prompt
     
@@ -779,7 +775,7 @@ def generate_check_prompt(schema_data, user_instructions, target_type="small_mol
     # Construct the prompt
     descriptor = _target_descriptor(target_type)
     prompt = f"""
-Please read the following paper and determine whether it contains information about {descriptor}s relevant to the following schema and instructions:
+Using the research paper text provided above, determine whether it contains information about {descriptor}s relevant to the following schema and instructions.
 
 Schema:
 {schema_info}
@@ -787,17 +783,13 @@ Schema:
 User Instructions:
 {user_instructions}
 
-Answer "yes" if the paper contains information that can be extracted according to the schema and instructions.
-Answer "no" if the paper does not contain enough relevant information to fill out a single row of the defined schema.
+Answer "yes" if the paper contains enough information to fill out at least one row of the defined schema.
+Answer "no" if the required information is missing.
 
-Your answer should be only "yes" or "no".
+Your answer must be exactly "yes" or "no" with no additional text.
 
-Understand that if you answer "yes" a somewhat costly call will be made to an api to extract relevant information. 
-So, it is important to only answer "yes" if the paper contains enough relevant information to fill out at least one row of the defined schema.
-Otherwise, answering "yes" when the paper does not contain the needed information will result in wasted money.
-
-Paper Contents:
-    """
+Understand that answering "yes" will result in a costly extraction step, so please be certain.
+"""
     return prompt
     
 
@@ -1078,7 +1070,11 @@ def _fetch_pdb_sequence(name):
 
 
 def _smiles_from_string(value):
-    """Return a canonical SMILES string from input using RDKit, local lookup, cirpy or PubChem."""
+    """Return a canonical SMILES string from input using RDKit, Cirpy or PubChem.
+
+    This function now falls back to synonym and related compound searches in
+    PubChem when a direct name lookup does not yield a valid structure.
+    """
     val_lower = value.strip().lower()
     if val_lower in SOLVENT_SMILES_LOOKUP:
         return SOLVENT_SMILES_LOOKUP[val_lower]
@@ -1088,18 +1084,92 @@ def _smiles_from_string(value):
             return Chem.MolToSmiles(mol)
     except Exception:
         pass
+
     try:
         res = cirpy.resolve(value, "smiles")
         if res:
             return res
     except Exception:
         pass
+
+    def _smiles_from_pubchem(name):
+        """Return a canonical SMILES for a name via PubChem, if available."""
+        try:
+            comps = pcp.get_compounds(name, "name")
+            for comp in comps:
+                smi = getattr(comp, "canonical_smiles", None)
+                if smi:
+                    return smi, comp
+        except Exception:
+            pass
+        return None, None
+
+    smi, comp = _smiles_from_pubchem(value)
+    if smi:
+        return smi
+
+    # Try synonyms and related compounds when a direct lookup fails
+    syns: set[str] = set()
     try:
-        compounds = pcp.get_compounds(value, "name")
-        if compounds:
-            return compounds[0].canonical_smiles
+        syns.update(pcp.get_synonyms(value, "name") or [])
     except Exception:
         pass
+
+    try:
+        for comp in pcp.get_compounds(value, "name"):
+            syns.update(getattr(comp, "synonyms", []) or [])
+            rec = getattr(comp, "record", {})
+            for rel in rec.get("compound", []):
+                cid = rel.get("id", {}).get("id", {}).get("cid")
+                if cid:
+                    syns.add(f"CID {cid}")
+    except Exception:
+        pass
+
+    seen: set[str] = {value.lower()}
+    while syns:
+        syn = syns.pop()
+        if not syn or syn.lower() in seen:
+            continue
+        seen.add(syn.lower())
+        smi, comp = _smiles_from_pubchem(syn)
+        if smi:
+            return smi
+        if comp:
+            syns.update(getattr(comp, "synonyms", []) or [])
+            rec = getattr(comp, "record", {})
+            for rel in rec.get("compound", []):
+                cid2 = rel.get("id", {}).get("id", {}).get("cid")
+                if cid2:
+                    syns.add(f"CID {cid2}")
+        m = re.search(r"\bCID\s+(\d+)\b", syn, re.IGNORECASE)
+        if m:
+            cid = m.group(1)
+            try:
+                comp = pcp.Compound.from_cid(cid)
+                smi = getattr(comp, "canonical_smiles", None)
+                if smi:
+                    return smi
+                syns.update(getattr(comp, "synonyms", []) or [])
+                rec = getattr(comp, "record", {})
+                for rel in rec.get("compound", []):
+                    cid2 = rel.get("id", {}).get("id", {}).get("cid")
+                    if cid2:
+                        syns.add(f"CID {cid2}")
+            except Exception:
+                pass
+        else:
+            try:
+                for comp in pcp.get_compounds(syn, "name"):
+                    syns.update(getattr(comp, "synonyms", []) or [])
+                    rec = getattr(comp, "record", {})
+                    for rel in rec.get("compound", []):
+                        cid = rel.get("id", {}).get("id", {}).get("cid")
+                        if cid:
+                            syns.add(f"CID {cid}")
+            except Exception:
+                pass
+
     return None
 
 
@@ -1399,7 +1469,17 @@ def estimate_tokens(text):
     return estimated_tokens
 
 
-def get_model_info(model_name_version, ollama_url="http://localhost:11434"):
+def _supports_feature(page_text, label):
+    active = re.search(rf'<div[^>]*class="text-sm font-medium"[^>]*>\s*{label}\s*</div>', page_text, re.IGNORECASE)
+    inactive = re.search(rf'<div[^>]*class="text-sm font-medium[^>]*text-gray-400[^>]*>\s*{label}\s*</div>', page_text, re.IGNORECASE)
+    if inactive:
+        return False
+    if active:
+        return True
+    return None
+
+
+def get_model_info(model_name_version, ollama_url="http://localhost:11434", use_openai=False, api_key=None):
     """Return context length and capabilities for a model.
 
     Attempts to run ``ollama show`` via subprocess. If that fails or the needed
@@ -1408,6 +1488,21 @@ def get_model_info(model_name_version, ollama_url="http://localhost:11434"):
     (a set of capability strings). If the context length cannot be determined,
     a default of 32768 is used.
     """
+
+    if use_openai:
+        ctx = 64000
+        caps = {"text", "responses", "chat", "vision"}
+        model_id = model_name_version.split(":", 1)[0]
+
+        try:
+            client = OpenAI(api_key=api_key)
+            models = client.models.list()
+            if not any(m.id == model_id for m in models.data):
+                print(f"Model {model_id} not available for this API key")
+        except Exception as err:
+            print(f"Failed to query OpenAI for model list: {err}")
+
+        return {"context_length": ctx, "capabilities": caps}
 
     output = ""
 
@@ -1753,11 +1848,11 @@ def begin_ollama_server():
     # Ping ollama port to see if it is running
     try:
         response = requests.get("http://localhost:11434")
-    
-    except:
+
+    except Exception:
         try:
             response.status_code = 404
-        except:
+        except Exception:
             is_ollama_running = False
         
     # If so, cool, if not, start it!
@@ -1766,7 +1861,7 @@ def begin_ollama_server():
             is_ollama_running = True
         else:
             is_ollama_running = False
-    except:
+    except Exception:
         is_ollama_running = False
 
     if is_ollama_running:
@@ -1784,10 +1879,18 @@ def begin_ollama_server():
         
         try:
             # Start ollama server
-            subprocess.Popen(["./ollama", "serve"], stdout=subprocess.DEVNULL, stderr=subprocess.STDOUT)
-        except:
+            subprocess.Popen(
+                ["./ollama", "serve"],
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.STDOUT,
+            )
+        except Exception:
             # print("Failed to start ollama using portable install, trying with full install")
-            subprocess.Popen(["ollama", "serve"], stdout=subprocess.DEVNULL, stderr=subprocess.STDOUT)
+            subprocess.Popen(
+                ["ollama", "serve"],
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.STDOUT,
+            )
 
 def check_model_file(model_name_version):
     model_name, model_version = model_name_version.split(":")
@@ -1805,7 +1908,7 @@ def check_model_file(model_name_version):
         return False
     else:
         begin_ollama_server()
-        print(f"Model file not found. Pulling the model...")
+        print("Model file not found. Pulling the model...")
         try:
             subprocess.run(["./ollama", "pull", model_name_version], check=True)
         except Exception as e:
@@ -1819,10 +1922,27 @@ def check_model_file(model_name_version):
         return False
 
 
+def check_openai_model(model_name, api_key=None):
+    """Return True if the given model is unavailable for the provided API key."""
+    try:
+        client = OpenAI(api_key=api_key)
+        models = client.models.list()
+        for m in models.data:
+            if m.id == model_name:
+                return False
+        print(f"OpenAI model {model_name} not found for this API key")
+        return True
+    except Exception as err:
+        print(f"Failed to fetch OpenAI models: {err}")
+        return True
+
+
 def _run_decimer(path):
     """Execute DECIMER extraction in a separate conda environment."""
     script = os.path.join(os.path.dirname(__file__), "decimer_runner.py")
-    cmd = ["conda", "run", "-n", "DECIMER", "python", script, path]
+    # Ensure the path is absolute so DECIMER can locate the file
+    abs_path = path if os.path.isabs(path) else os.path.join(os.getcwd(), 'scraped_docs', path)
+    cmd = ["conda", "run", "-n", "DECIMER", "python", script, abs_path]
     try:
         result = subprocess.run(
             cmd,
@@ -1839,15 +1959,41 @@ def _run_decimer(path):
         return []
 
     try:
-        smiles = json.loads(result.stdout.strip())
-        if isinstance(smiles, list):
-            return [s for s in smiles if s]
+        data = json.loads(result.stdout.strip())
+        if isinstance(data, list):
+            return data
     except json.JSONDecodeError:
         print(f"Could not decode DECIMER output: {result.stdout}")
     return []
 
 
-def extract_smiles_for_paper(file_path, text):
+def _rms_diff(arr1, arr2):
+    """Return the normalized RMS difference between two image arrays."""
+    arr1 = arr1.astype("float32")
+    # Ensure arr2 is uint8 before converting to an image
+    if arr2.dtype != np.uint8:
+        scaled = arr2.copy()
+        if scaled.max() <= 1.0:
+            scaled *= 255.0
+        scaled = np.clip(scaled, 0, 255)
+        arr2 = scaled.astype("uint8")
+    if arr1.shape != arr2.shape:
+        arr2 = np.array(
+            Image.fromarray(arr2).resize((arr1.shape[1], arr1.shape[0]))
+        ).astype("float32")
+    else:
+        arr2 = arr2.astype("float32")
+    diff = np.sqrt(np.mean((arr1 - arr2) ** 2))
+    return diff / 255.0
+
+
+def _load_pdf_pages(pdf_path, dpi=300):
+    """Return list of page images as numpy arrays."""
+    pages = convert_from_path(pdf_path, dpi)
+    return [np.array(p.convert("RGB")) for p in pages]
+
+
+def extract_smiles_for_paper(file_path, text, match_tolerance=0.1):
     """Insert SMILES strings predicted from figures directly into the text.
 
     Parameters
@@ -1868,16 +2014,83 @@ def extract_smiles_for_paper(file_path, text):
     if not text:
         return text, []
 
+    abs_path = file_path if os.path.isabs(file_path) else os.path.join(os.getcwd(), 'scraped_docs', file_path)
+    ext = os.path.splitext(abs_path)[1].lower()
     paper_id = os.path.splitext(os.path.basename(file_path))[0]
+
+    if ext == '.pdf':
+        extra_results = _run_decimer(abs_path)
+        if not extra_results:
+            return text, []
+
+        page_images = _load_pdf_pages(abs_path, dpi=300)
+        images_dir = os.path.join(os.getcwd(), 'images', paper_id)
+        placeholders = {
+            os.path.basename(p): os.path.join(images_dir, p)
+            for p in os.listdir(images_dir) if os.path.isfile(os.path.join(images_dir, p))
+        } if os.path.isdir(images_dir) else {}
+
+        match_map = {}
+        leftovers = []
+        for item in extra_results:
+            smi = item.get('smiles')
+            page = item.get('page')
+            bbox = item.get('bbox')
+            if not smi:
+                continue
+            if page and bbox and placeholders:
+                try:
+                    arr = page_images[page - 1]
+                    y0, x0, y1, x1 = bbox
+                    crop = arr[y0:y1, x0:x1]
+                except Exception:
+                    leftovers.append(smi)
+                    continue
+                best_name = None
+                best_diff = 1.0
+                for name, path in placeholders.items():
+                    try:
+                        img_arr = np.array(Image.open(path).convert('RGB'))
+                    except Exception:
+                        continue
+                    diff = _rms_diff(crop, img_arr)
+                    if diff < best_diff:
+                        best_diff = diff
+                        best_name = name
+                if best_name and best_diff <= match_tolerance:
+                    match_map[best_name] = smi
+                else:
+                    leftovers.append(smi)
+            else:
+                leftovers.append(smi)
+
+        pattern = re.compile(r"\[([^\[\]]+\.(?:png|jpg|jpeg|gif|tif|tiff))\]")
+        updated_text = text
+        offset = 0
+        locations = []
+        for match in pattern.finditer(text):
+            img_name = os.path.basename(match.group(1))
+            smi = match_map.get(img_name)
+            if smi:
+                start, end = match.span()
+                start += offset
+                end += offset
+                updated_text = updated_text[:start] + smi + updated_text[end:]
+                offset += len(smi) - (end - start)
+                snippet = updated_text[max(0, start - 30):min(len(updated_text), start + len(smi) + 30)]
+                locations.append((smi, snippet))
+
+        if leftovers:
+            append = (
+                "\n\n[We ran automated code to extract SMILES from figures in the paper but could not "
+                "confidently determine where some should be placed. Please deduce which molecules these "
+                "SMILES refer to: " + ", ".join(leftovers) + "]\n"
+            )
+            updated_text += append
+        return updated_text, locations
+
     images_dir = os.path.join(os.getcwd(), 'images', paper_id)
-
-    if not os.path.isdir(images_dir):
-        return text, []
-
-    # Find all image placeholders
     pattern = re.compile(r"\[([^\[\]]+\.(?:png|jpg|jpeg|gif|tif|tiff))\]")
-
-    # Map image filename -> SMILES (first prediction)
     smiles_cache = {}
     for match in pattern.finditer(text):
         img_name = os.path.basename(match.group(1))
@@ -1887,9 +2100,8 @@ def extract_smiles_for_paper(file_path, text):
         if os.path.exists(img_path):
             preds = _run_decimer(img_path)
             if preds:
-                smiles_cache[img_name] = preds[0]
+                smiles_cache[img_name] = preds[0].get('smiles')
 
-    # Replace placeholders with predicted SMILES
     updated_text = text
     offset = 0
     locations = []

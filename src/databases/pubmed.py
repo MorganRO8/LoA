@@ -1,15 +1,19 @@
 import os
 import requests
 import time
-import subprocess
 import xml.etree.ElementTree as ET
+
+from src.classes import JobSettings
 from src.extract import extract
-from src.utils import (is_file_processed, write_to_csv, begin_ollama_server)
+from src.utils import (
+    is_file_processed,
+    write_to_csv,
+    begin_ollama_server,
+)
 
 def download_pubmed_si(pmcid, root):
     """Download supplementary files for a given PubMed Central article."""
     si_files = []
-    ns = {"xlink": "http://www.w3.org/1999/xlink"}
 
     hrefs = []
     for elem in root.findall('.//supplementary-material') + root.findall('.//inline-supplementary-material'):
@@ -35,7 +39,6 @@ def download_pubmed_si(pmcid, root):
             print(f"Failed to download supplementary file {url}: {e}")
 
     return si_files
-from src.classes import JobSettings
 
 # Constants
 ESEARCH_URL = 'https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esearch.fcgi'

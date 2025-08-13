@@ -1,7 +1,6 @@
 import os
 import requests
 import time
-import subprocess
 from bs4 import BeautifulSoup
 from src.extract import extract
 from src.utils import (doi_to_filename, is_file_processed, write_to_csv, begin_ollama_server)

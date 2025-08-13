@@ -25,7 +25,9 @@ LoA (Librarian of Alexandria) is a comprehensive tool designed for researchers, 
 
 2. Install required dependencies listen in install_commands.txt (will be creating requirements.txt soon, as well as a dockerized version)
 
-3. Simply run "python main.py"
+3. Install conda environment using DECIMER-GPU file if usage of DECIMER is desired
+
+4. Simply run "python main.py"
 
 ## Usage
 

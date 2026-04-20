@@ -1285,6 +1285,45 @@ def _bigsmiles_from_string(value):
     return candidate
 
 
+def _polymer_name_from_string(value):
+    """Return a normalized polymer common name when BigSMILES is unavailable."""
+    if value is None:
+        return None
+    candidate = str(value).strip()
+    if not candidate:
+        return None
+
+    lowered = candidate.lower()
+    invalid_literals = {
+        "null",
+        "none",
+        "n/a",
+        "na",
+        "unknown",
+        "example",
+        "example_string",
+        "example_bigsmiles",
+        "example_polymer",
+        "bigsmiles",
+        "polymer",
+        "-",
+        "--",
+    }
+    if lowered in invalid_literals or lowered.startswith("example_"):
+        return None
+
+    # If the text appears to be an attempted BigSMILES but fails validation, reject it.
+    if any(token in candidate for token in ("{", "}", "[", "]", "$", "<", ">")):
+        return None
+
+    # Lightweight "common polymer name" heuristic.
+    if not re.search(r"[A-Za-z]", candidate):
+        return None
+    if len(candidate) < 3:
+        return None
+    return candidate
+
+
 def _protein_sequence_from_string(value):
     """Resolve a protein name or sequence to a valid amino acid sequence."""
     seq = value.strip()
@@ -1337,7 +1376,7 @@ def validate_target_value(value, target_type):
     if t == "peptide":
         return _peptide_sequence_from_string(value)
     if t == "polymer":
-        return _bigsmiles_from_string(value)
+        return _bigsmiles_from_string(value) or _polymer_name_from_string(value)
     return _smiles_from_string(value)
 
 
@@ -1364,7 +1403,13 @@ def validate_result(parsed_result, schema_data, examples, key_columns=None, targ
     """
     num_columns = len(schema_data)
     validated_result = []
-    example_rows = examples.split('\n')
+    # Parse examples using csv reader so comparisons match parsed_result rows even
+    # when quote characters differ from the raw prompt text.
+    example_rows = []
+    for ex_row in csv.reader(examples.splitlines(), quotechar='"', skipinitialspace=True):
+        if len(ex_row) == num_columns:
+            example_rows.append(tuple(cell.strip() for cell in ex_row))
+    example_rows = set(example_rows)
 
     # Check if headers are present in the parsed result
     headers_present = False
@@ -1386,7 +1431,8 @@ def validate_result(parsed_result, schema_data, examples, key_columns=None, targ
             continue
 
         # Skip rows that match example data
-        if any(example_row == ','.join(row) for example_row in example_rows):
+        normalized_row = tuple(cell.strip() for cell in row)
+        if normalized_row in example_rows:
             print(f"Skipping row containing example strings: {row}")
             continue
 

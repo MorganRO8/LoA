@@ -14,6 +14,7 @@ from src.utils import (
     prepend_target_column,
     insert_solvent_column,
     append_comments_column,
+    normalize_target_type,
 )
 from src.document_reader import doc_to_elements
 
@@ -189,11 +190,13 @@ class JobSettings(): ## Contains subsettings as well for each of the job types.
             elif key.lower() == "skip_check":
                 self.skip_check = bool(val.lower() == "y")
             elif key.lower() == "target_type":
-                self.target_type = val
+                # Accept: small_molecule (default), protein, peptide, polymer.
+                self.target_type = normalize_target_type(val)
             else:
                 print(f"JSON key '{key}' not recognized.")
     
     def _finalize(self):
+        self.target_type = normalize_target_type(self.target_type)
         # Check for necessary file information, generate if missing.
         if any([self.files.csv == "results_output.csv",self.files.csv == "", self.files.csv is None]):
             self.files.csv = os.path.join(os.getcwd(), 'results', f"{self.model_name}_{self.model_version}_{os.path.splitext(self.files.schema)[0].split('/')[-1]}.csv")
@@ -219,7 +222,9 @@ class JobSettings(): ## Contains subsettings as well for each of the job types.
             self.extract.key_columns,
             self.target_type,
         )
-        self.extract.examples = generate_examples(self.extract.schema_data)
+        self.extract.examples = generate_examples(
+            self.extract.schema_data, target_type=self.target_type
+        )
         # Generate check prompt to reduce cost
         self.check_prompt = generate_check_prompt(
             self.extract.schema_data,
@@ -419,4 +424,3 @@ class PromptData():
         if self.use_multimodal and self.supports_vision:
             data["images"] = self.images
         return data
-

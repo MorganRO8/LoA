@@ -738,9 +738,15 @@ def generate_prompt(schema_data, user_instructions, key_columns=None, target_typ
     # Generate key column information
     key_column_names = [schema_data[int(column)]['name'] for column in key_columns]
     first_col_instruction = _first_column_instruction(target_type, key_column_names[0]) if key_columns else ""
-    key_column_info = (
-        f"{first_col_instruction} Ensure that the values in this column are unique within each paper." if key_columns else ""
-    )
+    if key_columns:
+        uniqueness_instruction = (
+            "Duplicate target values are allowed when other extracted properties differ."
+            if normalize_target_type(target_type) == "polymer"
+            else "Ensure that the values in this column are unique within each paper."
+        )
+        key_column_info = f"{first_col_instruction} {uniqueness_instruction}"
+    else:
+        key_column_info = ""
 
     # Construct the prompt
     normalized_target_type = normalize_target_type(target_type)
@@ -1457,8 +1463,7 @@ def validate_result(parsed_result, schema_data, examples, key_columns=None, targ
                 validated_row.append('null')
 
         # Check if at least one key column has a non-null value, but only if the row is not all nulls.
-        # key_columns behavior is unchanged for polymer mode: duplicate checks still compare the
-        # parsed row values directly (including raw BigSMILES in column 1 when applicable).
+        # This guards against empty rows; deduplication (if any) happens in extract.py.
         if row_valid and key_columns and not all_null:
             key_values = [validated_row[i-1] for i in key_columns]
             if all(value.lower() == 'null' for value in key_values):

@@ -514,8 +514,8 @@ BUILTIN_TARGET_COLUMNS = {
         "type": "str",
         "name": "polymer_bigsmiles",
         "description": (
-            "BigSMILES string or common name of the polymer. "
-            "Provide BigSMILES directly when available."
+            "BigSMILES representation of the polymer. "
+            "Infer and report BigSMILES from the paper's structures/text when needed."
         ),
     },
 }
@@ -587,8 +587,8 @@ def _first_column_instruction(target_type: str, col_name: str) -> str:
     if descriptor == "polymer":
         return (
             f"The first column '{col_name}' uniquely identifies each polymer. "
-            "Always provide a BigSMILES string directly if it is available. "
-            "Only fall back to a common polymer name when no BigSMILES is given."
+            "Always provide a BigSMILES string. "
+            "Do not return polymer/common names in this column."
         )
     return (
         f"The first column '{col_name}' uniquely identifies each {descriptor}. "
@@ -757,6 +757,14 @@ def generate_prompt(schema_data, user_instructions, key_columns=None, target_typ
             "- Do not convert BigSMILES polymer notation to standard SMILES.\n"
             "- Keep all brackets/braces/parentheses and bond descriptors (e.g., $, <, >) unchanged.\n"
             "- If no valid BigSMILES-like target is present, use 'null' for the target column.\n"
+            "- If BigSMILES is not explicitly written, infer it from the paper's text/figures.\n"
+            "- Build BigSMILES from constitutional repeat unit(s), not full-chain drawings.\n"
+            "- Choose descriptors by connectivity: use [$] for equivalent AA-type links; use [<]/[>] for directional/complementary AB-type links.\n"
+            "- Mark repeat-unit continuation atoms with bonding descriptors and keep bond order consistent for matching descriptor patterns.\n"
+            "- Use the smallest repeat-unit set that captures architecture (homo/random/alternating/block/branched/graft).\n"
+            "- Use stochastic-object form { [left] repeat_unit_1,repeat_unit_2 ; optional_end_groups [right] } with [] terminals when outside connections are unspecified.\n"
+            "- Include descriptor IDs (e.g., [$1], [<1], [>1]) only when multiple orthogonal connection types are required.\n"
+            "- Encode only connectivity supported by the paper; do not invent unsupported stereochemistry/sequence statistics/end-group populations.\n"
             "- Keep output format identical: comma-separated CSV rows only."
         )
     else:
@@ -827,11 +835,12 @@ def generate_check_prompt(schema_data, user_instructions, target_type="small_mol
     if normalized_target_type == "polymer":
         polymer_check_instruction = (
             "\nPolymer-specific checks:\n"
-            "- Consider BigSMILES extractable only when it appears in polymer notation.\n"
-            "- Output BigSMILES exactly as written in source text.\n"
+            "- Consider BigSMILES extractable when polymer repeat-unit/connectivity information in text or figures is sufficient to construct it.\n"
+            "- Output BigSMILES exactly as written in source text when explicit notation is present.\n"
+            "- Otherwise infer BigSMILES from repeat units and connectivity shown in the paper.\n"
             "- Do not convert polymer notation to standard SMILES.\n"
             "- Keep brackets/braces/parentheses and bond descriptors unchanged.\n"
-            "- If no valid BigSMILES-like target appears, answer \"no\"."
+            "- If no valid BigSMILES can be found or constructed from the available evidence, answer \"no\"."
         )
     prompt = f"""
 Using the research paper text provided above, determine whether it contains information about {descriptor}s relevant to the following schema and instructions.
@@ -1291,45 +1300,6 @@ def _bigsmiles_from_string(value):
     return candidate
 
 
-def _polymer_name_from_string(value):
-    """Return a normalized polymer common name when BigSMILES is unavailable."""
-    if value is None:
-        return None
-    candidate = str(value).strip()
-    if not candidate:
-        return None
-
-    lowered = candidate.lower()
-    invalid_literals = {
-        "null",
-        "none",
-        "n/a",
-        "na",
-        "unknown",
-        "example",
-        "example_string",
-        "example_bigsmiles",
-        "example_polymer",
-        "bigsmiles",
-        "polymer",
-        "-",
-        "--",
-    }
-    if lowered in invalid_literals or lowered.startswith("example_"):
-        return None
-
-    # If the text appears to be an attempted BigSMILES but fails validation, reject it.
-    if any(token in candidate for token in ("{", "}", "[", "]", "$", "<", ">")):
-        return None
-
-    # Lightweight "common polymer name" heuristic.
-    if not re.search(r"[A-Za-z]", candidate):
-        return None
-    if len(candidate) < 3:
-        return None
-    return candidate
-
-
 def _protein_sequence_from_string(value):
     """Resolve a protein name or sequence to a valid amino acid sequence."""
     seq = value.strip()
@@ -1382,7 +1352,7 @@ def validate_target_value(value, target_type):
     if t == "peptide":
         return _peptide_sequence_from_string(value)
     if t == "polymer":
-        return _bigsmiles_from_string(value) or _polymer_name_from_string(value)
+        return _bigsmiles_from_string(value)
     return _smiles_from_string(value)
 
 

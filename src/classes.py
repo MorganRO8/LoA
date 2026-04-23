@@ -218,11 +218,17 @@ class JobSettings(): ## Contains subsettings as well for each of the job types.
         if self.use_comments:
             self.extract.schema_data = append_comments_column(self.extract.schema_data)
         if self.target_type == "general":
-            self.extract.key_columns = schema_key_columns
+            self.extract.key_columns = schema_key_columns.copy() if schema_key_columns else []
+            if self.use_solvent and self.extract.key_columns:
+                self.extract.key_columns = [col + 1 for col in self.extract.key_columns]
         elif self.target_type == "reaction":
-            self.extract.key_columns = [1]
+            self.extract.key_columns = [1, 2]
+            if self.use_solvent:
+                self.extract.key_columns.append(3)
         else:
             self.extract.key_columns = [1]
+            if self.use_solvent:
+                self.extract.key_columns.append(2)
         self.extract.num_columns = len(self.extract.schema_data)
         self.extract.headers = [self.extract.schema_data[column_number]['name'] for column_number in range(1, self.extract.num_columns + 1)] + ['paper']
         self.extract.prompt = generate_prompt(

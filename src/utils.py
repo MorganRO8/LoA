@@ -1547,11 +1547,12 @@ def validate_result(parsed_result, schema_data, examples, key_columns=None, targ
                     continue
                 value = validated_row[idx]
                 if str(value).lower() == "null":
-                    if assume_water and solvent_idx == idx:
-                        validated_row[idx] = SOLVENT_SMILES_LOOKUP.get('water', 'O')
-                    else:
-                        row_valid = False
-                        break
+                    if solvent_idx == idx:
+                        if assume_water:
+                            validated_row[idx] = SOLVENT_SMILES_LOOKUP.get('water', 'O')
+                        continue
+                    row_valid = False
+                    break
                 else:
                     canonical = validate_target_value(value, mode)
                     if canonical is None:

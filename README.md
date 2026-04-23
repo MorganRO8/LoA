@@ -110,6 +110,7 @@ before your schema columns.
 - `reaction`: prepends **two** columns:
   1. `reactants` (validated as SMILES)
   2. `products` (validated as SMILES)
+  - You can use an empty schema file if you only want these two built-in columns.
 - `general`: **no built-in target columns are injected**.
 
 Optional columns:
@@ -201,4 +202,3 @@ Unstructured
 Ollama
 
 For more detailed information on each module and function, please refer to the inline documentation in the source code.
-

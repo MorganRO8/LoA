@@ -704,6 +704,11 @@ def load_schema_file(schema_file):
     with open(schema_file, 'r') as f:
         lines = f.readlines()
 
+    # Allow empty schema files (e.g., reaction-only extractions that rely only on
+    # built-in columns like reactants/products).
+    if not lines:
+        return {}, []
+
     key_columns = []
     if lines[0].startswith("Key Columns:"):
         key_columns = [int(column.strip()) for column in lines[0].split(':')[1].strip().split(',') if column.strip()]

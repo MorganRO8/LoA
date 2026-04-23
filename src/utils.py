@@ -518,6 +518,25 @@ BUILTIN_TARGET_COLUMNS = {
             "Infer and report BigSMILES from the paper's structures/text when needed."
         ),
     },
+    "reaction": [
+        {
+            "type": "str",
+            "name": "reactants",
+            "description": (
+                "Reactant SMILES string(s). Use '.' to separate multiple reactants "
+                "in the same reaction entry."
+            ),
+        },
+        {
+            "type": "str",
+            "name": "products",
+            "description": (
+                "Product SMILES string(s). Use '.' to separate multiple products "
+                "in the same reaction entry."
+            ),
+        },
+    ],
+    "general": [],
 }
 
 SUPPORTED_TARGET_TYPES = tuple(BUILTIN_TARGET_COLUMNS.keys())
@@ -531,6 +550,18 @@ def normalize_target_type(target_type: str) -> str:
         raise ValueError(
             f"Unknown target_type '{target_type}'. Supported values are: {supported}."
         )
+    return normalized
+
+
+def normalize_validation_mode(validation_mode: str) -> str:
+    """Normalize schema validation mode values."""
+    normalized = normalize_target_type(validation_mode)
+    if normalized == "general":
+        raise ValueError(
+            "Validation Mode 'general' is not supported for column validation."
+        )
+    if normalized == "reaction":
+        return "small_molecule"
     return normalized
 
 # Column added to all schemas to capture additional notes
@@ -572,6 +603,10 @@ def _target_descriptor(target_type: str) -> str:
         return t
     if t == "polymer":
         return "polymer"
+    if t == "reaction":
+        return "reactions"
+    if t == "general":
+        return "records"
     return "small molecule"
 
 
@@ -590,6 +625,11 @@ def _first_column_instruction(target_type: str, col_name: str) -> str:
             "Always provide a BigSMILES string. "
             "Do not return polymer/common names in this column."
         )
+    if descriptor == "reactions":
+        return (
+            f"The first column '{col_name}' contains reaction reactant SMILES. "
+            "Always provide SMILES directly whenever available."
+        )
     return (
         f"The first column '{col_name}' uniquely identifies each {descriptor}. "
         "Always provide a SMILES string directly if it is available. "
@@ -601,9 +641,13 @@ def _first_column_instruction(target_type: str, col_name: str) -> str:
 def prepend_target_column(schema_data, target_type):
     """Prepend a built-in target column to the schema."""
     info = BUILTIN_TARGET_COLUMNS[normalize_target_type(target_type)]
-    new_schema = {1: info}
+    info_list = info if isinstance(info, list) else [info]
+    new_schema = {}
+    for idx, column in enumerate(info_list, start=1):
+        new_schema[idx] = column
+    shift = len(info_list)
     for idx in sorted(schema_data.keys()):
-        new_schema[idx + 1] = schema_data[idx]
+        new_schema[idx + shift] = schema_data[idx]
     return new_schema
 
 
@@ -614,17 +658,22 @@ def append_comments_column(schema_data):
     return new_schema
 
 
-def insert_solvent_column(schema_data):
+def insert_solvent_column(schema_data, target_type="small_molecule"):
     """Insert the solvent column after the target column."""
+    t = normalize_target_type(target_type)
     if not schema_data:
         return {1: SOLVENT_COLUMN}
+    insertion_index = 1
+    if t == "reaction":
+        insertion_index = 2
+    elif t == "general":
+        insertion_index = 0
+
     new_schema = {}
-    inserted = False
     for idx in sorted(schema_data.keys()):
-        new_schema[idx + (1 if inserted and idx > 1 else 0)] = schema_data[idx]
-        if idx == 1 and not inserted:
-            new_schema[2] = SOLVENT_COLUMN
-            inserted = True
+        new_idx = idx + 1 if idx > insertion_index else idx
+        new_schema[new_idx] = schema_data[idx]
+    new_schema[insertion_index + 1] = SOLVENT_COLUMN
     return new_schema
 
 
@@ -700,6 +749,8 @@ def load_schema_file(schema_file):
                 elif info_type == "Blacklisted Substrings":
                     schema_data[current_column]['blacklisted_substrings'] = [substring.strip() for substring in
                                                                              info_value.split(',') if substring.strip()]
+                elif info_type == "Validation Mode":
+                    schema_data[current_column]['validation_mode'] = normalize_validation_mode(info_value)
 
     # Fill in missing 'description' keys with empty strings
     for column_data in schema_data.values():
@@ -730,18 +781,25 @@ def generate_prompt(schema_data, user_instructions, key_columns=None, target_typ
 
     # Generate schema information and diagram
     for column_number, column_data in schema_data.items():
+        validation_info = ""
+        if column_data.get("validation_mode"):
+            validation_info = f" [validated as {column_data['validation_mode']}]"
         schema_info += f"Column {column_number}: {column_data['name']} ({column_data['type']})\n"
-        schema_info += f"Description: {column_data['description']}\n\n"
+        schema_info += f"Description: {column_data['description']}{validation_info}\n\n"
         schema_diagram += f"{column_data['name']}, "
     schema_diagram = schema_diagram[:-2]
 
     # Generate key column information
     key_column_names = [schema_data[int(column)]['name'] for column in key_columns]
-    first_col_instruction = _first_column_instruction(target_type, key_column_names[0]) if key_columns else ""
+    first_col_instruction = (
+        _first_column_instruction(target_type, key_column_names[0])
+        if key_columns and normalize_target_type(target_type) != "general"
+        else ""
+    )
     if key_columns:
         uniqueness_instruction = (
             "Duplicate target values are allowed when other extracted properties differ."
-            if normalize_target_type(target_type) == "polymer"
+            if normalize_target_type(target_type) in {"polymer", "reaction", "general"}
             else "Ensure that the values in this column are unique within each paper."
         )
         key_column_info = f"{first_col_instruction} {uniqueness_instruction}"
@@ -766,6 +824,16 @@ def generate_prompt(schema_data, user_instructions, key_columns=None, target_typ
             "- Include descriptor IDs (e.g., [$1], [<1], [>1]) only when multiple orthogonal connection types are required.\n"
             "- Encode only connectivity supported by the paper; do not invent unsupported stereochemistry/sequence statistics/end-group populations.\n"
             "- Keep output format identical: comma-separated CSV rows only."
+        )
+    elif normalized_target_type == "reaction":
+        target_output_instruction = (
+            "- For reactions, both reactants and products columns must contain SMILES.\n"
+            "- Use '.' to separate multiple species within reactants or products."
+        )
+    elif normalized_target_type == "general":
+        target_output_instruction = (
+            "- Follow each schema column's description carefully.\n"
+            "- If a column has a validation mode, format values to satisfy that validator."
         )
     else:
         target_output_instruction = (
@@ -1356,6 +1424,36 @@ def validate_target_value(value, target_type):
     return _smiles_from_string(value)
 
 
+def _get_column_index_by_name(schema_data, column_name):
+    """Return 0-based index for a named column, or None if absent."""
+    for idx, col in schema_data.items():
+        if col.get("name") == column_name:
+            return idx - 1
+    return None
+
+
+def _build_validation_modes(schema_data, target_type, verify_target):
+    """Build a map of 0-based column indexes to validation modes."""
+    mode_map = {}
+    normalized_target_type = normalize_target_type(target_type)
+    if verify_target and normalized_target_type not in {"general"}:
+        if normalized_target_type == "reaction":
+            mode_map[0] = "small_molecule"
+            mode_map[1] = "small_molecule"
+        else:
+            mode_map[0] = normalized_target_type
+
+    solvent_idx = _get_column_index_by_name(schema_data, "solvent")
+    if solvent_idx is not None:
+        mode_map[solvent_idx] = "small_molecule"
+
+    for idx, col_data in schema_data.items():
+        validation_mode = col_data.get("validation_mode")
+        if validation_mode:
+            mode_map[idx - 1] = validation_mode
+    return mode_map
+
+
 def validate_result(parsed_result, schema_data, examples, key_columns=None, target_type="small_molecule", verify_target=True, assume_water=False):
     """
     Validate the parsed result against the schema and remove any invalid or example rows.
@@ -1386,6 +1484,9 @@ def validate_result(parsed_result, schema_data, examples, key_columns=None, targ
         if len(ex_row) == num_columns:
             example_rows.append(tuple(cell.strip() for cell in ex_row))
     example_rows = set(example_rows)
+
+    validation_modes = _build_validation_modes(schema_data, target_type, verify_target)
+    solvent_idx = _get_column_index_by_name(schema_data, "solvent")
 
     # Check if headers are present in the parsed result
     headers_present = False
@@ -1440,44 +1541,37 @@ def validate_result(parsed_result, schema_data, examples, key_columns=None, targ
                 print(f"Skipping row with all null key columns: {row}")
                 row_valid = False
 
-        # Only the first (target) column changes validation behavior by target_type.
-        # For target_type == "polymer", validate_target_value(...) routes column 1 through
-        # _bigsmiles_from_string(...) and preserves the trimmed BigSMILES text (no RDKit
-        # canonicalization). Other target types keep their existing target validators.
-        if row_valid and verify_target:
-            if validated_row[0].lower() == 'null':
-                row_valid = False
-            else:
-                canonical = validate_target_value(validated_row[0], target_type)
-                if canonical is None:
-                    print(
-                        f"Warning: Unable to resolve '{validated_row[0]}' to a valid {target_type}."
-                    )
-                    row_valid = False
+        if row_valid:
+            for idx, mode in sorted(validation_modes.items()):
+                if idx >= len(validated_row):
+                    continue
+                value = validated_row[idx]
+                if str(value).lower() == "null":
+                    if assume_water and solvent_idx == idx:
+                        validated_row[idx] = SOLVENT_SMILES_LOOKUP.get('water', 'O')
+                    else:
+                        row_valid = False
+                        break
                 else:
-                    validated_row[0] = canonical
-
-        if row_valid and has_solvent_column(schema_data):
-            # Solvent handling always stays in standard small-molecule space, even when
-            # extracting polymer targets. This isolates polymer BigSMILES validation to the
-            # target column and prevents side effects in solvent canonicalization.
-            solvent_val = validated_row[1]
-            if solvent_val.lower() == 'null':
-                if assume_water:
-                    validated_row[1] = SOLVENT_SMILES_LOOKUP.get('water', 'O')
-            else:
-                canonical_solvent = validate_target_value(solvent_val, "small_molecule")
-                if canonical_solvent is None:
-                    print(
-                        f"Warning: Unable to resolve solvent '{solvent_val}' to a valid small_molecule."
-                    )
-                    row_valid = False
-                else:
-                    validated_row[1] = canonical_solvent
+                    canonical = validate_target_value(value, mode)
+                    if canonical is None:
+                        print(
+                            f"Warning: Unable to resolve '{value}' to a valid {mode}."
+                        )
+                        row_valid = False
+                        break
+                    validated_row[idx] = canonical
 
         # Require at least one data field (excluding comments) when a target is present
         if row_valid:
-            start_idx = 1 + int(has_solvent_column(schema_data))
+            normalized_target_type = normalize_target_type(target_type)
+            start_idx = 0
+            if normalized_target_type in {"small_molecule", "protein", "peptide", "polymer"}:
+                start_idx = 1
+            elif normalized_target_type == "reaction":
+                start_idx = 2
+            if has_solvent_column(schema_data):
+                start_idx += 1
             if has_comments_column(schema_data):
                 end_idx = -1
             else:
@@ -1552,6 +1646,7 @@ def generate_examples(schema_data, num_examples=3, target_type="small_molecule")
         '"{[>][<]CCO[>][<]}"',
         '"{[$]CC(c1ccccc1)[$]}"',
     ]
+    reaction_examples = ['"CCO.CC(=O)O"', '"CC(=O)O"', '"CCN.CCO"']
     for _ in range(num_examples):
         example_row = []
         for column_number, column_data in schema_data.items():
@@ -1564,6 +1659,12 @@ def generate_examples(schema_data, num_examples=3, target_type="small_molecule")
                 and column_type == 'str'
             ):
                 example_value = polymer_targets[(_ + column_number) % len(polymer_targets)]
+            elif (
+                normalized_target_type == "reaction"
+                and column_number in {1, 2}
+                and column_type == "str"
+            ):
+                example_value = reaction_examples[(_ + column_number) % len(reaction_examples)]
             elif allowed_values:
                 example_value = random.choice(allowed_values)
             elif column_type == 'str':

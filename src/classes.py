@@ -190,7 +190,7 @@ class JobSettings(): ## Contains subsettings as well for each of the job types.
             elif key.lower() == "skip_check":
                 self.skip_check = bool(val.lower() == "y")
             elif key.lower() == "target_type":
-                # Accept: small_molecule (default), protein, peptide, polymer.
+                # Accept: small_molecule (default), protein, peptide, polymer, reaction, general.
                 self.target_type = normalize_target_type(val)
             else:
                 print(f"JSON key '{key}' not recognized.")
@@ -203,17 +203,26 @@ class JobSettings(): ## Contains subsettings as well for each of the job types.
         
         # Process Secondary extraction parameters.
         ## Set up extraction parameters
-        self.extract.schema_data, _ = load_schema_file(self.files.schema)
-        self.extract.schema_data = prepend_target_column(
-            self.extract.schema_data, self.target_type
-        )
+        self.extract.schema_data, schema_key_columns = load_schema_file(self.files.schema)
+        if self.target_type != "general":
+            prepend_count = 2 if self.target_type == "reaction" else 1
+            self.extract.schema_data = prepend_target_column(
+                self.extract.schema_data, self.target_type
+            )
+            if schema_key_columns:
+                schema_key_columns = [col + prepend_count for col in schema_key_columns]
         if self.use_solvent:
-            self.extract.schema_data = insert_solvent_column(self.extract.schema_data)
+            self.extract.schema_data = insert_solvent_column(
+                self.extract.schema_data, self.target_type
+            )
         if self.use_comments:
             self.extract.schema_data = append_comments_column(self.extract.schema_data)
-        self.extract.key_columns = [1]
-        if self.use_solvent:
-            self.extract.key_columns.append(2)
+        if self.target_type == "general":
+            self.extract.key_columns = schema_key_columns
+        elif self.target_type == "reaction":
+            self.extract.key_columns = [1]
+        else:
+            self.extract.key_columns = [1]
         self.extract.num_columns = len(self.extract.schema_data)
         self.extract.headers = [self.extract.schema_data[column_number]['name'] for column_number in range(1, self.extract.num_columns + 1)] + ['paper']
         self.extract.prompt = generate_prompt(

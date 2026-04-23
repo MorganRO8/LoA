@@ -510,7 +510,28 @@ BUILTIN_TARGET_COLUMNS = {
             "Names will be resolved to sequences via PyPept, UniProt, and the PDB."
         ),
     },
+    "polymer": {
+        "type": "str",
+        "name": "polymer_bigsmiles",
+        "description": (
+            "BigSMILES representation of the polymer. "
+            "Infer and report BigSMILES from the paper's structures/text when needed."
+        ),
+    },
 }
+
+SUPPORTED_TARGET_TYPES = tuple(BUILTIN_TARGET_COLUMNS.keys())
+
+
+def normalize_target_type(target_type: str) -> str:
+    """Normalize and validate target type values."""
+    normalized = str(target_type).strip().lower()
+    if normalized not in SUPPORTED_TARGET_TYPES:
+        supported = ", ".join(SUPPORTED_TARGET_TYPES)
+        raise ValueError(
+            f"Unknown target_type '{target_type}'. Supported values are: {supported}."
+        )
+    return normalized
 
 # Column added to all schemas to capture additional notes
 COMMENTS_COLUMN = {
@@ -546,9 +567,11 @@ SOLVENT_SMILES_LOOKUP = {
 
 def _target_descriptor(target_type: str) -> str:
     """Return a simplified descriptor for the target type."""
-    t = target_type.lower()
+    t = normalize_target_type(target_type)
     if t in ["protein", "peptide"]:
         return t
+    if t == "polymer":
+        return "polymer"
     return "small molecule"
 
 
@@ -561,6 +584,12 @@ def _first_column_instruction(target_type: str, col_name: str) -> str:
             "Provide an amino acid sequence in one-letter code or a common name. "
             "Common names will be resolved to sequences."
         )
+    if descriptor == "polymer":
+        return (
+            f"The first column '{col_name}' uniquely identifies each polymer. "
+            "Always provide a BigSMILES string. "
+            "Do not return polymer/common names in this column."
+        )
     return (
         f"The first column '{col_name}' uniquely identifies each {descriptor}. "
         "Always provide a SMILES string directly if it is available. "
@@ -571,7 +600,7 @@ def _first_column_instruction(target_type: str, col_name: str) -> str:
 
 def prepend_target_column(schema_data, target_type):
     """Prepend a built-in target column to the schema."""
-    info = BUILTIN_TARGET_COLUMNS.get(target_type.lower(), BUILTIN_TARGET_COLUMNS["small_molecule"])
+    info = BUILTIN_TARGET_COLUMNS[normalize_target_type(target_type)]
     new_schema = {1: info}
     for idx in sorted(schema_data.keys()):
         new_schema[idx + 1] = schema_data[idx]
@@ -709,12 +738,39 @@ def generate_prompt(schema_data, user_instructions, key_columns=None, target_typ
     # Generate key column information
     key_column_names = [schema_data[int(column)]['name'] for column in key_columns]
     first_col_instruction = _first_column_instruction(target_type, key_column_names[0]) if key_columns else ""
-    key_column_info = (
-        f"{first_col_instruction} Ensure that the values in this column are unique within each paper." if key_columns else ""
-    )
+    if key_columns:
+        uniqueness_instruction = (
+            "Duplicate target values are allowed when other extracted properties differ."
+            if normalize_target_type(target_type) == "polymer"
+            else "Ensure that the values in this column are unique within each paper."
+        )
+        key_column_info = f"{first_col_instruction} {uniqueness_instruction}"
+    else:
+        key_column_info = ""
 
     # Construct the prompt
-    descriptor = _target_descriptor(target_type)
+    normalized_target_type = normalize_target_type(target_type)
+    descriptor = _target_descriptor(normalized_target_type)
+    if normalized_target_type == "polymer":
+        target_output_instruction = (
+            "- For polymer targets, output BigSMILES exactly as written in the source text.\n"
+            "- Do not convert BigSMILES polymer notation to standard SMILES.\n"
+            "- Keep all brackets/braces/parentheses and bond descriptors (e.g., $, <, >) unchanged.\n"
+            "- If no valid BigSMILES-like target is present, use 'null' for the target column.\n"
+            "- If BigSMILES is not explicitly written, infer it from the paper's text/figures.\n"
+            "- Build BigSMILES from constitutional repeat unit(s), not full-chain drawings.\n"
+            "- Choose descriptors by connectivity: use [$] for equivalent AA-type links; use [<]/[>] for directional/complementary AB-type links.\n"
+            "- Mark repeat-unit continuation atoms with bonding descriptors and keep bond order consistent for matching descriptor patterns.\n"
+            "- Use the smallest repeat-unit set that captures architecture (homo/random/alternating/block/branched/graft).\n"
+            "- Use stochastic-object form { [left] repeat_unit_1,repeat_unit_2 ; optional_end_groups [right] } with [] terminals when outside connections are unspecified.\n"
+            "- Include descriptor IDs (e.g., [$1], [<1], [>1]) only when multiple orthogonal connection types are required.\n"
+            "- Encode only connectivity supported by the paper; do not invent unsupported stereochemistry/sequence statistics/end-group populations.\n"
+            "- Keep output format identical: comma-separated CSV rows only."
+        )
+    else:
+        target_output_instruction = (
+            "- Provide SMILES strings directly whenever possible. This has the highest priority over IUPAC or common names."
+        )
     prompt = f"""
 Using the research paper text provided above, extract information about {descriptor}s that fits into the following CSV schema:
 
@@ -730,7 +786,7 @@ Extraction Instructions:
 - Enclose all string values in double-quotes.
 - Never use natural language outside of a string enclosed in double-quotes.
 - For range values, use the format "min-max" when a range is explicitly expected.
-- Provide SMILES strings directly whenever possible. This has the highest priority over IUPAC or common names.
+{target_output_instruction}
 - Do not include headers, explanations, summaries, or any additional formatting.
 - Invalid responses will result in retries, causing significant time and money loss per paper.
 - Ignore any information in references that may be included at the end of the paper.
@@ -741,13 +797,13 @@ Example showing only the column names:
 {schema_diagram}
 
 Example where the paper contains a single piece of information:
-{generate_examples(schema_data, 1)}
+{generate_examples(schema_data, 1, normalized_target_type)}
 
 Example where the paper contains two pieces of information:
-{generate_examples(schema_data, 2)}
+{generate_examples(schema_data, 2, normalized_target_type)}
 
 Example where the paper contains three pieces of information:
-{generate_examples(schema_data, 3)}
+{generate_examples(schema_data, 3, normalized_target_type)}
 
 User Instructions:
 {user_instructions}
@@ -773,7 +829,19 @@ def generate_check_prompt(schema_data, user_instructions, target_type="small_mol
         schema_info += f"- {column_data['name']}: {column_data['description']}\n"
     
     # Construct the prompt
-    descriptor = _target_descriptor(target_type)
+    normalized_target_type = normalize_target_type(target_type)
+    descriptor = _target_descriptor(normalized_target_type)
+    polymer_check_instruction = ""
+    if normalized_target_type == "polymer":
+        polymer_check_instruction = (
+            "\nPolymer-specific checks:\n"
+            "- Consider BigSMILES extractable when polymer repeat-unit/connectivity information in text or figures is sufficient to construct it.\n"
+            "- Output BigSMILES exactly as written in source text when explicit notation is present.\n"
+            "- Otherwise infer BigSMILES from repeat units and connectivity shown in the paper.\n"
+            "- Do not convert polymer notation to standard SMILES.\n"
+            "- Keep brackets/braces/parentheses and bond descriptors unchanged.\n"
+            "- If no valid BigSMILES can be found or constructed from the available evidence, answer \"no\"."
+        )
     prompt = f"""
 Using the research paper text provided above, determine whether it contains information about {descriptor}s relevant to the following schema and instructions.
 
@@ -782,6 +850,7 @@ Schema:
 
 User Instructions:
 {user_instructions}
+{polymer_check_instruction}
 
 Answer "yes" if the paper contains enough information to fill out at least one row of the defined schema.
 Answer "no" if the required information is missing.
@@ -1173,6 +1242,64 @@ def _smiles_from_string(value):
     return None
 
 
+def _bigsmiles_from_string(value):
+    """Validate and normalize a BigSMILES string using lightweight heuristics."""
+    if value is None:
+        return None
+    candidate = str(value).strip()
+    if not candidate:
+        return None
+
+    lowered = candidate.lower()
+    invalid_literals = {
+        "null",
+        "none",
+        "n/a",
+        "na",
+        "unknown",
+        "example",
+        "example_string",
+        "example_bigsmiles",
+        "polymer",
+        "bigsmiles",
+        "-",
+        "--",
+    }
+    if lowered in invalid_literals or lowered.startswith("example_"):
+        return None
+
+    def _balanced(text, opener, closer):
+        depth = 0
+        for ch in text:
+            if ch == opener:
+                depth += 1
+            elif ch == closer:
+                depth -= 1
+                if depth < 0:
+                    return False
+        return depth == 0
+
+    if not _balanced(candidate, "{", "}"):
+        return None
+    if not _balanced(candidate, "[", "]"):
+        return None
+    if not _balanced(candidate, "(", ")"):
+        return None
+
+    # BigSMILES-like structural heuristics:
+    # - stochastic object braces are expected
+    # - and either explicit descriptors ($, <, >) or repeat/connectivity hints
+    has_braces = "{" in candidate and "}" in candidate
+    has_descriptor = any(token in candidate for token in ("$", "<", ">"))
+    has_repeat_pattern = bool(re.search(r"\[[^\]]+\]", candidate))
+    if not has_braces:
+        return None
+    if not (has_descriptor or has_repeat_pattern):
+        return None
+
+    return candidate
+
+
 def _protein_sequence_from_string(value):
     """Resolve a protein name or sequence to a valid amino acid sequence."""
     seq = value.strip()
@@ -1219,11 +1346,13 @@ def _peptide_sequence_from_string(value):
 
 def validate_target_value(value, target_type):
     """Validate and normalize the first column based on the target type."""
-    t = target_type.lower()
+    t = normalize_target_type(target_type)
     if t == "protein":
         return _protein_sequence_from_string(value)
     if t == "peptide":
         return _peptide_sequence_from_string(value)
+    if t == "polymer":
+        return _bigsmiles_from_string(value)
     return _smiles_from_string(value)
 
 
@@ -1250,7 +1379,13 @@ def validate_result(parsed_result, schema_data, examples, key_columns=None, targ
     """
     num_columns = len(schema_data)
     validated_result = []
-    example_rows = examples.split('\n')
+    # Parse examples using csv reader so comparisons match parsed_result rows even
+    # when quote characters differ from the raw prompt text.
+    example_rows = []
+    for ex_row in csv.reader(examples.splitlines(), quotechar='"', skipinitialspace=True):
+        if len(ex_row) == num_columns:
+            example_rows.append(tuple(cell.strip() for cell in ex_row))
+    example_rows = set(example_rows)
 
     # Check if headers are present in the parsed result
     headers_present = False
@@ -1272,7 +1407,8 @@ def validate_result(parsed_result, schema_data, examples, key_columns=None, targ
             continue
 
         # Skip rows that match example data
-        if any(example_row == ','.join(row) for example_row in example_rows):
+        normalized_row = tuple(cell.strip() for cell in row)
+        if normalized_row in example_rows:
             print(f"Skipping row containing example strings: {row}")
             continue
 
@@ -1296,13 +1432,18 @@ def validate_result(parsed_result, schema_data, examples, key_columns=None, targ
             else:
                 validated_row.append('null')
 
-        # Check if at least one key column has a non-null value, but only if the row is not all nulls
+        # Check if at least one key column has a non-null value, but only if the row is not all nulls.
+        # This guards against empty rows; deduplication (if any) happens in extract.py.
         if row_valid and key_columns and not all_null:
             key_values = [validated_row[i-1] for i in key_columns]
             if all(value.lower() == 'null' for value in key_values):
                 print(f"Skipping row with all null key columns: {row}")
                 row_valid = False
 
+        # Only the first (target) column changes validation behavior by target_type.
+        # For target_type == "polymer", validate_target_value(...) routes column 1 through
+        # _bigsmiles_from_string(...) and preserves the trimmed BigSMILES text (no RDKit
+        # canonicalization). Other target types keep their existing target validators.
         if row_valid and verify_target:
             if validated_row[0].lower() == 'null':
                 row_valid = False
@@ -1317,6 +1458,9 @@ def validate_result(parsed_result, schema_data, examples, key_columns=None, targ
                     validated_row[0] = canonical
 
         if row_valid and has_solvent_column(schema_data):
+            # Solvent handling always stays in standard small-molecule space, even when
+            # extracting polymer targets. This isolates polymer BigSMILES validation to the
+            # target column and prevents side effects in solvent canonicalization.
             solvent_val = validated_row[1]
             if solvent_val.lower() == 'null':
                 if assume_water:
@@ -1387,7 +1531,7 @@ def write_to_csv(data, headers, filename="extracted_data.csv"):
         writer.writerows(data)
 
 
-def generate_examples(schema_data, num_examples=3):
+def generate_examples(schema_data, num_examples=3, target_type="small_molecule"):
     """
     Generate example data based on the provided schema.
 
@@ -1401,14 +1545,26 @@ def generate_examples(schema_data, num_examples=3):
     Returns:
     str: A string containing the generated examples, with each row separated by a newline.
     """
+    normalized_target_type = normalize_target_type(target_type)
     examples = []
+    polymer_targets = [
+        '"{[$]CC[$]}"',
+        '"{[>][<]CCO[>][<]}"',
+        '"{[$]CC(c1ccccc1)[$]}"',
+    ]
     for _ in range(num_examples):
         example_row = []
         for column_number, column_data in schema_data.items():
             column_type = column_data['type']
             allowed_values = column_data.get('allowed_values', [])
 
-            if allowed_values:
+            if (
+                normalized_target_type == "polymer"
+                and column_number == 1
+                and column_type == 'str'
+            ):
+                example_value = polymer_targets[(_ + column_number) % len(polymer_targets)]
+            elif allowed_values:
                 example_value = random.choice(allowed_values)
             elif column_type == 'str':
                 example_value = f'"example_string_{column_number}"'

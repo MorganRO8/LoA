@@ -227,8 +227,10 @@ def batch_extract(job_settings: JobSettings):
 
                     paper_filename = os.path.splitext(os.path.basename(file))[0]
 
-                    # Filter results based on key columns
-                    if job_settings.extract.key_columns:
+                    # Filter results based on key columns.
+                    # Polymer identity depends on the full row (not just target column),
+                    # so skip key-based deduplication in polymer mode.
+                    if job_settings.extract.key_columns and job_settings.target_type != "polymer":
                         key_values = set()
                         filtered_result = []
                         for row in validated_result:
@@ -456,8 +458,10 @@ def single_file_extract(job_settings: JobSettings, data: PromptData, file_path):
                 continue
 
             if validated_result:
-                # Filter results based on key columns
-                if job_settings.extract.key_columns:
+                # Filter results based on key columns.
+                # Polymer identity depends on the full row (not just target column),
+                # so skip key-based deduplication in polymer mode.
+                if job_settings.extract.key_columns and job_settings.target_type != "polymer":
                     key_values = set()
                     filtered_result = []
                     for row in validated_result:

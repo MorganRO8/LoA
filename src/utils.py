@@ -1315,6 +1315,31 @@ def _smiles_from_string(value):
     return None
 
 
+def _reaction_side_from_string(value):
+    """Validate a dot-separated reaction side and canonicalize each component.
+
+    Accepts strings like ``A.B.C`` and validates each molecule token
+    independently using the standard small-molecule resolver.
+    """
+    if value is None:
+        return None
+    side = str(value).strip()
+    if not side:
+        return None
+
+    parts = [part.strip() for part in side.split(".")]
+    if not parts or any(not part for part in parts):
+        return None
+
+    canonical_parts = []
+    for part in parts:
+        canonical = _smiles_from_string(part)
+        if canonical is None:
+            return None
+        canonical_parts.append(canonical)
+    return ".".join(canonical_parts)
+
+
 def _bigsmiles_from_string(value):
     """Validate and normalize a BigSMILES string using lightweight heuristics."""
     if value is None:
@@ -1426,6 +1451,8 @@ def validate_target_value(value, target_type):
         return _peptide_sequence_from_string(value)
     if t == "polymer":
         return _bigsmiles_from_string(value)
+    if t == "reaction":
+        return _reaction_side_from_string(value)
     return _smiles_from_string(value)
 
 
@@ -1583,7 +1610,7 @@ def validate_result(parsed_result, schema_data, examples, key_columns=None, targ
             else:
                 end_idx = None
             data_fields = validated_row[start_idx:end_idx] if end_idx is not None else validated_row[start_idx:]
-            if all(str(v).lower() == 'null' for v in data_fields):
+            if data_fields and all(str(v).lower() == 'null' for v in data_fields):
                 print(f"Skipping row with no data fields: {row}")
                 row_valid = False
 

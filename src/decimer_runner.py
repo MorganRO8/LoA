@@ -55,7 +55,12 @@ def _segment_array(arr):
 
 def _shape_to_bbox(box, h, w):
     """Build absolute and relative bbox data if a box is available."""
-    if not box:
+    if box is None:
+        return None, None
+    try:
+        if len(box) < 4:
+            return None, None
+    except TypeError:
         return None, None
     y0, x0, y1, x1 = [int(x) for x in box]
     return [y0, x0, y1, x1], [y0 / h, x0 / w, y1 / h, x1 / w]

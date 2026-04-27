@@ -349,6 +349,7 @@ class PromptData():
 
     def _refresh_paper_content(self, file, prompt, check_prompt, check_only=False):
         file_path = os.path.join(os.getcwd(), 'scraped_docs', file)
+        content_budget = max(1024, int(self.options["num_ctx"] * 0.75))
         
         """ Supposed to only go once, doesn't...
         if self.first_print:
@@ -362,7 +363,7 @@ class PromptData():
         try:
             self.paper_content = truncate_text(
                 doc_to_elements(file_path, self.use_hi_res, multimodal),
-                max_tokens=self.options["num_ctx"],
+                max_tokens=content_budget,
             )
         except Exception as err:
             print(f"Unable to process {file} into plaintext due to {err}")
@@ -408,11 +409,21 @@ class PromptData():
             self.segment_notes = []
         segment_note_block = ""
         if self.segment_notes:
-            joined = "\n".join(f"- {note}" for note in self.segment_notes)
+            max_segment_notes = 200
+            notes = self.segment_notes[:max_segment_notes]
+            if len(self.segment_notes) > max_segment_notes:
+                notes.append(
+                    f"... ({len(self.segment_notes) - max_segment_notes} additional segment notes omitted)"
+                )
+            joined = "\n".join(f"- {note}" for note in notes)
             segment_note_block = (
                 "\n\nSegment metadata for DECIMER sub-images (the sub-images are also included as multimodal inputs):\n"
                 f"{joined}"
             )
+        paper_with_segment_notes = truncate_text(
+            f"{self.paper_content}{segment_note_block}",
+            max_tokens=content_budget,
+        )
         note = ""
         if check_only and self.use_multimodal and self.supports_vision:
             note = (
@@ -421,7 +432,7 @@ class PromptData():
                 "deciding if relevant information is present."
             )
         self.prompt = (
-            f"Paper Contents:\n{self.paper_content}{segment_note_block}\n\n{prompt}\n\nAgain, please make sure to respond only in the specified format exactly as described, or you will cause errors.\nResponse:"
+            f"Paper Contents:\n{paper_with_segment_notes}\n\n{prompt}\n\nAgain, please make sure to respond only in the specified format exactly as described, or you will cause errors.\nResponse:"
         )
         self.check_prompt = (
             f"Paper Contents:\n{self.paper_content}{note}\n\n{check_prompt}\n\nAgain, please only answer 'yes' or 'no' (without quotes) to let me know if we should extract information from this paper using the costly api call"

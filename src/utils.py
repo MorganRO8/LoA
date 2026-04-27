@@ -1,9 +1,11 @@
 # Imports
 import itertools
+import glob
 import os
 import re
 import hashlib
 import csv
+import tempfile
 import numpy as np
 from pdf2image import convert_from_path
 from PIL import Image
@@ -2227,23 +2229,18 @@ def check_openai_model(model_name, api_key=None):
         return True
 
 
-def _run_decimer(path, mode="smiles", predict_smiles=True):
-    """Execute DECIMER extraction in a separate conda environment."""
-    script = os.path.join(os.path.dirname(__file__), "decimer_runner.py")
-    # Ensure the path is absolute so DECIMER can locate the file
+def _run_decimer_segmentation(path):
+    """Execute DECIMER image segmentation in dedicated DECIMER_SEG env."""
+    script = os.path.join(os.path.dirname(__file__), "decimer_segment_runner.py")
     abs_path = path if os.path.isabs(path) else os.path.join(os.getcwd(), 'scraped_docs', path)
     cmd = [
         "conda",
         "run",
         "-n",
-        "DECIMER",
+        "DECIMER_SEG",
         "python",
         script,
         abs_path,
-        "--mode",
-        mode,
-        "--predict-smiles",
-        "y" if predict_smiles else "n",
     ]
     try:
         result = subprocess.run(
@@ -2253,11 +2250,11 @@ def _run_decimer(path, mode="smiles", predict_smiles=True):
             check=False,
         )
     except Exception as err:
-        print(f"Failed to invoke DECIMER: {err}")
+        print(f"Failed to invoke DECIMER segmentation: {err}")
         return []
 
     if result.returncode != 0:
-        print(f"DECIMER error: {result.stderr}")
+        print(f"DECIMER segmentation error: {result.stderr}")
         return []
 
     try:
@@ -2265,14 +2262,73 @@ def _run_decimer(path, mode="smiles", predict_smiles=True):
         if isinstance(data, list):
             return data
     except json.JSONDecodeError:
-        print(f"Could not decode DECIMER output: {result.stdout}")
+        print(f"Could not decode DECIMER segmentation output: {result.stdout}")
+    return []
+
+
+def _run_decimer_smiles_for_segments(segment_images):
+    """Predict SMILES for a list of segment base64 images in DECIMER env."""
+    if not segment_images:
+        return []
+
+    script = os.path.join(os.path.dirname(__file__), "decimer_smiles_runner.py")
+    tmp_path = None
+    try:
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".json", delete=False) as tf:
+            json.dump(segment_images, tf)
+            tmp_path = tf.name
+
+        cmd = [
+            "conda",
+            "run",
+            "-n",
+            "DECIMER",
+            "python",
+            script,
+            "--segments-json",
+            tmp_path,
+        ]
+        result = subprocess.run(
+            cmd,
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+    except Exception as err:
+        print(f"Failed to invoke DECIMER SMILES runner: {err}")
+        return []
+    finally:
+        if tmp_path and os.path.exists(tmp_path):
+            try:
+                os.remove(tmp_path)
+            except Exception:
+                pass
+
+    if result.returncode != 0:
+        print(f"DECIMER SMILES error: {result.stderr}")
+        return []
+
+    try:
+        data = json.loads(result.stdout.strip())
+        if isinstance(data, list):
+            return data
+    except json.JSONDecodeError:
+        print(f"Could not decode DECIMER SMILES output: {result.stdout}")
     return []
 
 
 def _run_decimer_segments(path, predict_smiles=True):
-    """Run DECIMER segmentation and return segment-level records."""
-    data = _run_decimer(path, mode="segments", predict_smiles=predict_smiles)
-    return data if isinstance(data, list) else []
+    """Run DECIMER segmentation and optionally augment with SMILES predictions."""
+    data = _run_decimer_segmentation(path)
+    if not isinstance(data, list) or not data:
+        return []
+    if predict_smiles:
+        segment_images = [row.get("segment_image_base64") for row in data if row.get("segment_image_base64")]
+        smiles_predictions = _run_decimer_smiles_for_segments(segment_images)
+        for idx, smi in enumerate(smiles_predictions):
+            if idx < len(data) and smi:
+                data[idx]["smiles"] = smi
+    return data
 
 
 def get_segmented_multimodal_images(images_dir):

@@ -25,7 +25,8 @@ LoA (Librarian of Alexandria) is a comprehensive tool designed for researchers, 
 
 2. Install required dependencies listen in install_commands.txt (will be creating requirements.txt soon, as well as a dockerized version)
 
-3. Install conda environment using DECIMER-GPU file if usage of DECIMER is desired
+3. Install conda environments for DECIMER SMILES and DECIMER segmentation if
+   DECIMER features are desired (`DECIMER-GPU.yml` and `DECIMER-SEG.yml`)
 
 4. Simply run "python main.py"
 
@@ -99,8 +100,9 @@ When enabled, LoA will:
 The prompt additionally includes each sub-image's source figure filename and
 bounding-box metadata (absolute pixel coordinates and normalized relative
 coordinates) so reaction flow can be inferred in context.
-This requires the separate `decimer-segmentation` package in the DECIMER
-environment in addition to `decimer` itself (see `DECIMER-GPU.yml`).
+This uses a separate segmentation environment (`DECIMER_SEG`) plus a SMILES
+environment (`DECIMER`) so segmentation and SMILES inference can be tuned
+independently (`DECIMER-SEG.yml` and `DECIMER-GPU.yml`).
 `use_openai` can be set to `"y"` if you want to send prompts to the OpenAI API
 instead of using local Ollama models. Provide your API key with the `api_key`
 setting. You can list available models for your key using:

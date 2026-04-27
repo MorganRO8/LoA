@@ -15,6 +15,7 @@ from src.utils import (
     insert_solvent_column,
     append_comments_column,
     normalize_target_type,
+    get_segmented_multimodal_images,
 )
 from src.document_reader import doc_to_elements
 
@@ -103,6 +104,7 @@ class JobSettings(): ## Contains subsettings as well for each of the job types.
         self.use_multimodal = False
         self.use_thinking = False
         self.use_decimer = False
+        self.use_decimer_segmentation = False
         self.use_comments = True
         self.use_solvent = False
         self.assume_water = False
@@ -177,6 +179,8 @@ class JobSettings(): ## Contains subsettings as well for each of the job types.
                 self.use_thinking = bool(val.lower() == "y")
             elif key.lower() == "use_decimer":
                 self.use_decimer = bool(val.lower() == "y")
+            elif key.lower() == "use_decimer_segmentation":
+                self.use_decimer_segmentation = bool(val.lower() == "y")
             elif key.lower() == "use_comments":
                 self.use_comments = bool(val.lower() == "y")
             elif key.lower() == "use_solvent":
@@ -276,7 +280,7 @@ class JobSettings(): ## Contains subsettings as well for each of the job types.
 
 
 class PromptData():
-    def __init__(self, model_name_version, check_model_name_version, use_openai=False, api_key=None, use_hi_res=False, use_multimodal=False, use_thinking=False):
+    def __init__(self, model_name_version, check_model_name_version, use_openai=False, api_key=None, use_hi_res=False, use_multimodal=False, use_thinking=False, use_decimer_segmentation=False):
         self.model = model_name_version
         self.check_model_name_version = check_model_name_version
         self.use_openai = use_openai  # Track if using OpenAI API
@@ -310,9 +314,12 @@ class PromptData():
         self.use_hi_res = use_hi_res
         self.use_multimodal = use_multimodal
         self.use_thinking = use_thinking
+        self.use_decimer_segmentation = use_decimer_segmentation
         self.first_print = True
         self.images = []
         self.si_images = []
+        self.segment_images = []
+        self.segment_notes = []
 
     def _load_images_from_dir(self, directory):
         imgs = []
@@ -366,6 +373,14 @@ class PromptData():
             main_img_dir = os.path.join(os.getcwd(), 'images', paper_id)
             self.images = self._load_images_from_dir(main_img_dir)
             print(f"Loaded {len(self.images)} images from {main_img_dir}")
+            self.segment_images = []
+            self.segment_notes = []
+            if self.use_decimer_segmentation:
+                seg_images, seg_notes = get_segmented_multimodal_images(main_img_dir)
+                self.segment_images.extend(seg_images)
+                self.segment_notes.extend(seg_notes)
+                if seg_images:
+                    print(f"Loaded {len(seg_images)} DECIMER segmented sub-images from {main_img_dir}")
 
             si_files = sorted(glob.glob(os.path.join(os.getcwd(), 'scraped_docs', f"{paper_id}_SI*")))
             self.si_images = []
@@ -378,11 +393,26 @@ class PromptData():
                 si_id = os.path.splitext(os.path.basename(si_file))[0]
                 si_dir = os.path.join(os.getcwd(), 'images', si_id)
                 self.si_images.extend(self._load_images_from_dir(si_dir))
+                if self.use_decimer_segmentation:
+                    seg_images, seg_notes = get_segmented_multimodal_images(si_dir)
+                    self.segment_images.extend(seg_images)
+                    self.segment_notes.extend(seg_notes)
             if si_files:
                 print(f"Loaded {len(self.si_images)} images from {len(si_files)} SI files")
+            if self.use_decimer_segmentation and self.segment_images:
+                print(f"Total segmented sub-images loaded: {len(self.segment_images)}")
         else:
             self.images = []
             self.si_images = []
+            self.segment_images = []
+            self.segment_notes = []
+        segment_note_block = ""
+        if self.segment_notes:
+            joined = "\n".join(f"- {note}" for note in self.segment_notes)
+            segment_note_block = (
+                "\n\nSegment metadata for DECIMER sub-images (the sub-images are also included as multimodal inputs):\n"
+                f"{joined}"
+            )
         note = ""
         if check_only and self.use_multimodal and self.supports_vision:
             note = (
@@ -391,7 +421,7 @@ class PromptData():
                 "deciding if relevant information is present."
             )
         self.prompt = (
-            f"Paper Contents:\n{self.paper_content}\n\n{prompt}\n\nAgain, please make sure to respond only in the specified format exactly as described, or you will cause errors.\nResponse:"
+            f"Paper Contents:\n{self.paper_content}{segment_note_block}\n\n{prompt}\n\nAgain, please make sure to respond only in the specified format exactly as described, or you will cause errors.\nResponse:"
         )
         self.check_prompt = (
             f"Paper Contents:\n{self.paper_content}{note}\n\n{check_prompt}\n\nAgain, please only answer 'yes' or 'no' (without quotes) to let me know if we should extract information from this paper using the costly api call"
@@ -414,7 +444,7 @@ class PromptData():
             "prompt": self.prompt,
         }
         if self.use_multimodal and self.supports_vision:
-            data["images"] = self.images + self.si_images
+            data["images"] = self.images + self.si_images + self.segment_images
         return data
                 
     def __check__(self):

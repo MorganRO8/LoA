@@ -89,6 +89,18 @@ The `use_decimer` option (`"y"` or `"n"`) controls whether images are processed
 with DECIMER to extract additional SMILES strings from figures. When enabled,
 any predicted SMILES are inserted back into the text at the location of the
 corresponding figure instead of being appended separately.
+The `use_decimer_segmentation` option (`"y"` or `"n"`) controls whether figure
+images are first segmented with DECIMER image segmentation into sub-images.
+When enabled, LoA will:
+- run DECIMER SMILES prediction at the segmented sub-image level (instead of on
+  whole extracted figure images),
+- still include the original extracted figures as multimodal inputs, and
+- also attach all segmented sub-images as additional multimodal inputs.
+The prompt additionally includes each sub-image's source figure filename and
+bounding-box metadata (absolute pixel coordinates and normalized relative
+coordinates) so reaction flow can be inferred in context.
+This requires the separate `decimer-segmentation` package in the DECIMER
+environment in addition to `decimer` itself (see `DECIMER-GPU.yml`).
 `use_openai` can be set to `"y"` if you want to send prompts to the OpenAI API
 instead of using local Ollama models. Provide your API key with the `api_key`
 setting. You can list available models for your key using:

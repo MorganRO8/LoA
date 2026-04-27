@@ -36,3 +36,6 @@ pip install openai
 # Set up a separate environment for DECIMER utilities
 conda env create --name DECIMER -y -f DECIMER-GPU.yml
 
+# (Optional) install/update DECIMER packages directly inside DECIMER env
+conda run -n DECIMER pip install --upgrade decimer decimer-segmentation
+

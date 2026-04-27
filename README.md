@@ -100,8 +100,8 @@ When enabled, LoA will:
 The prompt additionally includes each sub-image's source figure filename and
 bounding-box metadata (absolute pixel coordinates and normalized relative
 coordinates) so reaction flow can be inferred in context.
-This uses a separate segmentation environment (`DECIMER_SEG`) plus a SMILES
-environment (`DECIMER`) so segmentation and SMILES inference can be tuned
+This uses a separate segmentation environment (`decimer-seg`) plus a SMILES
+environment (`decimer-gpu`) so segmentation and SMILES inference can be tuned
 independently (`DECIMER-SEG.yml` and `DECIMER-GPU.yml`).
 `use_openai` can be set to `"y"` if you want to send prompts to the OpenAI API
 instead of using local Ollama models. Provide your API key with the `api_key`

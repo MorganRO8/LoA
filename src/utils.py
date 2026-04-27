@@ -1,11 +1,13 @@
 # Imports
 import itertools
 import glob
+import base64
 import os
 import re
 import hashlib
 import csv
 import tempfile
+import shutil
 import numpy as np
 from pdf2image import convert_from_path
 from PIL import Image
@@ -2230,19 +2232,34 @@ def check_openai_model(model_name, api_key=None):
 
 
 def _run_decimer_segmentation(path):
-    """Execute DECIMER image segmentation in dedicated DECIMER_SEG env."""
+    """Execute DECIMER image segmentation in dedicated decimer-seg env."""
     script = os.path.join(os.path.dirname(__file__), "decimer_segment_runner.py")
     abs_path = path if os.path.isabs(path) else os.path.join(os.getcwd(), 'scraped_docs', path)
+    segment_dir = os.path.join(
+        os.path.dirname(abs_path),
+        os.path.splitext(os.path.basename(abs_path))[0],
+    )
+    if os.path.isdir(segment_dir):
+        shutil.rmtree(segment_dir, ignore_errors=True)
+    os.makedirs(segment_dir, exist_ok=True)
+    metadata_path = None
     cmd = [
         "conda",
         "run",
         "-n",
-        "DECIMER_SEG",
+        "decimer-seg",
         "python",
         script,
         abs_path,
+        "--output-dir",
+        segment_dir,
+        "--metadata-out",
+        "",  # filled below
     ]
     try:
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".json", delete=False) as tf:
+            metadata_path = tf.name
+        cmd[-1] = metadata_path
         result = subprocess.run(
             cmd,
             capture_output=True,
@@ -2252,40 +2269,50 @@ def _run_decimer_segmentation(path):
     except Exception as err:
         print(f"Failed to invoke DECIMER segmentation: {err}")
         return []
+    finally:
+        pass
 
     if result.returncode != 0:
         print(f"DECIMER segmentation error: {result.stderr}")
         return []
 
     try:
-        data = json.loads(result.stdout.strip())
-        if isinstance(data, list):
-            return data
-    except json.JSONDecodeError:
+        if metadata_path and os.path.exists(metadata_path):
+            with open(metadata_path, "r") as f:
+                data = json.load(f)
+            if isinstance(data, list):
+                return data
+    except Exception:
         print(f"Could not decode DECIMER segmentation output: {result.stdout}")
+    finally:
+        if metadata_path and os.path.exists(metadata_path):
+            try:
+                os.remove(metadata_path)
+            except Exception:
+                pass
     return []
 
 
-def _run_decimer_smiles_for_segments(segment_images):
-    """Predict SMILES for a list of segment base64 images in DECIMER env."""
-    if not segment_images:
+def _run_decimer_smiles_for_segments(segment_paths):
+    """Predict SMILES for a list of segment image file paths in decimer-gpu env."""
+    if not segment_paths:
         return []
 
     script = os.path.join(os.path.dirname(__file__), "decimer_smiles_runner.py")
     tmp_path = None
     try:
         with tempfile.NamedTemporaryFile(mode="w", suffix=".json", delete=False) as tf:
-            json.dump(segment_images, tf)
+            json.dump(segment_paths, tf)
             tmp_path = tf.name
 
         cmd = [
             "conda",
             "run",
             "-n",
-            "DECIMER",
+            "decimer-gpu",
             "python",
             script,
-            "--segments-json",
+            "--segment-paths-json",
             tmp_path,
         ]
         result = subprocess.run(
@@ -2323,8 +2350,8 @@ def _run_decimer_segments(path, predict_smiles=True):
     if not isinstance(data, list) or not data:
         return []
     if predict_smiles:
-        segment_images = [row.get("segment_image_base64") for row in data if row.get("segment_image_base64")]
-        smiles_predictions = _run_decimer_smiles_for_segments(segment_images)
+        segment_paths = [row.get("segment_path") for row in data if row.get("segment_path")]
+        smiles_predictions = _run_decimer_smiles_for_segments(segment_paths)
         for idx, smi in enumerate(smiles_predictions):
             if idx < len(data) and smi:
                 data[idx]["smiles"] = smi
@@ -2344,13 +2371,14 @@ def get_segmented_multimodal_images(images_dir):
         records = _run_decimer_segments(img_path, predict_smiles=False)
         image_name = os.path.basename(img_path)
         for rec in records:
-            seg_b64 = rec.get("segment_image_base64")
+            seg_path = rec.get("segment_path")
             bbox = rec.get("bbox")
             rel = rec.get("bbox_relative")
             seg_idx = rec.get("segment_index")
-            if not seg_b64:
+            if not seg_path or not os.path.exists(seg_path):
                 continue
-            segment_images.append(seg_b64)
+            with open(seg_path, "rb") as seg_f:
+                segment_images.append(base64.b64encode(seg_f.read()).decode("utf-8"))
             bbox_str = bbox if bbox else "unavailable"
             rel_str = [round(float(x), 4) for x in rel] if rel else "unavailable"
             segment_notes.append(

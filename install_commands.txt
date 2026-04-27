@@ -34,6 +34,6 @@ pip install openai
 # DECIMER segmentation and SMILES prediction
 
 # Set up separate environments for DECIMER utilities
-conda env create --name DECIMER -y -f DECIMER-GPU.yml
-conda env create --name DECIMER_SEG -y -f DECIMER-SEG.yml
+conda env create --name decimer-gpu -y -f DECIMER-GPU.yml
+conda env create --name decimer-seg -y -f DECIMER-SEG.yml
 

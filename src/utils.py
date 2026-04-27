@@ -1,9 +1,13 @@
 # Imports
 import itertools
+import glob
+import base64
 import os
 import re
 import hashlib
 import csv
+import tempfile
+import shutil
 import numpy as np
 from pdf2image import convert_from_path
 from PIL import Image
@@ -2227,13 +2231,35 @@ def check_openai_model(model_name, api_key=None):
         return True
 
 
-def _run_decimer(path):
-    """Execute DECIMER extraction in a separate conda environment."""
-    script = os.path.join(os.path.dirname(__file__), "decimer_runner.py")
-    # Ensure the path is absolute so DECIMER can locate the file
+def _run_decimer_segmentation(path):
+    """Execute DECIMER image segmentation in dedicated decimer-seg env."""
+    script = os.path.join(os.path.dirname(__file__), "decimer_segment_runner.py")
     abs_path = path if os.path.isabs(path) else os.path.join(os.getcwd(), 'scraped_docs', path)
-    cmd = ["conda", "run", "-n", "DECIMER", "python", script, abs_path]
+    segment_dir = os.path.join(
+        os.path.dirname(abs_path),
+        os.path.splitext(os.path.basename(abs_path))[0],
+    )
+    if os.path.isdir(segment_dir):
+        shutil.rmtree(segment_dir, ignore_errors=True)
+    os.makedirs(segment_dir, exist_ok=True)
+    metadata_path = None
+    cmd = [
+        "conda",
+        "run",
+        "-n",
+        "decimer-seg",
+        "python",
+        script,
+        abs_path,
+        "--output-dir",
+        segment_dir,
+        "--metadata-out",
+        "",  # filled below
+    ]
     try:
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".json", delete=False) as tf:
+            metadata_path = tf.name
+        cmd[-1] = metadata_path
         result = subprocess.run(
             cmd,
             capture_output=True,
@@ -2241,11 +2267,72 @@ def _run_decimer(path):
             check=False,
         )
     except Exception as err:
-        print(f"Failed to invoke DECIMER: {err}")
+        print(f"Failed to invoke DECIMER segmentation: {err}")
         return []
+    finally:
+        pass
 
     if result.returncode != 0:
-        print(f"DECIMER error: {result.stderr}")
+        print(f"DECIMER segmentation error: {result.stderr}")
+        return []
+
+    try:
+        if metadata_path and os.path.exists(metadata_path):
+            with open(metadata_path, "r") as f:
+                data = json.load(f)
+            if isinstance(data, list):
+                return data
+    except Exception:
+        print(f"Could not decode DECIMER segmentation output: {result.stdout}")
+    finally:
+        if metadata_path and os.path.exists(metadata_path):
+            try:
+                os.remove(metadata_path)
+            except Exception:
+                pass
+    return []
+
+
+def _run_decimer_smiles_for_segments(segment_paths):
+    """Predict SMILES for a list of segment image file paths in decimer-gpu env."""
+    if not segment_paths:
+        return []
+
+    script = os.path.join(os.path.dirname(__file__), "decimer_smiles_runner.py")
+    tmp_path = None
+    try:
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".json", delete=False) as tf:
+            json.dump(segment_paths, tf)
+            tmp_path = tf.name
+
+        cmd = [
+            "conda",
+            "run",
+            "-n",
+            "decimer-gpu",
+            "python",
+            script,
+            "--segment-paths-json",
+            tmp_path,
+        ]
+        result = subprocess.run(
+            cmd,
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+    except Exception as err:
+        print(f"Failed to invoke DECIMER SMILES runner: {err}")
+        return []
+    finally:
+        if tmp_path and os.path.exists(tmp_path):
+            try:
+                os.remove(tmp_path)
+            except Exception:
+                pass
+
+    if result.returncode != 0:
+        print(f"DECIMER SMILES error: {result.stderr}")
         return []
 
     try:
@@ -2253,8 +2340,57 @@ def _run_decimer(path):
         if isinstance(data, list):
             return data
     except json.JSONDecodeError:
-        print(f"Could not decode DECIMER output: {result.stdout}")
+        print(f"Could not decode DECIMER SMILES output: {result.stdout}")
     return []
+
+
+def _run_decimer_segments(path, predict_smiles=True):
+    """Run DECIMER segmentation and optionally augment with SMILES predictions."""
+    data = _run_decimer_segmentation(path)
+    if not isinstance(data, list) or not data:
+        return []
+    if predict_smiles:
+        segment_paths = [row.get("segment_path") for row in data if row.get("segment_path")]
+        smiles_predictions = _run_decimer_smiles_for_segments(segment_paths)
+        for idx, smi in enumerate(smiles_predictions):
+            if idx < len(data) and smi:
+                data[idx]["smiles"] = smi
+    return data
+
+
+def get_segmented_multimodal_images(images_dir):
+    """Return DECIMER-segmented image crops and location metadata for prompts."""
+    if not os.path.isdir(images_dir):
+        return [], []
+
+    segment_images = []
+    segment_notes = []
+    for img_path in sorted(glob.glob(os.path.join(images_dir, "*"))):
+        if not os.path.isfile(img_path):
+            continue
+        records = _run_decimer_segments(img_path, predict_smiles=False)
+        image_name = os.path.basename(img_path)
+        for rec in records:
+            seg_path = rec.get("segment_path")
+            bbox = rec.get("bbox")
+            rel = rec.get("bbox_relative")
+            seg_idx = rec.get("segment_index")
+            if not seg_path or not os.path.exists(seg_path):
+                continue
+            with open(seg_path, "rb") as seg_f:
+                segment_images.append(base64.b64encode(seg_f.read()).decode("utf-8"))
+            bbox_str = bbox if bbox else "unavailable"
+            rel_str = [round(float(x), 4) for x in rel] if rel else "unavailable"
+            segment_notes.append(
+                "source_image={name}, segment={seg}, bbox(y0,x0,y1,x1)={bbox}, "
+                "relative_bbox={rel}".format(
+                    name=image_name,
+                    seg=seg_idx,
+                    bbox=bbox_str,
+                    rel=rel_str,
+                )
+            )
+    return segment_images, segment_notes
 
 
 def _rms_diff(arr1, arr2):
@@ -2304,80 +2440,7 @@ def extract_smiles_for_paper(file_path, text, match_tolerance=0.1):
     if not text:
         return text, []
 
-    abs_path = file_path if os.path.isabs(file_path) else os.path.join(os.getcwd(), 'scraped_docs', file_path)
-    ext = os.path.splitext(abs_path)[1].lower()
     paper_id = os.path.splitext(os.path.basename(file_path))[0]
-
-    if ext == '.pdf':
-        extra_results = _run_decimer(abs_path)
-        if not extra_results:
-            return text, []
-
-        page_images = _load_pdf_pages(abs_path, dpi=300)
-        images_dir = os.path.join(os.getcwd(), 'images', paper_id)
-        placeholders = {
-            os.path.basename(p): os.path.join(images_dir, p)
-            for p in os.listdir(images_dir) if os.path.isfile(os.path.join(images_dir, p))
-        } if os.path.isdir(images_dir) else {}
-
-        match_map = {}
-        leftovers = []
-        for item in extra_results:
-            smi = item.get('smiles')
-            page = item.get('page')
-            bbox = item.get('bbox')
-            if not smi:
-                continue
-            if page and bbox and placeholders:
-                try:
-                    arr = page_images[page - 1]
-                    y0, x0, y1, x1 = bbox
-                    crop = arr[y0:y1, x0:x1]
-                except Exception:
-                    leftovers.append(smi)
-                    continue
-                best_name = None
-                best_diff = 1.0
-                for name, path in placeholders.items():
-                    try:
-                        img_arr = np.array(Image.open(path).convert('RGB'))
-                    except Exception:
-                        continue
-                    diff = _rms_diff(crop, img_arr)
-                    if diff < best_diff:
-                        best_diff = diff
-                        best_name = name
-                if best_name and best_diff <= match_tolerance:
-                    match_map[best_name] = smi
-                else:
-                    leftovers.append(smi)
-            else:
-                leftovers.append(smi)
-
-        pattern = re.compile(r"\[([^\[\]]+\.(?:png|jpg|jpeg|gif|tif|tiff))\]")
-        updated_text = text
-        offset = 0
-        locations = []
-        for match in pattern.finditer(text):
-            img_name = os.path.basename(match.group(1))
-            smi = match_map.get(img_name)
-            if smi:
-                start, end = match.span()
-                start += offset
-                end += offset
-                updated_text = updated_text[:start] + smi + updated_text[end:]
-                offset += len(smi) - (end - start)
-                snippet = updated_text[max(0, start - 30):min(len(updated_text), start + len(smi) + 30)]
-                locations.append((smi, snippet))
-
-        if leftovers:
-            append = (
-                "\n\n[We ran automated code to extract SMILES from figures in the paper but could not "
-                "confidently determine where some should be placed. Please deduce which molecules these "
-                "SMILES refer to: " + ", ".join(leftovers) + "]\n"
-            )
-            updated_text += append
-        return updated_text, locations
 
     images_dir = os.path.join(os.getcwd(), 'images', paper_id)
     pattern = re.compile(r"\[([^\[\]]+\.(?:png|jpg|jpeg|gif|tif|tiff))\]")
@@ -2388,17 +2451,23 @@ def extract_smiles_for_paper(file_path, text, match_tolerance=0.1):
             continue
         img_path = os.path.join(images_dir, img_name)
         if os.path.exists(img_path):
-            preds = _run_decimer(img_path)
-            if preds:
-                smiles_cache[img_name] = preds[0].get('smiles')
+            preds = _run_decimer_segments(img_path, predict_smiles=True)
+            smiles = []
+            for pred in preds:
+                smi = pred.get("smiles")
+                if smi and smi not in smiles:
+                    smiles.append(smi)
+            if smiles:
+                smiles_cache[img_name] = smiles
 
     updated_text = text
     offset = 0
     locations = []
     for match in pattern.finditer(text):
         img_name = os.path.basename(match.group(1))
-        smi = smiles_cache.get(img_name)
-        if smi:
+        smiles = smiles_cache.get(img_name)
+        if smiles:
+            smi = ", ".join(smiles)
             start, end = match.span()
             start += offset
             end += offset

@@ -16,6 +16,7 @@ from src.utils import (
     append_comments_column,
     normalize_target_type,
     get_segmented_multimodal_images,
+    generate_double_check_prompt,
 )
 from src.document_reader import doc_to_elements
 
@@ -78,6 +79,7 @@ class FileSettings():
         self.json = "automatic.json"
         self.schema = "schema.pkl"
         self.csv = "results_output.csv"
+        self.source_csv = "results_output.csv"
         self.log = "LoA.log"
         self.search_info_file = "search_info.txt"
     def _parse_from_json(self,json):
@@ -88,17 +90,36 @@ class FileSettings():
                 self.log = str(val)
             elif key.lower() == "results_csv":
                 self.csv = str(val)
+            elif key.lower() == "source_csv":
+                self.source_csv = str(val)
             else:
                 print(f"Files setting '{key}' not recognized. \n")
+
+
+class DoubleCheckSettings():
+    def __init__(self):
+        self.max_retries = 2
+        self.ollama_url = "http://localhost:11434"
+
+    def _parse_from_json(self, json):
+        for key, val in json.items():
+            if key.lower() == "max_retries":
+                self.max_retries = int(val)
+            elif key.lower() == "ollama_url":
+                self.ollama_url = str(val)
+            else:
+                print(f"Double-check setting '{key}' not recognized. \n")
 
 class JobSettings(): ## Contains subsettings as well for each of the job types.
     def __init__(self):
         self.scrape = ScrapeSettings()
         self.extract = ExtractSettings()
+        self.double_check = DoubleCheckSettings()
         self.files = FileSettings()
         self.auto = False
         self.run_scrape = False
         self.run_extract= False
+        self.run_double_check = False
         self.concurrent = False
         self.use_hi_res = False
         self.use_multimodal = False
@@ -122,6 +143,7 @@ class JobSettings(): ## Contains subsettings as well for each of the job types.
         self.use_openai = False
         self.api_key = None
         self.check_prompt = ""
+        self.double_check_prompt = ""
 
 
     def _update_model_name_version(self, model_name_version):
@@ -200,6 +222,14 @@ class JobSettings(): ## Contains subsettings as well for each of the job types.
                 print(f"JSON key '{key}' not recognized.")
     
     def _finalize(self):
+        if self.run_double_check and not self.run_extract:
+            # Double-check mode validates rows from an existing CSV.
+            # It does not require schema loading or extraction prompt generation.
+            if not hasattr(self.files, "source_csv") or not self.files.source_csv:
+                self.files.source_csv = self.files.csv
+            self.double_check_prompt = generate_double_check_prompt()
+            return
+
         self.target_type = normalize_target_type(self.target_type)
         # Check for necessary file information, generate if missing.
         if any([self.files.csv == "results_output.csv",self.files.csv == "", self.files.csv is None]):
@@ -250,6 +280,7 @@ class JobSettings(): ## Contains subsettings as well for each of the job types.
             self.extract.user_instructions,
             self.target_type,
         )
+        self.double_check_prompt = generate_double_check_prompt()
         
         # Generate output directory ID and query chunks
         output_directory_id, self.query_chunks = get_out_id(

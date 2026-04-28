@@ -78,6 +78,9 @@ The `example_general` pair demonstrates schema-level `Validation Mode` usage
 for mixed-type extraction in a single schema.
 The decimer_synthesis.json configuration focuses on synthesis papers rich in
 chemical figures so DECIMER insertion can be tested easily.
+The `example_double_check.json` configuration runs a strict row-level
+verification pass over an existing extraction CSV and writes a new CSV with an
+additional `double_check` yes/no column.
 Each configuration can optionally include a `use_comments` setting (`"y"` or `"n"`) to control
 whether a trailing comments column is added automatically. A similar `use_solvent` setting
 (`"y"` or `"n"`) toggles a built-in solvent column that expects a SMILES string or common name.

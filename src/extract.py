@@ -68,6 +68,7 @@ def batch_extract(job_settings: JobSettings):
         use_hi_res=job_settings.use_hi_res,
         use_multimodal=job_settings.use_multimodal,
         use_thinking=job_settings.use_thinking,
+        use_decimer_segmentation=job_settings.use_decimer_segmentation,
     )
 
     # Determine which files to process
@@ -295,6 +296,7 @@ def extract(file_path, job_settings:JobSettings):
         use_hi_res=job_settings.use_hi_res,
         use_multimodal=job_settings.use_multimodal,
         use_thinking=job_settings.use_thinking,
+        use_decimer_segmentation=job_settings.use_decimer_segmentation,
     )
 
     # Prepare prompt data

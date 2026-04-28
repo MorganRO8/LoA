@@ -25,7 +25,8 @@ LoA (Librarian of Alexandria) is a comprehensive tool designed for researchers, 
 
 2. Install required dependencies listen in install_commands.txt (will be creating requirements.txt soon, as well as a dockerized version)
 
-3. Install conda environment using DECIMER-GPU file if usage of DECIMER is desired
+3. Install conda environments for DECIMER SMILES and DECIMER segmentation if
+   DECIMER features are desired (`DECIMER-GPU.yml` and `DECIMER-SEG.yml`)
 
 4. Simply run "python main.py"
 
@@ -89,6 +90,19 @@ The `use_decimer` option (`"y"` or `"n"`) controls whether images are processed
 with DECIMER to extract additional SMILES strings from figures. When enabled,
 any predicted SMILES are inserted back into the text at the location of the
 corresponding figure instead of being appended separately.
+The `use_decimer_segmentation` option (`"y"` or `"n"`) controls whether figure
+images are first segmented with DECIMER image segmentation into sub-images.
+When enabled, LoA will:
+- run DECIMER SMILES prediction at the segmented sub-image level (instead of on
+  whole extracted figure images),
+- still include the original extracted figures as multimodal inputs, and
+- also attach all segmented sub-images as additional multimodal inputs.
+The prompt additionally includes each sub-image's source figure filename and
+bounding-box metadata (absolute pixel coordinates and normalized relative
+coordinates) so reaction flow can be inferred in context.
+This uses a separate segmentation environment (`decimer-seg`) plus a SMILES
+environment (`decimer-gpu`) so segmentation and SMILES inference can be tuned
+independently (`DECIMER-SEG.yml` and `DECIMER-GPU.yml`).
 `use_openai` can be set to `"y"` if you want to send prompts to the OpenAI API
 instead of using local Ollama models. Provide your API key with the `api_key`
 setting. You can list available models for your key using:

@@ -937,6 +937,33 @@ Your answer must be exactly "yes" or "no" with no additional text.
 Understand that answering "yes" will result in a costly extraction step, so please be certain.
 """
     return prompt
+
+
+def generate_double_check_prompt():
+    """
+    Generate a strict binary prompt for row-level verification.
+
+    Returns:
+    str: Prompt template that expects a single yes/no answer.
+    """
+    return """
+You are performing a strict binary classification task.
+
+You will be given:
+1) The full text of a scientific paper.
+2) The paper images (and segmented sub-images when available).
+3) A single CSV row that was previously extracted from this paper.
+
+Task:
+- Decide whether the provided row is supported by the paper contents and images.
+- Return "yes" only if the row clearly appears in or is directly supported by the paper.
+- If there is any uncertainty, inconsistency, or missing support, return "no".
+- Be strict: partial matches, guesses, or weak implications should be "no".
+
+Output requirements:
+- Respond with exactly one token: yes or no
+- Any answer other than exact "yes" is treated as "no"
+"""
     
 
 def parse_llm_response(response, num_columns):
